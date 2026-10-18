@@ -211,7 +211,8 @@ Multi-agent run: tasks and capsules went through the OmniMemo store.
 - Claude Code mod (`plugins/omniverse-bridge-mod`):
   - `claude plugin validate` passed, and a strict `tsc` against the 2.1.302 engine types passed.
   - `claude plugin test`: 5 tests passed. They cover the handoff through `/om-rollover` (checkpoint first, capsule replaces the compaction, Claude's own summarizer not reached, one ACK prompt), auto mode with ACK completed or failed, and suggest mode never compacting.
-  - Found by the tests: the engine refuses a compaction from a `command.run` hook, and a plugin's own `$.session.compact` skips its own hook. The mod therefore runs `/compact` with a marker after the command returns.
+  - Found by the tests: the engine refuses a compaction from a `command.run` hook, and a plugin's own `$.session.compact` skips its own hook.
+  - Changed afterwards (user's choice): the handoff now uses `/clear` for a fresh session id instead of a compaction. That adds `om rollover begin|link` and `report --child`, and the mod tests now number 7: checkpoint before the one-child reserve, the new session getting the capsule once, ACK moving the task, no second child, a refused `/clear` changing nothing, suggest mode.
   - Not run yet inside a live Claude Code session: it loads after a restart.
 - XCTest: 66 passed (+3: OpenCode tool names, in-place rollover report on SQLite and MongoDB). Smoke: all nine passed; `global_install_smoke` now expects the v2 plugin.
 - Activated on this machine:

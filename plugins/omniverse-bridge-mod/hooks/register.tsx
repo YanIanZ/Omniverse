@@ -10,11 +10,8 @@ const PANE = 'omniverse-agent-cards'
 const agents = atom({ plugin: 'omniverse-bridge', key: 'agents' } as const, [] as AgentCard[])
 const report = atom({ plugin: 'omniverse-bridge', key: 'report' } as const, 'No bridge reading yet')
 
-/** A handoff in flight: compacting (our compaction answer pending), then awaiting the ACK. */
-type Pending = { session: string; digest: string; capsule: string; lastRequest?: string; phase: 'compacting' | 'ack'; answered?: boolean }
-
-/** The `/compact` instruction that marks the compaction this mod answers with the capsule. */
-const MARKER = 'omnimemo-rollover'
+/** A handoff in flight: the parent's checkpoint saved, then the fresh child awaiting its ACK. */
+type Pending = { parent: string; child?: string; digest: string; capsule: string; lastRequest?: string }
 
 // Options are read in register on each load; the rest starts over on a reload.
 const config = { om: 'om', mode: 'suggest', rolloverAt: 80, prepareAt: 70 }
@@ -61,37 +58,49 @@ async function refresh($: EngineInterface, context?: number) {
   }
 }
 
-/** Checkpoint first, then the compaction answered with the capsule alone, then one ACK prompt. */
-async function rollOver($: EngineInterface, session: string, why: string) {
+/** Checkpoint, reserve the only child, /clear into a fresh session, deliver the capsule once. */
+async function rollOver($: EngineInterface, parent: string, why: string) {
   if (pending) return 'A rollover is already in progress.'
-  const prepared = await run($, ['--agent', 'claude', 'rollover', 'prepare', '--session', session, '--provider', 'claude'])
+  const prepared = await run($, ['--agent', 'claude', 'rollover', 'prepare', '--session', parent, '--provider', 'claude'])
   const parsed = prepared.exitCode === 0 ? parsePrepared(prepared.stdout) : undefined
   if (!parsed) return 'Rollover not started: om rollover prepare failed; nothing changed.'
+  const reserved = await run($, ['rollover', 'begin', '--session', parent, '--provider', 'claude'])
+  if (reserved.exitCode !== 0) return 'Rollover not started: this session already handed off once (one child per session).'
   const lastUser = (await $.session.messages()).filter(m => m.role === 'user' && m.text.trim()).at(-1)
-  pending = { session, ...parsed, lastRequest: lastUser?.text.slice(0, 1200), phase: 'compacting' }
-  // The engine's own /compact raises the compaction, so this mod's session.compact hook answers it
-  // (a plugin's direct $.session.compact passes over that plugin's own hook).
-  await $.command.run({ command: 'compact', args: MARKER }).catch(() => undefined)
-  if (!pending?.answered) {
-    await run($, ['rollover', 'report', '--session', session, '--digest', parsed.digest, '--outcome', 'failed', '--reason', 'compaction not answered with the capsule'])
+  pending = { parent, ...parsed, lastRequest: lastUser?.text.slice(0, 1200) }
+  const fail = async (reason: string) => {
+    await run($, ['rollover', 'report', '--session', parent, '--digest', parsed.digest, '--outcome', 'failed', '--reason', reason])
     pending = undefined
-    return 'Rollover not applied: the compaction was not answered with the capsule. The checkpoint is saved.'
+    return `Rollover not applied (${reason}). This session is unchanged; the checkpoint is saved.`
   }
-  pending = { ...pending, phase: 'ack' }
+  // /clear ends this conversation; the process goes on under a new session id with an empty context.
+  const cleared = await $.command.run({ command: 'clear' }).then(() => true, () => false)
+  if (!cleared) return fail('/clear did not run')
+  const child = await $.session.id()
+  if (child === parent) return fail('no new session after /clear')
+  await run($, ['rollover', 'link', '--session', parent, '--child', child, '--provider', 'claude'])
+  pending = { ...pending, child }
   rollovers.push(Date.now())
+  const request = pending.lastRequest
+    ? `\nLast request from the person (verbatim, cut to 1200 characters):\n${pending.lastRequest}\n`
+    : ''
   void $.prompt.submit({
-    text: `OmniMemo rollover (${why}). First line of your reply must be exactly \`ACK ${parsed.digest}\`; then continue the work from the handoff above.`,
+    text: `${parsed.capsule}${request}\nOmniMemo rollover (${why}) from session ${parent}. First line of your reply must be exactly \`ACK ${parsed.digest}\`; then continue the work above.`,
   })
-  return `Context replaced by the verified capsule (digest ${parsed.digest}); waiting for the acknowledgement.`
+  return `Fresh session ${child} started from the verified capsule (digest ${parsed.digest}); waiting for the acknowledgement.`
 }
 
 /** After a main turn: settle an ACK, report usage, then prepare or hand off on a rising level. */
 async function afterTurn($: EngineInterface, answer: string) {
   const session = await $.session.id()
-  if (pending?.phase === 'ack' && pending.session === session) {
+  if (pending?.child && pending.child === session) {
     const ok = acknowledged(answer, pending.digest)
-    await run($, ['rollover', 'report', '--session', session, '--digest', pending.digest, '--outcome', ok ? 'completed' : 'failed', '--reason', ok ? 'acknowledged' : 'first line was not the ACK'])
-    $.ui.toast(ok ? 'OmniMemo rollover acknowledged.' : 'OmniMemo rollover not acknowledged; the checkpoint is in OmniMemo for a manual handoff.')
+    await run($, ['rollover', 'report', '--session', pending.parent, '--child', session, '--digest', pending.digest, '--outcome', ok ? 'completed' : 'failed', '--reason', ok ? 'acknowledged' : 'first line was not the ACK'])
+    $.ui.toast(
+      ok
+        ? 'OmniMemo rollover acknowledged: the task moved to this session.'
+        : `OmniMemo rollover not acknowledged; the parent keeps the task (claude --resume ${pending.parent}).`,
+    )
     pending = undefined
   }
   const { context } = await $.session.usage()
@@ -141,26 +150,16 @@ export const register: Register = (on, options) => {
     return { text: 'Omniverse agent cards opened.' }
   })
 
-  // The engine refuses a compaction under the command's own turn, so it runs just after.
+  // /clear cannot run under the command's own turn, so the handoff starts just after it.
   on('command.run', { command: 'om-rollover' }, async $ => {
     const session = await $.session.id()
     $.clock.after(100, () => void rollOver($, session, 'requested with /om-rollover').then(text => $.ui.toast(text)))
-    return { text: 'OmniMemo rollover starting: checkpoint, then a fresh context from the capsule.' }
+    return { text: 'OmniMemo rollover starting: checkpoint, then a fresh session from the capsule.' }
   })
-
-  // Our own compaction answer: the conversation becomes the persisted capsule, nothing else.
-  on('session.compact', async ($, e, next) => {
-    if (e.agentId !== undefined || pending?.phase !== 'compacting' || e.instructions !== MARKER) return next(e)
-    pending.answered = true
-    const request = pending.lastRequest
-      ? `\nLast request from the person (verbatim, cut to 1200 characters):\n${pending.lastRequest}\n`
-      : ''
-    return { messages: [{ role: 'user' as const, text: pending.capsule + request, toolUses: [] }] }
-  }).catch(($, e, next) => next(e)) // On any failure the engine's own compaction stands.
 
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
-    // After the turn, so compaction and prompts run with the session idle.
+    // After the turn, so /clear and prompts run with the session idle.
     if (e.agentId === undefined) $.clock.after(200, () => void afterTurn($, e.answer))
     return result
   })

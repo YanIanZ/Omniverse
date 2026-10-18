@@ -11,14 +11,16 @@ A Claude Code mod (function hooks, Claude Code 2.1.302+) for OmniMemo. It runs t
   - `off`: reports usage only.
 - `/om-rollover` runs the handoff now.
 
-## The handoff
+## The handoff: a fresh session
 
 1. `om rollover prepare` saves the capsule as a checkpoint first: tasks, unverified milestones, git branch/commit and changed files.
-2. The mod runs Claude Code's own `/compact`, marked `omnimemo-rollover`, and answers that compaction with the capsule alone, plus the person's last request (up to 1200 characters, never stored). No summary of the old conversation is carried over.
-3. One prompt asks the model to reply `ACK <digest>` on its first line and then continue.
-4. `om rollover report` records `rollover.completed` or `rollover.failed`.
-
-This is a same-session reset: the session id stays the same, the transcript file keeps the history, and the context window starts from the capsule. If the acknowledgement is missing, the checkpoint stays in OmniMemo for a manual handoff.
+2. `om rollover begin` reserves the only child of this session. A session that already handed off gets no second one.
+3. The mod runs `/clear`. The conversation ends and Claude Code continues under a new session id with an empty context; nothing of the old conversation is carried over.
+4. `om rollover link` records parent → child.
+5. One prompt delivers the capsule into the new session, with the person's last request (up to 1200 characters, never stored). Its first line must be `ACK <digest>`.
+6. With the acknowledgement, `om rollover report --child` moves the task to the new session and retires the parent (`rollover.completed`).
+   - Without it, the parent keeps the task (`rollover.failed`) and stays resumable with `claude --resume <parent id>`.
+   - If `/clear` is refused, the session is unchanged and the checkpoint stays saved.
 
 ## Load it
 

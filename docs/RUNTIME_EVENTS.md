@@ -163,7 +163,14 @@ Managed rollover (opt-in): `om codex run --rollover [--rollover-at 80] [--max-ro
 
 Session fields: `parent_session_id`, `child_session_id`, `rollover_state` (`starting_child`, `waiting_ack`, `completed`, `failed_recoverable`).
 
-Claude Code (mod, `rollover` option `auto`, or `/om-rollover`): a same-session reset. The mod saves the checkpoint, then runs `/compact` marked `omnimemo-rollover` and answers that compaction with the capsule alone. It asks once for `ACK <digest>`, then records the outcome with `om rollover report` (`rollover.completed` or `rollover.failed`, `mode: in_place`). The session id stays the same and no child session exists; at most 3 per hour.
+Claude Code (mod, `rollover` option `auto`, or `/om-rollover`): a fresh session with the same lineage as managed Codex.
+1. `om rollover prepare` saves the checkpoint.
+2. `om rollover begin` reserves the only child.
+3. `/clear` starts a new session id with an empty context.
+4. `om rollover link` records parent → child.
+5. The capsule is delivered once with an `ACK <digest>` request, and `om rollover report --child` settles it.
+
+At most 3 per hour. A parent left without an acknowledgement keeps its task and stays resumable with `claude --resume`. `om rollover report` without `--child` records a same-session reset (`mode: in_place`) for hosts that cannot start a new session.
 
 OpenCode context: the last step's input plus cache tokens (`session.step.ended`) over the model's `limit.context` from `ctx.model.list()`.
 

@@ -575,7 +575,7 @@ extension OmniMemo {
   struct Rollover: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
       abstract: "Prepare a bounded handoff for a fresh session; never launches or controls one.",
-      subcommands: [Preview.self, Prepare.self, Report.self])
+      subcommands: [Preview.self, Prepare.self, Begin.self, Link.self, Report.self])
     struct Target: ParsableArguments {
       @Option(help: "Host session id whose reported context usage to include.") var session: String?
       @Option(help: "Provider whose tasks lead the capsule (default: all open tasks).") var provider: String?
@@ -603,11 +603,42 @@ extension OmniMemo {
       }
     }
 
-    struct Report: AsyncParsableCommand {
+    // A host that starts its own fresh session (Claude Code /clear from a mod): begin reserves the
+    // only child of the parent, link records the new session, report settles it on the ACK.
+    struct Begin: AsyncParsableCommand {
       static let configuration = CommandConfiguration(
-        abstract: "Record the outcome of a same-session rollover (a host that reset its own context).")
+        abstract: "Reserve the only child of a parent session; exits 1 when one was already reserved.")
       @OptionGroup var options: Options
       @Option var session: String
+      @Option var provider = "claude"
+      func run() async throws {
+        let reserved = try await withStore(options) { try await $0.beginRollover(agent: provider, parent: session) }
+        if !reserved { throw ExitCode(1) }
+      }
+    }
+    struct Link: AsyncParsableCommand {
+      static let configuration = CommandConfiguration(abstract: "Record the fresh child session of a reserved rollover.")
+      @OptionGroup var options: Options
+      @Option var session: String
+      @Option var child: String
+      @Option var provider = "claude"
+      func run() async throws {
+        try await withStore(options) { store in
+          // The host's own start hook may not have reported the child yet.
+          _ = try await store.ingest(
+            RuntimeEventInput(
+              source: provider + "_mod", provider: provider, externalSessionID: child, eventType: "session.started",
+              metadata: ["observability": .string("passive")]))
+          try await store.linkRolloverChild(agent: provider, parent: session, child: child)
+        }
+      }
+    }
+    struct Report: AsyncParsableCommand {
+      static let configuration = CommandConfiguration(
+        abstract: "Record a rollover outcome: with --child the task moves on ACK; without, a same-session reset.")
+      @OptionGroup var options: Options
+      @Option var session: String
+      @Option(help: "Fresh child session; omit for a same-session reset.") var child: String?
       @Option var provider = "claude"
       @Option(help: "Digest printed by prepare.") var digest: String
       @Option(help: "completed (acknowledged) or failed.") var outcome: String
@@ -616,10 +647,14 @@ extension OmniMemo {
         guard ["completed", "failed"].contains(outcome) else { throw ValidationError("--outcome completed|failed") }
       }
       func run() async throws {
+        let ok = outcome == "completed"
+        let why = reason.isEmpty ? outcome : reason
         try await withStore(options) {
-          try await $0.reportInPlaceRollover(
-            agent: provider, session: session, digest: digest, acknowledged: outcome == "completed",
-            reason: reason.isEmpty ? outcome : reason)
+          if let child {
+            try await $0.finishRollover(agent: provider, parent: session, child: child, acknowledged: ok, reason: why)
+          } else {
+            try await $0.reportInPlaceRollover(agent: provider, session: session, digest: digest, acknowledged: ok, reason: why)
+          }
         }
       }
     }

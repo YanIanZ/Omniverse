@@ -10,7 +10,7 @@ Implemented (suggest/manual mode):
 - `om rollover preview` prints a bounded capsule (tasks, unverified milestones, git branch/commit, changed files). `om rollover prepare` saves it as a checkpoint first, then prints it with a handoff id.
 - Managed Codex only (opt-in): `om codex run --rollover` starts an empty app-server thread after a completed turn at the threshold, delivers the capsule once, requires `ACK <digest>`, then moves the task; without the acknowledgement the parent keeps it.
 
-- Claude Code with the Omniverse mod: `rollover` `auto` (or `/om-rollover`) answers a marked `/compact` with the capsule alone, asks once for `ACK <digest>`, and records the outcome. This is a same-session reset, not a new session id.
+- Claude Code with the Omniverse mod: `rollover` `auto` (or `/om-rollover`) saves the checkpoint, reserves one child, runs `/clear` for a fresh session id, and delivers the capsule once. The ACK moves the task to the new session; without it, the parent keeps the task and stays resumable.
 
 Not implemented: rollover for OpenCode or Gemini; compaction guards.
 
