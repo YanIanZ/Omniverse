@@ -2,13 +2,21 @@
 export type AgentCard = {
   display_slug: string
   status: string
+  client?: string
+  model?: string
+  session_id?: string
+  last_seen?: string
+  tool_category?: string
   task?: { id: string; title: string }
   progress: { kind: string; percent?: number; completed?: number; total?: number }
   context: { measurement: string; level: string; used_percent?: number }
 }
 
+/** One OmniMemo record an agent saved (`om memory list`), cut down to what the pane prints. */
+export type AgentRecord = { id: string; title: string; kind: string; state: string; created_at: string; lines: string[] }
+
 declare module 'claude-code' {
   interface PluginState {
-    'omniverse-bridge': { agents: AgentCard[]; report: string }
+    'omniverse-bridge': { agents: AgentCard[]; report: string; self: string; focus: string; records: AgentRecord[] }
   }
 }

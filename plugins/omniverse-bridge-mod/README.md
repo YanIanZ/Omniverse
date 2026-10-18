@@ -2,7 +2,8 @@
 
 A Claude Code mod (function hooks, Claude Code 2.1.302+) for OmniMemo. It runs the local `om` CLI and needs no server or token.
 
-- `/om-agents` opens a pane of agent cards: `client-model · STATUS`, current task, verified-milestone progress (indeterminate without milestones) and reported context usage.
+- `/om-agents` opens a pane of agent cards: `client-model · STATUS`, current task, verified-milestone progress (indeterminate without milestones) and reported context usage. Offline sessions and sessions with no recent signal (stale) are left out; the pane counts the stale ones it hides.
+- The other terminal agents present in the project (Codex, OpenCode, Gemini CLI, other Claude sessions) show as rows in the band directly above the prompt, like Claude's own subagents: `● codex · gpt-6.1-sol · working · <task> · 12s`. This session is not listed. Claude Code's own tasks list below the prompt is not open to mods, so the band is the closest place.
 - The status line reads `OmniMemo · 3 agents · 2 working · 1 blocked · ctx 42%`.
 - After each main turn it reports the session's context usage (`$.session.usage()`, the same numbers as Claude's status line) to OmniMemo.
 - Context rollover, set with `rollover` (`/config`):

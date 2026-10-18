@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { acknowledged, levelOf, parsePrepared } from './register'
+import { acknowledged, agentLabel, facts, levelOf, others, parsePrepared, present, recordLines, recordsOf } from './register'
 
 const DIGEST = '0123456789abcdef'
 const PREPARED = `OmniMemo context handoff (fresh session; verify everything against the repository).\nGoal:\n- task_1 ship it [doing]\nHandoff: h-1 · digest ${DIGEST} (created)\n`
@@ -116,4 +116,47 @@ test('suggest mode (the default) never starts a session by itself', async ($, on
   expect(w.session()).toBe('sess-1')
   expect(w.submitted).toHaveLength(0)
   expect(w.om('hook claude')).toBeDefined() // usage still reported
+})
+
+const card = (session_id: string, status: string, client: string, model?: string) => ({
+  display_slug: `${client}-${model ?? 'model-unavailable'}`,
+  status,
+  client,
+  model,
+  session_id,
+  progress: { kind: 'indeterminate' },
+  context: { measurement: 'unknown', level: 'unknown' },
+})
+
+test('offline and stale agents are hidden; the band lists the other present agents', () => {
+  const list = [
+    card('me', 'working', 'claude', 'claude-opus-5-5'),
+    card('c1', 'working', 'codex', 'gpt-6.1-sol'),
+    card('o1', 'waiting', 'opencode'),
+    card('o2', 'stale', 'opencode'),
+    card('g1', 'offline', 'gemini'),
+    card('x1', 'blocked', 'claude', 'claude-sonnet-5-5'),
+  ]
+  expect(present(list).map(a => a.session_id)).toEqual(['me', 'c1', 'o1', 'x1'])
+  expect(others(list, 'me').map(a => a.session_id)).toEqual(['x1', 'c1', 'o1'])
+  expect(agentLabel(list[1]!)).toBe('codex · gpt-6.1-sol')
+  expect(agentLabel(list[2]!)).toBe('opencode · model unknown')
+})
+
+test('an agent session opens as its OmniMemo record: saved checkpoints in readable lines', () => {
+  const content = JSON.stringify({ scope: 'Read-only review', findings: [{ severity: 'P1', location: 'views.tsx:638', issue: 'stale shown as working' }] })
+  expect(recordLines(content)).toEqual(['scope: Read-only review', 'findings:', '  • P1 · views.tsx:638 · stale shown as working'])
+  expect(recordLines('plain note\nsecond line')).toEqual(['plain note', 'second line'])
+  const saved = [
+    { agent: 'codex', id: 'm1', title: 'Review', kind: 'checkpoint', state: 'active', created_at: '2026-10-18T20:54:05Z', content },
+    { agent: 'claude', id: 'm2', title: 'Other', kind: 'memory', state: 'active', created_at: '2026-10-18T20:00:00Z', content: 'x' },
+  ]
+  expect(recordsOf(saved, 'codex').map(m => m.id)).toEqual(['m1'])
+})
+
+test('unknown progress and context are left out of a row instead of printed', () => {
+  const a = { ...card('c1', 'waiting', 'codex', 'gpt-6.1-sol'), task: { id: 't', title: 'Review' } }
+  expect(facts(a, Date.now())).toEqual(['waiting', 'Review'])
+  const b = { ...a, progress: { kind: 'determinate', percent: 40, completed: 2, total: 5 }, context: { measurement: 'reported', level: 'normal', used_percent: 33 } }
+  expect(facts(b, Date.now())).toEqual(['waiting', 'Review', '40% (2/5)', 'ctx 33%'])
 })

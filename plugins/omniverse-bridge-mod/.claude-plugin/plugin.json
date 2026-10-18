@@ -1,6 +1,6 @@
 {
   "name": "omniverse-bridge",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "OmniMemo agent cards, context usage reporting and opt-in fresh-context rollover for Claude Code.",
   "author": {
     "name": "YanIanZ"
