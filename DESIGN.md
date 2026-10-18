@@ -1,359 +1,377 @@
 ---
 name: OmniMemo Mission Control
-description: A night office seen from above, where each agent's verified state is the room it stands in.
+description: A floor plan drawn at night, where each agent stands in the room its verified state belongs to.
 colors:
-  ground: "#0d0f14"
-  panel: "#12151c"
-  raise: "#181c25"
-  raise-hover: "#1e2330"
-  rule: "#1f2430"
-  rule-strong: "#2b3142"
-  rule-hover: "#3d4560"
-  ink: "#e6e9f0"
-  muted: "#9aa3b8"
-  glow: "#7fd4ff"
-  glow-hover: "#a6e2ff"
-  glow-ink: "#06212e"
-  attention: "#ffcf5c"
-  attention-hover: "#ffe08f"
-  attention-ink: "#1f1500"
-  ok: "#4fe07a"
-  fault: "#ff6b5c"
-  map-void: "#08090d"
-  pixel-shadow: "#050608"
-  room-wall: "#4a5266"
-  tone-green-fill: "#163a22"
-  tone-green-text: "#9ff0b3"
-  tone-green-edge: "#2f5e3a"
-  tone-amber-fill: "#3d2f0c"
+  sheet: "#0b1a2e"
+  floor: "#10243d"
+  raise: "#163152"
+  raise-hover: "#1b3a60"
+  rule: "#1d3654"
+  construction: "#4d6b8f"
+  construction-text: "#7391b6"
+  line: "#cfe3ff"
+  ink: "#e3edf9"
+  muted: "#9db2cf"
+  placeholder: "#8197b6"
+  focus: "#8fd0ff"
+  ok: "#5ee08a"
+  attention: "#ffc857"
+  attention-hover: "#ffd77f"
+  attention-ink: "#241900"
+  fault: "#ff6b6b"
+  unknown: "#8193ab"
+  unknown-text: "#a9b8cc"
+  tone-ok-fill: "#12351f"
+  tone-ok-text: "#9ff0bb"
+  tone-amber-fill: "#3a2c09"
   tone-amber-text: "#ffd98a"
-  tone-amber-edge: "#6b5420"
-  tone-blue-fill: "#0f2c42"
-  tone-blue-text: "#a6dcff"
-  tone-red-fill: "#3a1a18"
-  tone-red-text: "#ffb3aa"
-  tone-red-edge: "#6b2a26"
-  tone-gray-fill: "#2a2f3c"
-  tone-gray-text: "#c3c9d6"
-  tone-gray-edge: "#4a5266"
+  tone-line-fill: "#1a3557"
+  tone-line-text: "#d4e6ff"
+  tone-red-fill: "#3d1818"
+  tone-red-text: "#ffb4b4"
+  tone-gray-fill: "#1a2a3f"
 typography:
   display:
-    fontFamily: "'Pixelify Sans', ui-monospace, monospace"
-    fontSize: "clamp(26px, 2.6vw, 34px)"
+    fontFamily: "'Barlow Condensed', 'Arial Narrow', sans-serif"
+    fontSize: "clamp(26px, 2.2vw, 32px)"
     fontWeight: 600
-    letterSpacing: "0.01em"
+    lineHeight: 1
+    letterSpacing: "0.08em"
   headline:
-    fontFamily: "'Pixelify Sans', ui-monospace, monospace"
-    fontSize: "20px"
+    fontFamily: "'Barlow Condensed', 'Arial Narrow', sans-serif"
+    fontSize: "19px"
     fontWeight: 600
-    lineHeight: 1.15
-    letterSpacing: "0.01em"
+    letterSpacing: "0.08em"
   title:
-    fontFamily: "'Pixelify Sans', ui-monospace, monospace"
+    fontFamily: "'Barlow Condensed', 'Arial Narrow', sans-serif"
     fontSize: "16px"
     fontWeight: 600
-    letterSpacing: "0.01em"
-  nav:
-    fontFamily: "'Pixelify Sans', ui-monospace, monospace"
-    fontSize: "17px"
-    fontWeight: 400
+    letterSpacing: "0.1em"
   body:
-    fontFamily: "-apple-system, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif"
-    fontSize: "15px"
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif"
+    fontSize: "14px"
     fontWeight: 400
-    lineHeight: 1.55
+    lineHeight: 1.5
     fontFeature: "tnum"
-  body-dense:
-    fontFamily: "-apple-system, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif"
+  body-table:
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif"
     fontSize: "13.5px"
     fontWeight: 400
-    lineHeight: 1.55
+    lineHeight: 1.5
   label:
-    fontFamily: "'Pixelify Sans', ui-monospace, monospace"
+    fontFamily: "'Barlow Condensed', 'Arial Narrow', sans-serif"
     fontSize: "12px"
-    fontWeight: 400
-    lineHeight: 1.2
+    fontWeight: 600
+    letterSpacing: "0.14em"
+  control:
+    fontFamily: "'Barlow Condensed', 'Arial Narrow', sans-serif"
+    fontSize: "15px"
+    fontWeight: 600
+    letterSpacing: "0.08em"
   mono:
     fontFamily: "'JetBrains Mono', ui-monospace, monospace"
     fontSize: "12.5px"
-    fontWeight: 400
-  mono-map:
+    fontWeight: 500
+  plan-room:
+    fontFamily: "'Barlow Condensed', 'Arial Narrow', sans-serif"
+    fontSize: "16px"
+    fontWeight: 600
+    letterSpacing: "0.12em"
+  plan-plate:
+    fontFamily: "'Barlow Condensed', 'Arial Narrow', sans-serif"
+    fontSize: "13px"
+    fontWeight: 600
+    letterSpacing: "0.06em"
+  plan-dimension:
     fontFamily: "'JetBrains Mono', ui-monospace, monospace"
-    fontSize: "11px"
-    fontWeight: 400
-    lineHeight: 1.3
+    fontSize: "10.5px"
+    fontWeight: 500
 rounded:
-  none: "0px"
+  hair: "1px"
+  sm: "2px"
+  md: "3px"
+  badge: "9px"
 spacing:
+  xxs: "2px"
   xs: "4px"
   sm: "8px"
   md: "12px"
+  inset: "14px"
   lg: "16px"
-  xl: "24px"
-  xxl: "48px"
+  xl: "20px"
+  xxl: "28px"
 components:
   button:
-    backgroundColor: "{colors.raise}"
+    backgroundColor: "{colors.floor}"
     textColor: "{colors.ink}"
-    typography: "{typography.title}"
-    rounded: "{rounded.none}"
-    padding: "8px 16px"
-    height: "44px"
+    typography: "{typography.control}"
+    rounded: "{rounded.md}"
+    padding: "6px 16px"
+    height: "40px"
   button-hover:
     backgroundColor: "{colors.raise-hover}"
   button-primary:
-    backgroundColor: "{colors.glow}"
-    textColor: "{colors.glow-ink}"
-    typography: "{typography.title}"
-    rounded: "{rounded.none}"
-    padding: "8px 16px"
-    height: "44px"
+    backgroundColor: "{colors.line}"
+    textColor: "{colors.sheet}"
+    typography: "{typography.control}"
+    rounded: "{rounded.md}"
+    padding: "6px 16px"
+    height: "40px"
   button-primary-hover:
-    backgroundColor: "{colors.glow-hover}"
-  needs-you:
+    backgroundColor: "#ffffff"
+  button-needs-you:
     backgroundColor: "{colors.attention}"
     textColor: "{colors.attention-ink}"
-    rounded: "{rounded.none}"
-    padding: "6px 12px"
-  needs-you-hover:
+    rounded: "{rounded.md}"
+    padding: "4px 14px"
+    height: "36px"
+  button-needs-you-hover:
     backgroundColor: "{colors.attention-hover}"
   input:
-    backgroundColor: "{colors.ground}"
+    backgroundColor: "{colors.sheet}"
     textColor: "{colors.ink}"
     typography: "{typography.body}"
-    rounded: "{rounded.none}"
-    padding: "8px 10px"
-    height: "44px"
+    rounded: "{rounded.md}"
+    padding: "6px 10px"
+    height: "40px"
   nav-item:
     textColor: "{colors.muted}"
-    typography: "{typography.nav}"
-    rounded: "{rounded.none}"
-    padding: "8px 12px"
-    height: "44px"
-  nav-item-hover:
-    backgroundColor: "{colors.panel}"
-    textColor: "{colors.ink}"
+    rounded: "{rounded.md}"
+    padding: "6px 10px"
+    height: "40px"
   nav-item-active:
-    backgroundColor: "{colors.raise}"
-    textColor: "#ffffff"
+    backgroundColor: "{colors.floor}"
+    textColor: "{colors.line}"
+  stat-chip:
+    textColor: "{colors.muted}"
+    rounded: "{rounded.md}"
+    padding: "2px 10px"
+    height: "32px"
   panel:
-    backgroundColor: "{colors.panel}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.none}"
-    padding: "18px"
-  card:
-    backgroundColor: "{colors.raise}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.none}"
-    padding: "12px"
-  pill-green:
-    backgroundColor: "{colors.tone-green-fill}"
-    textColor: "{colors.tone-green-text}"
-    rounded: "{rounded.none}"
+    backgroundColor: "{colors.floor}"
+    rounded: "{rounded.md}"
+    padding: "12px 14px"
+  pill-ok:
+    backgroundColor: "{colors.tone-ok-fill}"
+    textColor: "{colors.tone-ok-text}"
+    rounded: "{rounded.md}"
     padding: "1px 8px"
   pill-amber:
     backgroundColor: "{colors.tone-amber-fill}"
     textColor: "{colors.tone-amber-text}"
-    rounded: "{rounded.none}"
+    rounded: "{rounded.md}"
     padding: "1px 8px"
-  pill-blue:
-    backgroundColor: "{colors.tone-blue-fill}"
-    textColor: "{colors.tone-blue-text}"
-    rounded: "{rounded.none}"
+  pill-line:
+    backgroundColor: "{colors.tone-line-fill}"
+    textColor: "{colors.tone-line-text}"
+    rounded: "{rounded.md}"
     padding: "1px 8px"
   pill-red:
     backgroundColor: "{colors.tone-red-fill}"
     textColor: "{colors.tone-red-text}"
-    rounded: "{rounded.none}"
+    rounded: "{rounded.md}"
     padding: "1px 8px"
   pill-unknown:
     backgroundColor: "{colors.tone-gray-fill}"
-    textColor: "{colors.tone-gray-text}"
-    rounded: "{rounded.none}"
+    textColor: "{colors.unknown-text}"
+    rounded: "{rounded.md}"
     padding: "1px 8px"
   count:
-    backgroundColor: "{colors.rule-strong}"
+    backgroundColor: "{colors.rule}"
     textColor: "{colors.ink}"
-    typography: "{typography.mono}"
-    rounded: "{rounded.none}"
+    rounded: "{rounded.badge}"
     padding: "0 6px"
   count-attention:
     backgroundColor: "{colors.attention}"
     textColor: "{colors.attention-ink}"
-  room-label:
-    backgroundColor: "#1a1d26"
-    textColor: "#d5dbe8"
-    rounded: "{rounded.none}"
-    padding: "1px 8px"
-  nametag:
-    backgroundColor: "#0b0d12dd"
-    textColor: "#eef1f6"
+  tag:
+    textColor: "{colors.muted}"
     typography: "{typography.label}"
-    rounded: "{rounded.none}"
-    padding: "0 6px"
+    rounded: "{rounded.md}"
+    padding: "0 7px"
 ---
 
-<!-- Review state at time of writing: the finish reviewer's last verdict was `fix` (five of seven findings resolved; open: map bubble containment, lounge plate placement, desktop map size, bottom tag clipping). A final batch addressed those and was checked only by the coordinator's own screenshots; it has not been re-reviewed. Nothing here is recorded as reviewer-approved. -->
+<!--
+Scan-mode record of the shipped Night Floor Plan (2026-10-19), replacing the pixel-art "Night Office". Derived from frontend/src/styles.css, office.css, OfficeMap.tsx, office.ts, Figure.tsx and main.tsx, checked against the .impeccable/review screenshots.
+Review state, recorded honestly: the finish reviewer ran two rounds. Round 2 resolved everything except the route callout overlapping its own dashed route; that was then fixed with a solid backing box (sheet fill, amber 1px edge) and NOT re-reviewed. A separate Codex correctness review raised three findings (stale outranked task ownership; routes did not pass through door thresholds; task conflict warnings were keyed by id). All three were fixed afterwards and NOT re-reviewed.
+-->
 
 # Design System: OmniMemo Mission Control
 
 ## Overview
 
-**Creative North Star: "The Night Office"**
+**Creative North Star: "The Night Floor Plan"**
 
-Mission Control is a lit office floor at night, seen from above. The pixel-art map is the status board: each agent is an original 12x16 sprite standing in the room its verified state belongs to, and when a committed event changes that state it walks there in stepped motion. Everything around the map (rail, header, Tasks, Agents, Approvals, Memory, Events) is the same building's back office: near-black panels, 2px slate rules, square corners, and the pixel face only where something is named.
+Mission Control is an architect's drawing set read at night. A prussian sheet carries pale, crisp linework. Rooms are drawn with double-line walls and quarter-arc door swings, and the sheet ends in a legend and a title block. Each agent is a small plan figure standing in the room that its verified state belongs to, so the plan itself is the status board. Everything around the plan (rail, header, schedule tables, event list) uses the same drawing grammar: hairline construction rules, condensed uppercase tags, and tabular figures.
 
-Density is that of an operator console, not a marketing page. Text sits on dark ground at body 15px, ids and revisions drop to a small monospace, and colour is spent almost entirely on state: monitor-glow blue for focus and selection, amber for what needs a human, green for verified activity, red for faults, and dashed grey for anything unknown. The office carries the delight (floors, lamps, plants, blinking racks); the data views carry clarity and stay plain.
+Hue is reserved for meaning. The linework, panels and type are all one blue-grey family. Green, amber and red appear only where a verified state needs them. "Unknown" is never shown as a colour. It is drawn as a diagonal hatch with a dashed outline, so a missing signal looks like a gap in the drawing and not like a status. The one exception to the hue budget is agent identity: each provider's figure has its own fixed body and head colours and its own head silhouette, so you can recognise the provider even when its figure is hatched.
 
-The world is drawn, not decorated. Walls are 4px, rules are 2px, shadows are pixel steps, motion is `steps()`, and nothing has a rounded corner.
+Density is that of an operator's second screen: compact rows, 13 to 14px reading text, and a plan held at the largest scale that stays legible. Motion is rare and meaningful. When a committed event moves an agent to another room, its figure walks through the doorways and leaves a short-lived amber dashed route behind.
 
 **Key Characteristics:**
-- Pixel-art night office as the primary view; data views share its palette and square geometry.
-- Colour encodes verified state only; unknown is a visible, dashed, desaturated state.
-- Three type voices with strict jobs: Pixelify Sans names things, system sans reads, JetBrains Mono identifies.
-- Zero radius everywhere; 2px rules for UI, 4px walls for the map.
-- All motion is stepped and disappears under reduced motion.
+- Prussian sheet ground with pale linework. Panels are a single step lighter. There are no drop shadows.
+- Hue is spent only on verified state (green working/verified, amber needs-a-human or in flight, red fault). Unknown is hatched and dashed.
+- Barlow Condensed uppercase with wide tracking is the drawing's lettering. The system sans is used for reading text. JetBrains Mono is used for ids, revisions and minutes.
+- Double-line walls, door arcs, dimension lines, a legend and a title block: real drafting devices, used functionally.
+- Corners are crisp at 3px. Strokes are 1.5px construction lines and 1px rules.
+- One signature motion: the walked amber route.
 
 ## Colors
 
-A near-black slate ground lit by one cool monitor glow, with warm amber kept for the human's attention and a small state palette of green, blue, red and grey.
+A single cold blue family for ground, linework and type, plus three state hues and a hatch for "unknown".
 
 ### Primary
-- **Monitor Glow** (`glow`): focus rings on every control, the selected agent's pixel outline, links, the active filter edge, and the primary button. It is the "you are here" colour; `glow-hover` brightens it on hover and `glow-ink` is the text that sits on it.
+- **Drafting Line** (line): the pale ink of the drawing. Used for walls, room tags, headings, the title block, the selected name plate fill, and the primary button. It is the brightest non-state colour, and it marks structure and emphasis rather than action.
 
 ### Secondary
-- **Attention Amber** (`attention`): full strength only for what waits on the human: the Needs-you button, the Approvals count badge, the skip link; also room overflow counts on the map. `attention-ink` is its text colour, `attention-hover` its hover fill. The dark amber tone family (`tone-amber-*`) marks in-flight states (doing, review, pending) and approval rows.
+- **Signal Amber** (attention): needs a human, or in flight. Used for the Needs-you button, the attention count, the Approvals room tag when someone is asking, the asking agent's plate edge and signal text, the walked route, the approval card border, and the P1 priority. Text on amber is **Amber Ink** (attention-ink). **Amber Lift** (attention-hover) is the hover state only.
 
 ### Tertiary
-- **Verified Green** (`ok`): live connection LED, healthy rack LEDs and their light pools, and the green tone family (`tone-green-*`) for active, ready, approved and done.
-- **Fault Red** (`fault`): offline connection, failed rack LED, and the red tone family (`tone-red-*`) for blocked, denied and disconnected.
+- **Verified Green** (ok): working or verified. Used for the status pip, the context meter fill, the "live" state, healthy rack LEDs, and the legend key.
+- **Fault Red** (fault): faults, offline status and P0 priority. Used for the rack LED for an unavailable service and the critical context meter.
 
 ### Neutral
-- **Night Ground** (`ground`): page background and input wells.
-- **Panel Slate** (`panel`): panels, board columns, tables, approval rows; also the corridor floor between rooms.
-- **Raised Slate** (`raise`, hover `raise-hover`): cards, buttons, the active nav item, portraits, skeleton bars.
-- **Slate Rule** (`rule`) and **Strong Rule** (`rule-strong`, hover `rule-hover`): every 2px border, divider and count badge.
-- **Paper Ink** (`ink`) for primary text, **Dusk Grey** (`muted`) for labels, metadata and quiet text.
-- **Map Void** (`map-void`): the dark frame behind the office map. **Pixel Shadow** (`pixel-shadow`): the near-black used for drop steps, bubble outlines and the bubble tail. **Room Wall** (`room-wall`): the 4px room wall and the dashed unknown edge (`tone-gray-edge`).
+- **Prussian Sheet** (sheet): page ground, the plan sheet, input wells, and the knock-out colour inside double walls and behind route callouts.
+- **Plan Panel** (floor): room floors, panels, tables and default buttons.
+- **Raised Panel** (raise) / **Raised Hover** (raise-hover): selected table rows, pressed filters and skeleton bars, plus the hover fill on buttons.
+- **Rule** (rule): 1px dividers between rows, and the count badge ground.
+- **Construction Line** (construction): 1.5px borders on panels, controls, the rail and the topbar; door swings and furniture on the plan.
+- **Construction Text** (construction-text): corridor labels on the plan.
+- **Ink** (ink): body text. **Muted** (muted): secondary text, table heads and fact keys. **Placeholder** (placeholder): input placeholders.
+- **Focus Blue** (focus): the focus ring only.
+- **Unknown Grey** (unknown) / **Unknown Text** (unknown-text): the stroke of the hatch and the dashed outline, and text on unknown pills and plates.
 
-### State tones
-Each state is a dark fill plus a light text of the same hue, with an optional mid-dark edge for bordered chips: green (active, ready, approved, done), amber (doing, review, pending), blue (todo), red (blocked, denied, disconnected), grey with a dashed edge (unknown, stale).
+### Tones (pill fills)
+Each state pill is a dark fill with light text in the same hue: tone-ok, tone-amber, tone-line (neutral/todo), tone-red. Unknown and stale pills layer the 45° hatch over tone-gray-fill, with an inset Unknown Grey edge and a dashed outline.
 
 ### Named Rules
-**The Signal Colour Rule.** Hue on this surface means a verified state. Do not use green, amber, blue or red for decoration; the floors and furniture of the office use desaturated woods, carpets and slates so that state colour stays readable on top of them.
+**The Hue Is Evidence Rule.** Green, amber and red appear only when a verified state calls for them. Structure, emphasis and navigation use the blue-grey family. Provider figure colours are identity, not state, and they never tint UI chrome.
 
-**The Solid Amber Rule.** A full-strength `attention` fill is reserved for what a human must act on. In-flight work uses the dark amber tone, never the solid fill.
+**The Hatched Unknown Rule.** Unknown or stale is never a colour. It is a diagonal hatch (45°, Unknown Grey) with a dashed edge, and it is applied in the same way to pills, figures, plates, legend keys and LEDs.
 
 ## Typography
 
-**Display Font:** Pixelify Sans (with ui-monospace, monospace), self-hosted via @fontsource, weights 400 and 600
+**Display Font:** Barlow Condensed 600 (with Arial Narrow, sans-serif)
 **Body Font:** system sans (-apple-system, SF Pro Text, Helvetica Neue, system-ui)
-**Label/Mono Font:** JetBrains Mono (with ui-monospace), self-hosted, weight 400
+**Label/Mono Font:** JetBrains Mono 400/500 (with ui-monospace)
 
-**Character:** Pixelify Sans is the office's signage: page titles, panel titles, navigation, room labels, agent names, buttons. The system sans does the reading, and JetBrains Mono is the machine's voice for ids, revisions, paths, counts and the quoted text in speech bubbles.
+**Character:** Condensed, tracked capitals are the draughtsman's lettering for room tags, titles, navigation, buttons and table heads. The quiet system sans does all the reading, and the mono font sets every number that is an identifier or a measurement. The whole body uses tabular numerals.
 
 ### Hierarchy
-- **Display** (600, clamp(26px, 2.6vw, 34px)): the page title in the header. Sign-in uses 32px.
-- **Headline** (600, 17-20px, 1.15): the selected agent's name, approval request titles (19px), memory titles (17px), empty-state titles (18px).
-- **Title** (600, 15-16px): panel titles in muted colour, board column titles, button labels (16px).
-- **Nav** (400, 17px; 15px under 900px): rail navigation.
-- **Body** (400, 15px, 1.55, tabular numerals): all prose and table text; dense lists step to 13.5-14.5px. Running prose caps at 68-75ch.
-- **Label** (400, 12-13px): room labels, control labels, nametags, tags, map hints, live chip.
-- **Mono** (400, 12.5px; 11-11.5px on the map and priority chips): ids, revisions, paths, counts, `kbd`, bubble quotes.
+- **Display** (600, clamp(26px, 2.2vw, 32px), line-height 1, 0.08em, uppercase): the one page title in the topbar.
+- **Headline** (600, 19–20px): the selected agent's name, empty-state titles, and approval and memory titles. Approval and memory titles drop uppercase and use 0.02em tracking because they are sentences.
+- **Title** (600, 16px, 0.1em, uppercase): panel heads, rail navigation, and the Needs-you button.
+- **Body** (400, 14px/1.5, tabular-nums): the default. Tables and event rows use 13.5px, and dense tables use 13px. Running copy is capped at 72–75ch.
+- **Label** (600, 12px, 0.14em, uppercase, condensed): table heads, fact keys, tags, and group heads at 14px.
+- **Control** (600, 15px, 0.08em, uppercase, condensed): every button.
+- **Mono** (500, 12.5–13px): ids, revisions, priorities, minutes, counts (11.5px) and the live chip.
+- **Plan lettering**: room tag 600 16px at 0.12em; name plate 600 13px at 0.06em; corridor label 600 10px at 0.24em knocked out of the linework; signal line in sans at 11px; dimension figures in mono 500 at 10.5px; title-block revision 600 at 22px.
 
 ### Named Rules
-**The Three Voices Rule.** Pixel names, sans reads, mono identifies. Never set paragraphs in Pixelify Sans and never set ids in the sans.
+**The Lettering Rule.** Condensed uppercase is lettering for things that name or label a place, a column or an action. Sentences are always set in the system sans, sentence case.
 
-**The Legible Map Rule.** Text inside the scaled map is sized by the inverse of the map scale, so its rendered size never drops below its 11-13px floor however small the map gets.
+**The Measured Number Rule.** Any number that identifies or measures (revision, id, minutes, priority, count) is set in mono. Counts in prose stay in the sans.
 
 ## Layout
 
-A left rail (200-224px, 2px right rule) holds the brand, six destinations with counts, and a project/revision/live footer. The work area takes the rest with 24px top padding and `clamp(16px, 2.4vw, 32px)` side padding, sections spaced 16-20px apart. The header line carries the display title, the live chip and a one-line summary on the left; task stat chips and the Needs-you button align right.
+The shell is a 216px sticky left rail plus a fluid work area padded at clamp(16px, 2vw, 28px). A 72px topbar holds the title, live chip, presence summary, and the Todo/Doing/Review stat chips with the amber Needs-you button pushed to the right. A 1.5px construction rule closes the topbar.
 
-The office view stacks the map frame, then the selected-agent panel, then latest events at 1280px and wider; below that the side panel wraps beside or under the map. The map is a fixed 1056x640 world scaled to fit the frame width between 0.6x and 1.5x; below the legible minimum it scrolls sideways with stepped edge fades and a dashed hint, and room jump buttons sit under it.
+The Office view is a two-column grid: the plan sheet is minmax(0, 1fr), and the right column is 320–372px, holding the agent schedule, the selected agent's details and the latest events, stacked with 16px gaps. The plan is a fixed 840×790 SVG in plan units, scaled as a whole to at most 100vh − 128px, with a minimum width of 620px. Rooms, slots, doors and corridors live in that coordinate space, never in CSS.
 
-Tasks is a five-column board (min 200px per column, 12px gaps). Agents and Events use bordered tables and 2px-ruled lists. Under 900px the rail becomes a top bar with wrapping nav, its footer hides, the board becomes one column, and event rows fold into two lines.
+Rhythm: 16px between panels, 14px panel inset, 8px vertical padding in table rows (5px in dense tables and task rows), and 8–12px gaps inside rows.
 
-Spacing runs on a 4px base: 4, 8, 12, 16, 24, 48, with 18px panel padding as the one off-step. Primary controls are 44px tall; dense in-card selects are 32px.
+Responsive:
+- **≤1180px**: the right column drops below the plan as an auto-fit grid with 300px minimum columns.
+- **≤900px**: the rail becomes a wrapping top bar, rail metadata hides, event rows fold into two lines, and approvals stack.
+- **≤700px**: the plan keeps a 760px legible width and scrolls sideways, opened at the room that matters, with a scroll cue, a compact state key and a right-edge fade. Task rows fold into a title line over a priority/owner/status line.
 
 ## Elevation & Depth
 
-The UI chrome is flat: panels, cards and tables separate by tonal steps (`ground` to `panel` to `raise`) and 2px rules, never by shadow. Depth lives only inside the office map, and there it is drawn the way pixel art draws it: a hard 4px drop step of `pixel-shadow` under rooms and furniture, inset bands for wall faces and table tops, a stepped inset vignette inside each room, and banded radial light pools blended with `screen`. The only blurred light is emission: the live LED and the lamp, monitor and rack-LED pools.
+The system is flat. Depth comes only from the tonal step from sheet to floor to raise and from drawn lines. No element casts a shadow. `box-shadow` appears only as an inset hairline, so it is a drawn line and not a lift.
 
 ### Shadow Vocabulary
-- **Pixel drop** (`box-shadow: 0 4px 0 #050608`): rooms, desks and the meeting table on the map; 3px under speech bubbles, 2px under the cable tray.
-- **Wall face** (`box-shadow: inset 0 -3px 0 #0e1117, inset 0 -5px 0 #2b3142, inset 0 2px 0 #262c3c`): the three-quarter top wall of each room.
-- **Room vignette** (`box-shadow: inset 0 0 0 4px rgb(0 0 0 / 0.16), inset 0 0 0 8px rgb(0 0 0 / 0.1), inset 0 0 0 14px rgb(0 0 0 / 0.06)`): stepped darkening toward room walls.
-- **Selection outline** (`filter: drop-shadow` x4 at 2px in `glow`): the pixel outline around the selected agent sprite.
-- **LED emission** (`box-shadow: 0 0 8px 1px #4fe07a80`): the live LED only.
+- **Active rail item** (`box-shadow: inset 0 0 0 1.5px var(--construction)`): outlines the current page in the rail.
+- **Selected row** (`box-shadow: inset 0 1px 0 var(--line), inset 0 -1px 0 var(--line)`): pale rules above and below a selected schedule row.
+- **Asking / unknown pill edge** (`box-shadow: inset 0 0 0 1.5px var(--attention | --unknown)`): the pill outline for attention and hatched states.
 
 ### Named Rules
-**The Flat Chrome Rule.** Outside the map, nothing casts a shadow. Panels separate by tone and a 2px rule.
-
-**The Pixel Step Rule.** Inside the map, shadows are whole-pixel offsets with no blur. Blur is reserved for light that a source emits.
+**The Drawn Depth Rule.** If something needs to stand forward, draw a line or step the tone. Never blur a shadow under it.
 
 ## Shapes
 
-Every corner is square (0px radius) in the UI and on the map. Borders are 2px solid slate for UI objects and 4px for map room walls, with doorways cut through the walls as 40px gaps edged in light grey. Board columns carry a 4px state-coloured top edge. Dashed borders mean provisional or absent: unknown pills and bubbles, the unknown-crowd room plate, a card being saved, empty states and the map scroll hint. Floors are pure CSS gradient tiles per room (wood, carpet, plum, tech grid, warm planks, checker, grate); sprites and props are inline SVG pixel maps rendered with `image-rendering: pixelated` at integer scales (agent base 12x16 shown at 1x, 2x, 3x or 4x).
+Corners are crisp: 3px on every panel, control, chip, pill, tag and kbd; 2px on skeleton bars; 1px on the context meter and plan furniture. The only round forms are functional: the count badge capsule (9px), LEDs, status pips and legend dots (50%), and the scrollbar thumb (6px).
+
+Lines carry the form language. Panel and control borders are 1.5px construction lines, row dividers are 1px rule, and dashed borders mean empty or unknown. On the plan, walls are double lines (a 7-unit pale stroke with a 4-unit sheet stroke cut through it), doors are a 30-unit gap with a quarter-arc swing into the room, and the age of an agent's signal is shown as a dimension line under its figure. That line's length grows on a log scale with the minutes since the last signal, capped at 99m+.
+
+Agent figures are a head over a shoulder arc, 24 plan units tall. Each provider has its own head silhouette: Claude round, Codex square, OpenCode hex, Gemini drop, Cursor triangle. Unknown providers get a stable fallback colour chosen from their name.
 
 ## Components
 
 ### Buttons
-Chunky square keys with pixel labels.
-- **Shape:** square (0px), 2px `rule-strong` border, 44px minimum height.
-- **Default:** `raise` fill, Pixelify Sans 16px, 8px 16px padding.
-- **Primary:** `glow` fill and border with `glow-ink` text; hover brightens to `glow-hover`.
-- **Hover / Focus / Active:** border to `rule-hover`, fill to `raise-hover`; focus is the global 2px `glow` outline at 2px offset; active presses down 1px. Disabled drops to 0.45 opacity.
-- **Link button:** no border or padding, underlined, inherits text style.
-- **Needs you:** solid `attention` block with `attention-ink` semibold text; the only amber-filled button.
+Condensed capitals on drawn edges. Firm, never glossy.
+- **Shape:** crisp 3px corners, with a 1.5px construction border and a minimum height of 40px.
+- **Default:** a Plan Panel fill with 6px 16px padding and Control lettering.
+- **Hover / Focus:** a Raised Hover fill with the border lifting to Drafting Line over a 160ms ease-out transition. Pressing nudges the button down 1px. Focus is a 2px Focus Blue outline with a 2px offset. Disabled buttons drop to 45% opacity.
+- **Primary:** a Drafting Line fill with Sheet text, turning white on hover.
+- **Needs you:** an amber fill with Amber Ink text, 36px tall. This is the one amber call to action in the header.
+- **Link button:** sans text with a construction-coloured underline at a 3px offset.
 
 ### Chips
-- **Status pill:** 12px semibold sans, 1px 8px, square, state tone fill plus text; unknown and stale add a 2px dashed `tone-gray-edge` outline inset by 2px.
-- **Stat chip:** 2px bordered link in muted text with a mono count; doing and review chips tint their border.
-- **Count badge:** mono 12px on `rule-strong`; the Approvals count turns `attention`.
-- **Live chip:** pixel 13px with an 8px square LED: green steady when live, amber blinking (stepped, 1s) when connecting, red when offline.
-- **Filter toggles:** pressed state takes a `glow` border on `#10202b`.
+- **Stat chip:** a 32px outlined chip with a condensed label and a mono figure. The Doing and Review chips use a darker green or amber edge.
+- **Live chip:** a mono label with a 7px LED, drawn in currentColor. While connecting, the LED blinks at 1.2s.
+- **Count badge:** a mono 11.5px capsule on Rule. It turns amber when a human is needed.
+- **Tag:** a 1px construction outline with Label lettering.
+
+### State Pills
+- **Style:** 3px corners, 1px 8px padding, 600 12px/18px sans. Each pill is a dark fill with light text in one hue.
+- **Mapping:** working, active, ready, done and approved are green; doing, review, blocked, pending, unverified and in flight are amber; todo, waiting and neutral are line-blue; denied, disconnected and offline are red; stale and unknown are hatched with a dashed outline. A pill for a human-attention state adds an inset 1.5px amber edge.
 
 ### Cards / Containers
-- **Corner Style:** square (0px).
-- **Background:** panels on `panel`, task cards and portraits on `raise`.
-- **Shadow Strategy:** none (see Flat Chrome Rule).
-- **Border:** 2px `rule` for panels and tables, 2px `rule-strong` for cards; approvals use the amber edge; cards in flight go dashed.
-- **Internal Padding:** 18px panels, 12px cards and columns.
+- **Corner Style:** 3px.
+- **Background:** Plan Panel on the Prussian Sheet.
+- **Shadow Strategy:** none (see Elevation & Depth).
+- **Border:** a 1.5px construction line. Approval cards use a 1.5px amber border. Empty states and the map's empty notice use a dashed border.
+- **Internal Padding:** heads are 10px 14px with a closing construction rule, bodies are 12px 14px, and footers are 8px 14px 10px over a 1px rule.
 
 ### Inputs / Fields
-- **Style:** `ground` well, 2px `rule-strong` border, square, 44px tall, 8px 10px padding; placeholder `#7d869c`.
-- **Select:** platform widget removed; a down-chevron drawn with two CSS gradients in `muted` (CSP-safe), brightening on hover.
-- **Focus:** border turns `glow` with the outline flush (0 offset). Hover lifts the border to `rule-hover`. Disabled selects at 0.55 opacity.
+- **Style:** a Prussian Sheet well with a 1.5px construction border, 3px corners and a 40px height. Selects have a drawn two-stroke chevron in Muted. Selects inside the task table sit transparent and borderless until hovered or focused.
+- **Focus:** the border turns Focus Blue, along with the global 2px focus outline.
+- **Disabled:** 55% opacity with the not-allowed cursor.
 
 ### Navigation
-Rail links in Pixelify Sans 17px, 44px tall, muted at rest. Hover fills `panel` and lifts to `ink`; the current page fills `raise` with a 2px `rule-strong` border and white text. Counts align right. Under 900px the rail becomes a wrapping top bar at 15px.
+- **Rail:** the logo (a drawn room with a door swing and one occupant, all in Drafting Line) and the wordmark at 600 20px condensed, then nav items in 600 16px condensed capitals in Muted. On hover an item fills with Plan Panel and turns to Drafting Line. The current page uses the same fill plus an inset construction outline. Counts sit at the right edge. A footer block lists project, revision and live status, with green, amber or red marking connection state.
+- **Mobile:** below 900px the rail becomes a wrapping top row and the footer block hides.
 
-### Agent Sprite
-Original 12x16 pixel characters drawn as inline SVG from a palette map: 1px dark outline, per-provider hair and coat colours (Claude terracotta, Codex white and teal, OpenCode charcoal and green, Gemini periwinkle), unknown providers get a stable hashed palette. Two frames alternate at a stepped 1.2s only when the agent is fresh. Unknown agents render at 0.5 opacity in greyscale. Selection is a 2px `glow` pixel outline; keyboard focus a 3px `glow` ring at 4px offset.
+### Schedule Table
+The shared tabular grammar used by the office schedule, Agents and Tasks.
+- Condensed 12px tracked heads over a 1.5px construction rule, 1px rule dividers between rows, and a 3% Drafting Line hover tint.
+- Numbers are right-aligned. Every agent cell pairs the agent's figure mark with its printed name.
+- Stale and offline rows drop to Muted.
+- Tasks group by status. Each group head is 14px condensed in the hue of that status, with a count. A conflict row is an amber tone band.
 
-### Office Room
-A floor-tiled box with a 4px `room-wall` border, a three-quarter wall face along the top, a pixel drop below, and a tab-shaped Pixelify label sitting on the wall with the room's occupant count. Agents walk between rooms with `transform 1.1s steps(9, end)`; reduced motion jumps.
-
-### Speech Bubble and Nametag
-Bubbles quote an agent's current signal in mono 11px on a light state-tone fill (green, amber, blue) with a 2px `pixel-shadow` outline, a 3px pixel drop and a square 4px tail; unknown bubbles are grey and dashed. Bubbles anchor toward the room interior so they do not cross walls, truncate to a width cap, and expand when opened. Nametags sit below the sprite in Pixelify 12px on translucent near-black. Crowds of unknown agents collapse into one dashed room plate.
+### Floor Plan (signature)
+- **Rooms:** Plan Panel floors inside double-line walls. Each room has a tag (name plus live occupancy) at its top-left. The Approvals room tag turns amber when someone is asking.
+- **Agent personal furniture:** a figure, a status pip (green solid, amber solid, amber ring for in flight, hatched dashed for unknown), a 76×18 name plate, a one-line signal, and the signal-age dimension line.
+- **Selection:** the name plate fills with Drafting Line and gains a dotted ring. Focus adds a 2.5-unit Focus Blue ring.
+- **Fresh signal:** the pip swells to 1.6× once every 2.4s.
+- **Sheet furniture:** a legend (state keys plus 1m/10m/1h dimension samples) and a title block with project, drawing, sheet, status and a large revision number. The server room rack shows MongoDB and Redis health as LEDs.
+- **Walked route:** a 2-unit amber dashed line (7 5) with an arrowhead, routed through door thresholds and along the corridors. The figure walks the route over min(2400ms, 600 + 2.2 × length) with cubic-bezier(0.22, 1, 0.36, 1). The line holds for 70% of 6s and then fades. A mono callout sits on a solid sheet box with an amber 1px edge on the longest corridor run, trimmed to fit. With reduced motion, the figure jumps and the route stays drawn for the same 6s.
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** keep every corner square (0px) and every UI rule 2px; room walls are 4px.
-- **Do** spend hue only on verified state, and render unknown as grey, dashed and desaturated rather than hiding it.
-- **Do** set names, navigation, titles, labels and buttons in Pixelify Sans, prose in the system sans, and ids, revisions, paths and counts in JetBrains Mono.
-- **Do** animate with `steps()` timing only, and remove all animation and transition under `prefers-reduced-motion: reduce`.
-- **Do** draw sprites and props as original inline SVG pixel maps at integer scales with `image-rendering: pixelated`.
-- **Do** bundle every font and asset locally; the page runs under CSP `default-src 'self'`.
-- **Do** give every primary control a 44px target and the shared `glow` focus ring.
+- **Do** keep every colour on the CSS custom properties in `styles.css`. A new state reuses an existing tone pair; it never introduces a new hue.
+- **Do** show unknown or stale with the 45° hatch and a dashed edge, everywhere it appears.
+- **Do** set room tags, headings, navigation, buttons and table heads in Barlow Condensed 600 uppercase with 0.06–0.24em tracking; reading text in the system sans; and ids, revisions and minutes in JetBrains Mono.
+- **Do** draw borders as 1.5px construction lines and row dividers as 1px rule, with 3px corners.
+- **Do** place anything new on the plan in plan units inside the 840×790 sheet, and route movement through doorways.
+- **Do** print the agent's name next to every figure mark. The mark is decorative.
+- **Do** honour `prefers-reduced-motion`: figures jump and transitions stop, but state stays readable.
 
 ### Don't:
-- **Don't** round corners anywhere, including pills, inputs and bubbles.
-- **Don't** put shadows on UI chrome; elevation outside the map is tonal.
-- **Don't** blur a shadow on the map; use whole-pixel drop steps, and keep blur for emitted light.
-- **Don't** use smooth easing curves for movement; agents and scenery move in steps.
-- **Don't** fill anything with full-strength `attention` amber unless it waits on a human.
-- **Don't** copy third-party tilesets or characters; pixel art here is original.
-- **Don't** load fonts, images or scripts from external origins.
+- **Don't** add drop shadows, glows or blur. Depth is a tonal step or a drawn line.
+- **Don't** spend green, amber or red on decoration, navigation or emphasis that isn't state.
+- **Don't** give unknown its own colour, or show it as a grey "status".
+- **Don't** reintroduce the pixel world: no pixel fonts, sprites, stepped sprite animation, square-pixel walls or 0px corners.
+- **Don't** set sentences in condensed capitals, or numbers that identify or measure in the sans.
+- **Don't** number rooms or add decorative sequence numbers. A room tag carries its name and its live occupancy.

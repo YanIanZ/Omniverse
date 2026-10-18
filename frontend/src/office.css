@@ -343,14 +343,10 @@
   .plan .agent.is-fresh .pip {
     animation: none;
   }
+  /* No movement: the route and its callout stay drawn, then disappear at once. */
   .plan .route,
+  .plan .route-callout,
   .plan .route-callout-back {
-  fill: var(--sheet);
-  stroke: var(--attention);
-  stroke-width: 1;
-  animation: route-fade 6s ease-out forwards;
-}
-.plan .route-callout {
-    animation: route-fade 6s steps(1, end) forwards;
+    animation: route-fade 6s step-end forwards;
   }
 }

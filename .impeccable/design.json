@@ -1,774 +1,736 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-18T18:45:36+00:00",
+  "generatedAt": "2026-10-18T21:01:18+00:00",
   "title": "Design System: OmniMemo Mission Control",
   "extensions": {
     "colorMeta": {
-      "ground": {
+      "sheet": {
         "role": "neutral",
-        "displayName": "Night Ground",
-        "canonical": "oklch(16.9% 0.011 268.0)",
+        "displayName": "Prussian Sheet",
+        "canonical": "#0b1a2e",
+        "oklch": "oklch(21.6% 0.045 256.2)",
         "tonalRamp": [
-          "#090b10",
-          "#23252b",
-          "#3f4248",
-          "#5e6168",
-          "#7f8289",
-          "#a2a5ac",
-          "#c6c9d1",
-          "#ebeef6"
+          "#010b1d",
+          "#16263a",
+          "#32435a",
+          "#51637b",
+          "#71849d",
+          "#93a7c1",
+          "#b7cbe7",
+          "#e4f0ff"
         ]
       },
-      "panel": {
+      "floor": {
         "role": "neutral",
-        "displayName": "Panel Slate",
-        "canonical": "oklch(19.6% 0.015 266.8)",
+        "displayName": "Plan Panel",
+        "canonical": "#10243d",
+        "oklch": "oklch(25.8% 0.054 255.0)",
         "tonalRamp": [
-          "#080b12",
-          "#22252d",
-          "#3e424a",
-          "#5d616a",
-          "#7e828c",
-          "#a1a5af",
-          "#c5c9d3",
-          "#eaeef9"
+          "#000b1f",
+          "#12263f",
+          "#2e435e",
+          "#4c6380",
+          "#6d84a3",
+          "#8fa7c7",
+          "#b2cced",
+          "#e4f0fe"
         ]
       },
       "raise": {
         "role": "neutral",
-        "displayName": "Raised Slate",
-        "canonical": "oklch(22.7% 0.019 266.2)",
+        "displayName": "Raised Panel",
+        "canonical": "#163152",
+        "oklch": "oklch(31.0% 0.068 254.7)",
         "tonalRamp": [
-          "#080b13",
-          "#21252e",
-          "#3d424c",
-          "#5c616c",
-          "#7d828e",
-          "#a0a5b1",
-          "#c3c9d6",
-          "#e9effb"
+          "#000b1f",
+          "#0a2545",
+          "#284366",
+          "#466388",
+          "#6685ab",
+          "#88a8d0",
+          "#abccf6",
+          "#e4f0ff"
         ]
       },
       "raise-hover": {
         "role": "neutral",
-        "displayName": "Raised Slate Hover",
-        "canonical": "oklch(25.7% 0.026 268.2)",
+        "displayName": "Raised Hover",
+        "canonical": "#1b3a60",
+        "oklch": "oklch(34.5% 0.076 254.8)",
         "tonalRamp": [
-          "#070b16",
-          "#202532",
-          "#3c4250",
-          "#5b6170",
-          "#7c8292",
-          "#9ea5b6",
-          "#c2c9db",
-          "#e8eefe"
+          "#000b1f",
+          "#052549",
+          "#24436a",
+          "#42638c",
+          "#6385b0",
+          "#85a8d5",
+          "#a8ccfb",
+          "#e4f0ff"
         ]
       },
       "rule": {
         "role": "neutral",
-        "displayName": "Slate Rule",
-        "canonical": "oklch(26.1% 0.024 267.1)",
+        "displayName": "Rule",
+        "canonical": "#1d3654",
+        "oklch": "oklch(32.8% 0.062 254.0)",
         "tonalRamp": [
-          "#070b15",
-          "#202531",
-          "#3c424f",
-          "#5b616f",
-          "#7c8291",
-          "#9ea5b5",
-          "#c2c9d9",
-          "#e8eefe"
+          "#000b1d",
+          "#0d2642",
+          "#2a4362",
+          "#486384",
+          "#6985a7",
+          "#8aa8cc",
+          "#aeccf1",
+          "#e4f0ff"
         ]
       },
-      "rule-strong": {
+      "construction": {
         "role": "neutral",
-        "displayName": "Strong Rule",
-        "canonical": "oklch(31.5% 0.032 269.4)",
+        "displayName": "Construction Line",
+        "canonical": "#4d6b8f",
+        "oklch": "oklch(52.0% 0.067 253.5)",
         "tonalRamp": [
-          "#060a18",
-          "#1f2435",
-          "#3b4153",
-          "#5a6174",
-          "#7b8296",
-          "#9da5ba",
-          "#c1c9df",
-          "#e8eefe"
+          "#010b1d",
+          "#092545",
+          "#274365",
+          "#466387",
+          "#6685aa",
+          "#88a8cf",
+          "#abccf5",
+          "#e4f0fe"
         ]
       },
-      "rule-hover": {
+      "construction-text": {
         "role": "neutral",
-        "displayName": "Rule Hover",
-        "canonical": "oklch(39.5% 0.047 271.4)",
+        "displayName": "Construction Text",
+        "canonical": "#7391b6",
+        "oklch": "oklch(64.8% 0.065 254.0)",
         "tonalRamp": [
-          "#05091f",
-          "#1d233c",
-          "#39415b",
-          "#57607d",
-          "#78819f",
-          "#9aa4c3",
-          "#bec8e9",
-          "#e9eeff"
+          "#000b1e",
+          "#0b2544",
+          "#284364",
+          "#476386",
+          "#6785a9",
+          "#89a8ce",
+          "#acccf4",
+          "#e4f0fe"
+        ]
+      },
+      "line": {
+        "role": "primary",
+        "displayName": "Drafting Line",
+        "canonical": "#cfe3ff",
+        "oklch": "oklch(91.0% 0.044 256.8)",
+        "tonalRamp": [
+          "#010b1d",
+          "#17263a",
+          "#334359",
+          "#51627a",
+          "#72849d",
+          "#94a7c1",
+          "#b7cbe6",
+          "#e5efff"
         ]
       },
       "ink": {
         "role": "neutral",
-        "displayName": "Paper Ink",
-        "canonical": "oklch(93.4% 0.010 267.4)",
+        "displayName": "Ink",
+        "canonical": "#e3edf9",
+        "oklch": "oklch(94.2% 0.019 252.9)",
         "tonalRamp": [
-          "#090b0f",
-          "#23252a",
-          "#404247",
-          "#5f6167",
-          "#808289",
-          "#a2a5ab",
-          "#c6c9d0",
-          "#ebeef5"
+          "#060c13",
+          "#1e262e",
+          "#3b434c",
+          "#5a626c",
+          "#7a838e",
+          "#9da6b1",
+          "#c1cad6",
+          "#e6f0fc"
         ]
       },
       "muted": {
         "role": "neutral",
-        "displayName": "Dusk Grey",
-        "canonical": "oklch(71.5% 0.032 267.1)",
+        "displayName": "Muted",
+        "canonical": "#9db2cf",
+        "oklch": "oklch(75.7% 0.048 256.5)",
         "tonalRamp": [
-          "#060a19",
-          "#1e2535",
-          "#3a4254",
-          "#596174",
-          "#7a8296",
-          "#9ca5ba",
-          "#c0c9df",
-          "#e8eefe"
+          "#010b1f",
+          "#15263c",
+          "#31435b",
+          "#50637d",
+          "#70849f",
+          "#92a7c3",
+          "#b5cbe9",
+          "#e5effe"
         ]
       },
-      "glow": {
-        "role": "primary",
-        "displayName": "Monitor Glow",
-        "canonical": "oklch(83.2% 0.102 231.8)",
+      "placeholder": {
+        "role": "neutral",
+        "displayName": "Placeholder",
+        "canonical": "#8197b6",
+        "oklch": "oklch(67.0% 0.053 257.0)",
         "tonalRamp": [
-          "#000d16",
-          "#02293a",
-          "#024863",
-          "#006a90",
-          "#348db5",
-          "#5bb0da",
-          "#84d5fe",
-          "#ddf2ff"
+          "#000a21",
+          "#14253e",
+          "#30435e",
+          "#4e627f",
+          "#6e84a2",
+          "#90a7c6",
+          "#b4cbec",
+          "#e5effe"
         ]
       },
-      "glow-hover": {
-        "role": "primary",
-        "displayName": "Monitor Glow Hover",
-        "canonical": "oklch(88.2% 0.073 229.4)",
+      "focus": {
+        "role": "neutral",
+        "displayName": "Focus Blue",
+        "canonical": "#8fd0ff",
+        "oklch": "oklch(83.1% 0.094 240.7)",
         "tonalRamp": [
-          "#000d15",
-          "#012939",
-          "#044961",
-          "#2e6982",
-          "#518ba5",
-          "#74aeca",
-          "#97d3ef",
-          "#dcf3fe"
-        ]
-      },
-      "glow-ink": {
-        "role": "primary",
-        "displayName": "Glow Ink",
-        "canonical": "oklch(23.4% 0.041 233.0)",
-        "tonalRamp": [
-          "#000d16",
-          "#0e2836",
-          "#2b4654",
-          "#4a6675",
-          "#6a8797",
-          "#8caabb",
-          "#b0cee0",
-          "#def2fe"
-        ]
-      },
-      "attention": {
-        "role": "secondary",
-        "displayName": "Attention Amber",
-        "canonical": "oklch(87.5% 0.142 86.3)",
-        "tonalRamp": [
-          "#110a00",
-          "#302300",
-          "#543e00",
-          "#7a5c04",
-          "#a37c03",
-          "#cc9d1b",
-          "#f2c24e",
-          "#feedc6"
-        ]
-      },
-      "attention-hover": {
-        "role": "secondary",
-        "displayName": "Attention Amber Hover",
-        "canonical": "oklch(91.5% 0.106 89.3)",
-        "tonalRamp": [
-          "#100a00",
-          "#2f2300",
-          "#523f03",
-          "#785d03",
-          "#9c7f2b",
-          "#bfa251",
-          "#e5c676",
-          "#feedc1"
-        ]
-      },
-      "attention-ink": {
-        "role": "secondary",
-        "displayName": "Amber Ink",
-        "canonical": "oklch(20.3% 0.042 86.2)",
-        "tonalRamp": [
-          "#110a00",
-          "#2e230b",
-          "#4c4128",
-          "#6c6046",
-          "#8d8166",
-          "#b1a488",
-          "#d5c8ab",
-          "#fbedd0"
+          "#010d17",
+          "#002840",
+          "#06476a",
+          "#266791",
+          "#4a89b5",
+          "#6dadda",
+          "#97d1fb",
+          "#dff1ff"
         ]
       },
       "ok": {
         "role": "tertiary",
         "displayName": "Verified Green",
-        "canonical": "oklch(80.6% 0.188 149.7)",
+        "canonical": "#5ee08a",
+        "oklch": "oklch(81.3% 0.167 151.9)",
         "tonalRamp": [
-          "#001003",
-          "#012e10",
-          "#015021",
-          "#017533",
-          "#019d46",
-          "#28c460",
-          "#5bea83",
-          "#c8ffd1"
+          "#001004",
+          "#042e14",
+          "#025026",
+          "#14743c",
+          "#1d9b52",
+          "#3ac26e",
+          "#66e891",
+          "#c7ffd4"
+        ]
+      },
+      "attention": {
+        "role": "secondary",
+        "displayName": "Signal Amber",
+        "canonical": "#ffc857",
+        "oklch": "oklch(86.1% 0.142 82.7)",
+        "tonalRamp": [
+          "#110a00",
+          "#312204",
+          "#553d04",
+          "#7b5b14",
+          "#a47b1d",
+          "#d09b1b",
+          "#f6c04e",
+          "#fdeccd"
+        ]
+      },
+      "attention-hover": {
+        "role": "secondary",
+        "displayName": "Amber Lift",
+        "canonical": "#ffd77f",
+        "oklch": "oklch(89.5% 0.116 85.6)",
+        "tonalRamp": [
+          "#110a00",
+          "#302303",
+          "#543e02",
+          "#795c12",
+          "#a17c1b",
+          "#c69f46",
+          "#ebc46c",
+          "#feedc9"
+        ]
+      },
+      "attention-ink": {
+        "role": "secondary",
+        "displayName": "Amber Ink",
+        "canonical": "#241900",
+        "oklch": "oklch(22.1% 0.045 86.5)",
+        "tonalRamp": [
+          "#110a00",
+          "#2f2307",
+          "#4d4025",
+          "#6d6043",
+          "#8e8163",
+          "#b2a485",
+          "#d6c8a8",
+          "#fcedcd"
         ]
       },
       "fault": {
         "role": "tertiary",
         "displayName": "Fault Red",
-        "canonical": "oklch(70.9% 0.184 28.4)",
+        "canonical": "#ff6b6b",
+        "oklch": "oklch(71.2% 0.181 22.8)",
         "tonalRamp": [
-          "#1f0000",
-          "#4d0001",
-          "#800205",
-          "#b21e19",
-          "#da493d",
-          "#fe7465",
-          "#feb3a8",
-          "#fee9e6"
+          "#1e0102",
+          "#4d0009",
+          "#7e0819",
+          "#b11d2c",
+          "#d9484c",
+          "#fb7674",
+          "#fdb3af",
+          "#ffe9e7"
         ]
       },
-      "map-void": {
+      "unknown": {
         "role": "neutral",
-        "displayName": "Map Void",
-        "canonical": "oklch(14.1% 0.009 273.2)",
+        "displayName": "Unknown Grey",
+        "canonical": "#8193ab",
+        "oklch": "oklch(65.7% 0.041 255.7)",
         "tonalRamp": [
-          "#0a0b0f",
-          "#23252a",
-          "#404247",
-          "#5f6166",
-          "#808288",
-          "#a3a5ab",
-          "#c7c9cf",
-          "#eceef5"
+          "#020b1c",
+          "#172639",
+          "#334358",
+          "#526379",
+          "#72849b",
+          "#94a7bf",
+          "#b8cbe4",
+          "#e5f0fe"
         ]
       },
-      "pixel-shadow": {
+      "unknown-text": {
         "role": "neutral",
-        "displayName": "Pixel Shadow",
-        "canonical": "oklch(12.2% 0.006 261.6)",
+        "displayName": "Unknown Text",
+        "canonical": "#a9b8cc",
+        "oklch": "oklch(77.7% 0.033 255.6)",
         "tonalRamp": [
-          "#0a0b0e",
-          "#232528",
-          "#404245",
-          "#5f6165",
-          "#808286",
-          "#a3a5a9",
-          "#c7c9cd",
-          "#eceff3"
+          "#030b19",
+          "#1a2635",
+          "#364354",
+          "#556274",
+          "#768496",
+          "#98a6ba",
+          "#bbcbdf",
+          "#e4f0ff"
         ]
       },
-      "room-wall": {
-        "role": "neutral",
-        "displayName": "Room Wall",
-        "canonical": "oklch(43.9% 0.035 267.9)",
+      "tone-ok-fill": {
+        "role": "tertiary",
+        "displayName": "Green Tone Fill",
+        "canonical": "#12351f",
+        "oklch": "oklch(29.6% 0.057 153.4)",
         "tonalRamp": [
-          "#060a1a",
-          "#1e2436",
-          "#3a4255",
-          "#596175",
-          "#798298",
-          "#9ca5bb",
-          "#bfc9e1",
-          "#e8eefe"
+          "#000f04",
+          "#092d17",
+          "#284b34",
+          "#476b52",
+          "#688d72",
+          "#8ab095",
+          "#add5b8",
+          "#d2fadd"
         ]
       },
-      "tone-green-fill": {
-        "role": "state",
-        "displayName": "Tone Green Fill",
-        "canonical": "oklch(31.4% 0.060 152.3)",
+      "tone-ok-text": {
+        "role": "tertiary",
+        "displayName": "Green Tone Text",
+        "canonical": "#9ff0bb",
+        "oklch": "oklch(88.9% 0.108 154.9)",
         "tonalRamp": [
-          "#001004",
-          "#082d16",
-          "#274b32",
-          "#476b51",
-          "#678d71",
-          "#89b093",
-          "#add5b6",
-          "#d1fbdb"
-        ]
-      },
-      "tone-green-text": {
-        "role": "state",
-        "displayName": "Tone Green Text",
-        "canonical": "oklch(88.7% 0.116 151.3)",
-        "tonalRamp": [
-          "#001004",
-          "#012e12",
-          "#025025",
-          "#1f733e",
-          "#46965e",
-          "#6aba80",
-          "#8edfa3",
-          "#c7ffd3"
-        ]
-      },
-      "tone-green-edge": {
-        "role": "state",
-        "displayName": "Tone Green Edge",
-        "canonical": "oklch(43.8% 0.079 149.7)",
-        "tonalRamp": [
-          "#001003",
-          "#002e10",
-          "#1e4d2a",
-          "#3f6e49",
-          "#609069",
-          "#82b38b",
-          "#a5d8ae",
-          "#cafed3"
+          "#001005",
+          "#012e17",
+          "#0b4f2c",
+          "#1e7345",
+          "#459565",
+          "#6ab987",
+          "#8edeaa",
+          "#c5ffd8"
         ]
       },
       "tone-amber-fill": {
-        "role": "state",
-        "displayName": "Tone Amber Fill",
-        "canonical": "oklch(31.3% 0.054 86.6)",
+        "role": "secondary",
+        "displayName": "Amber Tone Fill",
+        "canonical": "#3a2c09",
+        "oklch": "oklch(30.2% 0.053 86.2)",
         "tonalRamp": [
           "#110a00",
-          "#302300",
-          "#4e401e",
+          "#302301",
+          "#4f401e",
           "#6f5f3d",
-          "#90815d",
+          "#91815d",
           "#b4a37f",
-          "#d8c7a2",
+          "#d9c7a2",
           "#feedc6"
         ]
       },
       "tone-amber-text": {
-        "role": "state",
-        "displayName": "Tone Amber Text",
-        "canonical": "oklch(90.1% 0.106 84.7)",
+        "role": "secondary",
+        "displayName": "Amber Tone Text",
+        "canonical": "#ffd98a",
+        "oklch": "oklch(90.1% 0.106 84.7)",
         "tonalRamp": [
           "#110a00",
-          "#312200",
-          "#553e02",
-          "#7b5c02",
+          "#302303",
+          "#553e00",
+          "#7a5c0e",
           "#a07d2b",
           "#c4a051",
           "#e9c475",
-          "#ffecc7"
+          "#feedc8"
         ]
       },
-      "tone-amber-edge": {
-        "role": "state",
-        "displayName": "Tone Amber Edge",
-        "canonical": "oklch(45.9% 0.075 84.9)",
+      "tone-line-fill": {
+        "role": "neutral",
+        "displayName": "Line Tone Fill",
+        "canonical": "#1a3557",
+        "oklch": "oklch(32.6% 0.069 255.2)",
         "tonalRamp": [
-          "#110a00",
-          "#312201",
-          "#543e04",
-          "#755e2a",
-          "#977f4c",
-          "#bba26e",
-          "#e0c691",
-          "#ffedc8"
+          "#000b20",
+          "#0a2546",
+          "#284366",
+          "#466388",
+          "#6684ac",
+          "#88a8d0",
+          "#abccf6",
+          "#e4f0ff"
         ]
       },
-      "tone-blue-fill": {
-        "role": "state",
-        "displayName": "Tone Blue Fill",
-        "canonical": "oklch(28.3% 0.053 244.3)",
+      "tone-line-text": {
+        "role": "neutral",
+        "displayName": "Line Tone Text",
+        "canonical": "#d4e6ff",
+        "oklch": "oklch(91.9% 0.039 256.6)",
         "tonalRamp": [
-          "#000c1a",
-          "#0a273d",
-          "#28455c",
-          "#47657e",
-          "#6786a1",
-          "#89a9c5",
-          "#adceea",
-          "#e1f1ff"
-        ]
-      },
-      "tone-blue-text": {
-        "role": "state",
-        "displayName": "Tone Blue Text",
-        "canonical": "oklch(86.9% 0.074 237.1)",
-        "tonalRamp": [
-          "#000d18",
-          "#00283d",
-          "#104764",
-          "#346786",
-          "#5689a9",
-          "#78acce",
-          "#9bd1f4",
-          "#dff2fe"
+          "#020b1b",
+          "#182638",
+          "#344357",
+          "#536278",
+          "#73849a",
+          "#96a6be",
+          "#b9cbe3",
+          "#e5effe"
         ]
       },
       "tone-red-fill": {
-        "role": "state",
-        "displayName": "Tone Red Fill",
-        "canonical": "oklch(26.3% 0.051 24.8)",
+        "role": "tertiary",
+        "displayName": "Red Tone Fill",
+        "canonical": "#3d1818",
+        "oklch": "oklch(26.5% 0.058 21.8)",
         "tonalRamp": [
-          "#1c0202",
-          "#3a1a18",
-          "#5a3734",
-          "#7c5653",
-          "#9f7773",
-          "#c39995",
-          "#e9bdb9",
-          "#fee9e7"
+          "#1e0002",
+          "#3d1818",
+          "#5d3534",
+          "#7f5452",
+          "#a37573",
+          "#c79795",
+          "#edbbb8",
+          "#fee9e8"
         ]
       },
       "tone-red-text": {
-        "role": "state",
-        "displayName": "Tone Red Text",
-        "canonical": "oklch(83.6% 0.090 26.7)",
+        "role": "tertiary",
+        "displayName": "Red Tone Text",
+        "canonical": "#ffb4b4",
+        "oklch": "oklch(84.1% 0.088 19.1)",
         "tonalRamp": [
-          "#1f0000",
-          "#480b0a",
-          "#6a2c27",
-          "#8d4b45",
-          "#b26d65",
-          "#d88f87",
-          "#ffb3aa",
-          "#ffe9e6"
-        ]
-      },
-      "tone-red-edge": {
-        "role": "state",
-        "displayName": "Tone Red Edge",
-        "canonical": "oklch(37.7% 0.094 26.1)",
-        "tonalRamp": [
-          "#1f0001",
-          "#490909",
-          "#6b2a26",
-          "#8f4a44",
-          "#b46b64",
-          "#da8e86",
-          "#ffb3ab",
-          "#fee9e6"
+          "#1e0103",
+          "#470c13",
+          "#692c2f",
+          "#8c4b4d",
+          "#b16c6d",
+          "#d78f8f",
+          "#fdb2b2",
+          "#ffe8e8"
         ]
       },
       "tone-gray-fill": {
-        "role": "state",
-        "displayName": "Tone Gray Fill",
-        "canonical": "oklch(30.6% 0.025 268.5)",
+        "role": "neutral",
+        "displayName": "Unknown Tone Fill",
+        "canonical": "#1a2a3f",
+        "oklch": "oklch(28.2% 0.045 255.6)",
         "tonalRamp": [
-          "#070b16",
-          "#202531",
-          "#3c424f",
-          "#5b6170",
-          "#7c8292",
-          "#9ea5b5",
-          "#c2c9da",
-          "#e8eefe"
-        ]
-      },
-      "tone-gray-text": {
-        "role": "state",
-        "displayName": "Tone Gray Text",
-        "canonical": "oklch(83.5% 0.019 266.0)",
-        "tonalRamp": [
-          "#070b13",
-          "#21252f",
-          "#3d424d",
-          "#5c616d",
-          "#7d828e",
-          "#9fa5b2",
-          "#c3c9d6",
-          "#e8effc"
-        ]
-      },
-      "tone-gray-edge": {
-        "role": "state",
-        "displayName": "Tone Gray Edge",
-        "canonical": "oklch(43.9% 0.035 267.9)",
-        "tonalRamp": [
-          "#060a1a",
-          "#1e2436",
-          "#3a4255",
-          "#596175",
-          "#798298",
-          "#9ca5bb",
-          "#bfc9e1",
-          "#e8eefe"
+          "#010b1d",
+          "#16263a",
+          "#32435a",
+          "#51637b",
+          "#71849d",
+          "#93a7c1",
+          "#b6cbe6",
+          "#e4f0ff"
         ]
       }
     },
     "typographyMeta": {
       "display": {
         "displayName": "Display",
-        "purpose": "Page title in the header; sign-in title."
+        "purpose": "The one topbar page title."
       },
       "headline": {
         "displayName": "Headline",
-        "purpose": "Selected agent name, approval titles, memory and empty-state titles."
+        "purpose": "Selected agent name, empty states; approval and memory titles in sentence case."
       },
       "title": {
         "displayName": "Title",
-        "purpose": "Panel and board column titles, button labels."
-      },
-      "nav": {
-        "displayName": "Nav",
-        "purpose": "Rail navigation links (15px under 900px)."
+        "purpose": "Panel heads, rail navigation, Needs-you button."
       },
       "body": {
         "displayName": "Body",
-        "purpose": "Prose and table text with tabular numerals."
+        "purpose": "Default reading text with tabular numerals."
       },
-      "body-dense": {
-        "displayName": "Body Dense",
-        "purpose": "Event rows, list rows and notes."
+      "body-table": {
+        "displayName": "Table Body",
+        "purpose": "Schedule tables and event rows (13px when dense)."
       },
       "label": {
         "displayName": "Label",
-        "purpose": "Room labels, control labels, nametags, tags, map hints."
+        "purpose": "Table heads, fact keys, tags; uppercase."
+      },
+      "control": {
+        "displayName": "Control",
+        "purpose": "Every button; uppercase."
       },
       "mono": {
         "displayName": "Mono",
-        "purpose": "Ids, revisions, paths, counts, kbd."
+        "purpose": "Ids, revisions, priorities, minutes, counts."
       },
-      "mono-map": {
-        "displayName": "Mono Map",
-        "purpose": "Speech-bubble quotes and room plates; inverse-scaled with the map."
+      "plan-room": {
+        "displayName": "Room Tag",
+        "purpose": "Room names on the plan; uppercase."
+      },
+      "plan-plate": {
+        "displayName": "Name Plate",
+        "purpose": "Agent name under each plan figure."
+      },
+      "plan-dimension": {
+        "displayName": "Dimension",
+        "purpose": "Signal-age figures on dimension lines."
       }
     },
     "shadows": [
       {
-        "name": "pixel-drop",
-        "value": "0 4px 0 #050608",
-        "purpose": "Map rooms, desks, meeting table (3px under bubbles, 2px under the cable tray). Map only; never on UI chrome."
+        "name": "rail-current",
+        "value": "inset 0 0 0 1.5px var(--construction)",
+        "purpose": "Drawn outline of the current rail item; not a lift."
       },
       {
-        "name": "wall-face",
-        "value": "inset 0 -3px 0 #0e1117, inset 0 -5px 0 #2b3142, inset 0 2px 0 #262c3c",
-        "purpose": "Three-quarter top wall of each room."
+        "name": "row-selected",
+        "value": "inset 0 1px 0 var(--line), inset 0 -1px 0 var(--line)",
+        "purpose": "Pale rules above and below a selected schedule row."
       },
       {
-        "name": "room-vignette",
-        "value": "inset 0 0 0 4px rgb(0 0 0 / 0.16), inset 0 0 0 8px rgb(0 0 0 / 0.1), inset 0 0 0 14px rgb(0 0 0 / 0.06)",
-        "purpose": "Stepped darkening toward room walls."
-      },
-      {
-        "name": "selection-outline",
-        "value": "filter: drop-shadow(2px 0 0 #7fd4ff) drop-shadow(-2px 0 0 #7fd4ff) drop-shadow(0 2px 0 #7fd4ff) drop-shadow(0 -2px 0 #7fd4ff)",
-        "purpose": "Pixel outline around the selected agent sprite."
-      },
-      {
-        "name": "led-emission",
-        "value": "0 0 8px 1px #4fe07a80",
-        "purpose": "Live LED only; blur reserved for emitted light."
+        "name": "pill-edge",
+        "value": "inset 0 0 0 1.5px var(--attention) | var(--unknown)",
+        "purpose": "Edge of attention and hatched-unknown pills."
       }
     ],
     "motion": [
       {
+        "name": "state-transition",
+        "value": "160ms ease-out",
+        "purpose": "Background, border and colour changes on buttons and nav."
+      },
+      {
+        "name": "press",
+        "value": "translateY(1px)",
+        "purpose": "Button active nudge."
+      },
+      {
         "name": "agent-walk",
-        "value": "transform 1.1s steps(9, end)",
-        "purpose": "Agent and its tag move to the room of its new verified state."
+        "value": "min(2400ms, 600ms + 2.2ms per plan unit) cubic-bezier(0.22, 1, 0.36, 1)",
+        "purpose": "Figure walks its route through doorways on a committed room change (Web Animations API)."
       },
       {
-        "name": "sprite-frames",
-        "value": "1.2s steps(1, end) infinite",
-        "purpose": "Two-frame idle for fresh agents only."
+        "name": "route-fade",
+        "value": "6s ease-out, opaque until 70%",
+        "purpose": "Amber dashed route, its callout and backing box linger, then fade."
       },
       {
-        "name": "led-blink",
-        "value": "1s steps(1, end) infinite",
-        "purpose": "Amber LED while connecting or reconnecting."
+        "name": "pip-breathe",
+        "value": "2.4s ease-out infinite, scale 1 to 1.6 at 20%",
+        "purpose": "Status pip of an agent with a fresh verified signal, while live."
       },
       {
-        "name": "pending",
-        "value": "1.6s steps(2, jump-none) infinite",
-        "purpose": "Skeleton bars while loading."
-      },
-      {
-        "name": "scenery",
-        "value": "0.36s-11s steps(1, end) infinite",
-        "purpose": "Screens, carets, rack LEDs, plants, fans; only under prefers-reduced-motion: no-preference."
-      },
-      {
-        "name": "edge-fade",
-        "value": "opacity 0.15s steps(2)",
-        "purpose": "Map scroll edge hints."
+        "name": "blink",
+        "value": "1.2s ease-in-out infinite (skeleton 1.6s), opacity to 0.25",
+        "purpose": "Live LED while connecting; skeleton loading bars."
       },
       {
         "name": "reduced-motion",
-        "value": "animation: none; transition: none",
-        "purpose": "All motion removed under prefers-reduced-motion: reduce; agents jump."
+        "value": "prefers-reduced-motion: reduce",
+        "purpose": "Transitions off, pip and blink stop, figures jump; route stays drawn for its 6s."
       }
     ],
     "breakpoints": [
       {
-        "name": "compact",
-        "value": "max-width: 900px"
+        "name": "stack-side",
+        "value": "1180px"
       },
       {
-        "name": "wide",
-        "value": "min-width: 1280px"
+        "name": "rail-to-top",
+        "value": "900px"
+      },
+      {
+        "name": "plan-scroll",
+        "value": "700px"
       }
-    ]
+    ],
+    "plan": {
+      "viewBox": "0 0 840 790",
+      "wallOuter": 7,
+      "wallInner": 4,
+      "doorGap": 30,
+      "figureHeight": 24,
+      "hatch": "45deg, 4-unit pattern, Unknown Grey 1.4 stroke on floor",
+      "providerFigures": {
+        "claude": {
+          "body": "#d97757",
+          "head": "#f3c0a2",
+          "shape": "round"
+        },
+        "codex": {
+          "body": "#e8eef2",
+          "head": "#3fb8b0",
+          "shape": "square"
+        },
+        "opencode": {
+          "body": "#4caf63",
+          "head": "#d6f0dc",
+          "shape": "hex"
+        },
+        "gemini": {
+          "body": "#8b9cf7",
+          "head": "#d5dbff",
+          "shape": "drop"
+        },
+        "cursor": {
+          "body": "#c4a95a",
+          "head": "#f1e4bb",
+          "shape": "tri"
+        }
+      }
+    }
   },
   "components": [
     {
       "name": "Button",
       "kind": "button",
       "refersTo": "button",
-      "description": "Default square key with a pixel label; 44px target.",
-      "html": "<button class=\"ds-btn\">Deny</button>",
-      "css": ":host{--ground:#0d0f14;--panel:#12151c;--raise:#181c25;--rule:#1f2430;--rule-strong:#2b3142;--ink:#e6e9f0;--muted:#9aa3b8;--glow:#7fd4ff;--attention:#ffcf5c;--ok:#4fe07a;--fault:#ff6b5c;--pixel:'Pixelify Sans',ui-monospace,monospace;--sans:-apple-system,'SF Pro Text','Helvetica Neue',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace} .ds-btn{min-height:44px;padding:8px 16px;border:2px solid var(--rule-strong);border-radius:0;background:var(--raise);color:var(--ink);font-family:var(--pixel);font-size:16px;cursor:pointer}.ds-btn:hover{border-color:#3d4560;background:#1e2330}.ds-btn:focus-visible{outline:2px solid var(--glow);outline-offset:2px}.ds-btn:active{transform:translateY(1px)}"
+      "description": "Default action: condensed capitals on a drawn 1.5px edge.",
+      "html": "<button class=\"ds-btn\">Refresh</button>",
+      "css": ":host{--sheet:#0b1a2e;--floor:#10243d;--raise:#163152;--raise-hover:#1b3a60;--rule:#1d3654;--construction:#4d6b8f;--line:#cfe3ff;--ink:#e3edf9;--muted:#9db2cf;--focus:#8fd0ff;--ok:#5ee08a;--attention:#ffc857;--attention-hover:#ffd77f;--attention-ink:#241900;--unknown:#8193ab;--unknown-text:#a9b8cc;--cond:\"Barlow Condensed\",\"Arial Narrow\",sans-serif;--sans:-apple-system,BlinkMacSystemFont,\"SF Pro Text\",\"Helvetica Neue\",system-ui,sans-serif;--mono:\"JetBrains Mono\",ui-monospace,monospace;--hatch:repeating-linear-gradient(45deg,transparent 0 3px,rgb(129 147 171 / .32) 3px 4.5px)}.ds-btn{min-height:40px;padding:6px 16px;border:1.5px solid var(--construction);border-radius:3px;background:var(--floor);color:var(--ink);font:600 15px var(--cond);letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:background 160ms ease-out,border-color 160ms ease-out}.ds-btn:hover{background:var(--raise-hover);border-color:var(--line)}.ds-btn:active{transform:translateY(1px)}.ds-btn:focus-visible{outline:2px solid var(--focus);outline-offset:2px}"
     },
     {
       "name": "Primary Button",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "Monitor-glow fill for the one committing action in a view.",
-      "html": "<button class=\"ds-btn-primary\">Approve</button>",
-      "css": ":host{--ground:#0d0f14;--panel:#12151c;--raise:#181c25;--rule:#1f2430;--rule-strong:#2b3142;--ink:#e6e9f0;--muted:#9aa3b8;--glow:#7fd4ff;--attention:#ffcf5c;--ok:#4fe07a;--fault:#ff6b5c;--pixel:'Pixelify Sans',ui-monospace,monospace;--sans:-apple-system,'SF Pro Text','Helvetica Neue',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace} .ds-btn-primary{min-height:44px;padding:8px 16px;border:2px solid var(--glow);border-radius:0;background:var(--glow);color:#06212e;font-family:var(--pixel);font-size:16px;cursor:pointer}.ds-btn-primary:hover{background:#a6e2ff;border-color:#a6e2ff}.ds-btn-primary:focus-visible{outline:2px solid var(--glow);outline-offset:2px}.ds-btn-primary:active{transform:translateY(1px)}"
+      "description": "The single primary action of a form, filled in Drafting Line.",
+      "html": "<button class=\"ds-btn ds-btn-primary\">Add task</button>",
+      "css": ":host{--sheet:#0b1a2e;--floor:#10243d;--raise:#163152;--raise-hover:#1b3a60;--rule:#1d3654;--construction:#4d6b8f;--line:#cfe3ff;--ink:#e3edf9;--muted:#9db2cf;--focus:#8fd0ff;--ok:#5ee08a;--attention:#ffc857;--attention-hover:#ffd77f;--attention-ink:#241900;--unknown:#8193ab;--unknown-text:#a9b8cc;--cond:\"Barlow Condensed\",\"Arial Narrow\",sans-serif;--sans:-apple-system,BlinkMacSystemFont,\"SF Pro Text\",\"Helvetica Neue\",system-ui,sans-serif;--mono:\"JetBrains Mono\",ui-monospace,monospace;--hatch:repeating-linear-gradient(45deg,transparent 0 3px,rgb(129 147 171 / .32) 3px 4.5px)}.ds-btn{min-height:40px;padding:6px 16px;border:1.5px solid var(--construction);border-radius:3px;background:var(--floor);color:var(--ink);font:600 15px var(--cond);letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:background 160ms ease-out,border-color 160ms ease-out}.ds-btn:hover{background:var(--raise-hover);border-color:var(--line)}.ds-btn:active{transform:translateY(1px)}.ds-btn:focus-visible{outline:2px solid var(--focus);outline-offset:2px}.ds-btn-primary{background:var(--line);border-color:var(--line);color:var(--sheet)}.ds-btn-primary:hover{background:#fff;border-color:#fff}"
     },
     {
       "name": "Needs You",
       "kind": "button",
-      "refersTo": "needs-you",
-      "description": "The only solid-amber control: what waits on the human.",
-      "html": "<a class=\"ds-needs-you\" href=\"#\">Needs you · 2</a>",
-      "css": ":host{--ground:#0d0f14;--panel:#12151c;--raise:#181c25;--rule:#1f2430;--rule-strong:#2b3142;--ink:#e6e9f0;--muted:#9aa3b8;--glow:#7fd4ff;--attention:#ffcf5c;--ok:#4fe07a;--fault:#ff6b5c;--pixel:'Pixelify Sans',ui-monospace,monospace;--sans:-apple-system,'SF Pro Text','Helvetica Neue',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace} .ds-needs-you{display:inline-block;padding:6px 12px;background:var(--attention);color:#1f1500;font-family:var(--sans);font-weight:600;text-decoration:none}.ds-needs-you:hover{background:#ffe08f}.ds-needs-you:focus-visible{outline:2px solid var(--glow);outline-offset:2px}"
+      "refersTo": "button-needs-you",
+      "description": "The one amber call to action: open approvals waiting on a human.",
+      "html": "<a class=\"ds-needs\" href=\"#\">Needs you · 1</a>",
+      "css": ":host{--sheet:#0b1a2e;--floor:#10243d;--raise:#163152;--raise-hover:#1b3a60;--rule:#1d3654;--construction:#4d6b8f;--line:#cfe3ff;--ink:#e3edf9;--muted:#9db2cf;--focus:#8fd0ff;--ok:#5ee08a;--attention:#ffc857;--attention-hover:#ffd77f;--attention-ink:#241900;--unknown:#8193ab;--unknown-text:#a9b8cc;--cond:\"Barlow Condensed\",\"Arial Narrow\",sans-serif;--sans:-apple-system,BlinkMacSystemFont,\"SF Pro Text\",\"Helvetica Neue\",system-ui,sans-serif;--mono:\"JetBrains Mono\",ui-monospace,monospace;--hatch:repeating-linear-gradient(45deg,transparent 0 3px,rgb(129 147 171 / .32) 3px 4.5px)}.ds-needs{display:inline-flex;align-items:center;min-height:36px;padding:4px 14px;border-radius:3px;background:var(--attention);color:var(--attention-ink);text-decoration:none;font:600 16px var(--cond);letter-spacing:.08em;text-transform:uppercase}.ds-needs:hover{background:var(--attention-hover)}.ds-needs:focus-visible{outline:2px solid var(--focus);outline-offset:2px}"
     },
     {
-      "name": "Search Input",
+      "name": "Text Field",
       "kind": "input",
       "refersTo": "input",
-      "description": "Ground-coloured well with a 2px slate edge that turns glow on focus.",
-      "html": "<input class=\"ds-input\" type=\"search\" placeholder=\"Search memory\">",
-      "css": ":host{--ground:#0d0f14;--panel:#12151c;--raise:#181c25;--rule:#1f2430;--rule-strong:#2b3142;--ink:#e6e9f0;--muted:#9aa3b8;--glow:#7fd4ff;--attention:#ffcf5c;--ok:#4fe07a;--fault:#ff6b5c;--pixel:'Pixelify Sans',ui-monospace,monospace;--sans:-apple-system,'SF Pro Text','Helvetica Neue',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace} .ds-input{min-height:44px;padding:8px 10px;background:var(--ground);border:2px solid var(--rule-strong);border-radius:0;color:var(--ink);font:15px/1.55 var(--sans)}.ds-input::placeholder{color:#7d869c}.ds-input:hover{border-color:#3d4560}.ds-input:focus-visible{outline:2px solid var(--glow);outline-offset:0;border-color:var(--glow)}"
+      "description": "Sheet-coloured well with a construction edge.",
+      "html": "<input class=\"ds-input\" placeholder=\"Describe a task for an agent\">",
+      "css": ":host{--sheet:#0b1a2e;--floor:#10243d;--raise:#163152;--raise-hover:#1b3a60;--rule:#1d3654;--construction:#4d6b8f;--line:#cfe3ff;--ink:#e3edf9;--muted:#9db2cf;--focus:#8fd0ff;--ok:#5ee08a;--attention:#ffc857;--attention-hover:#ffd77f;--attention-ink:#241900;--unknown:#8193ab;--unknown-text:#a9b8cc;--cond:\"Barlow Condensed\",\"Arial Narrow\",sans-serif;--sans:-apple-system,BlinkMacSystemFont,\"SF Pro Text\",\"Helvetica Neue\",system-ui,sans-serif;--mono:\"JetBrains Mono\",ui-monospace,monospace;--hatch:repeating-linear-gradient(45deg,transparent 0 3px,rgb(129 147 171 / .32) 3px 4.5px)}.ds-input{min-height:40px;width:320px;padding:6px 10px;border:1.5px solid var(--construction);border-radius:3px;background:var(--sheet);color:var(--ink);font:14px/1.5 var(--sans)}.ds-input::placeholder{color:#8197b6}.ds-input:hover{border-color:var(--muted)}.ds-input:focus-visible{border-color:var(--focus);outline:2px solid var(--focus);outline-offset:0}"
     },
     {
       "name": "Rail Navigation",
       "kind": "nav",
       "refersTo": "nav-item",
-      "description": "Pixel-type rail links with right-aligned counts; amber count only for approvals.",
-      "html": "<nav class=\"ds-rail\"><a href=\"#\" aria-current=\"page\">Office</a><a href=\"#\">Tasks <span class=\"ds-count\">7</span></a><a href=\"#\">Approvals <span class=\"ds-count ds-count-attn\">2</span></a></nav>",
-      "css": ":host{--ground:#0d0f14;--panel:#12151c;--raise:#181c25;--rule:#1f2430;--rule-strong:#2b3142;--ink:#e6e9f0;--muted:#9aa3b8;--glow:#7fd4ff;--attention:#ffcf5c;--ok:#4fe07a;--fault:#ff6b5c;--pixel:'Pixelify Sans',ui-monospace,monospace;--sans:-apple-system,'SF Pro Text','Helvetica Neue',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace} .ds-rail{display:flex;flex-direction:column;gap:4px;width:200px;padding:16px;background:var(--ground)}.ds-rail a{display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 12px;border:2px solid transparent;color:var(--muted);font-family:var(--pixel);font-size:17px;text-decoration:none}.ds-rail a:hover{color:var(--ink);background:var(--panel)}.ds-rail a:focus-visible{outline:2px solid var(--glow);outline-offset:2px}.ds-rail a[aria-current=page]{color:#fff;background:var(--raise);border-color:var(--rule-strong)}.ds-count{margin-left:auto;min-width:26px;padding:0 6px;text-align:center;font-family:var(--mono);font-size:12px;background:var(--rule-strong);color:var(--ink)}.ds-count-attn{background:var(--attention);color:#1f1500;font-weight:600}"
+      "description": "Left rail items in condensed capitals; current page outlined, counts at the edge.",
+      "html": "<ul class=\"ds-rail\"><li><a href=\"#\" aria-current=\"page\">Office</a></li><li><a href=\"#\">Tasks <span class=\"ds-count\">6</span></a></li><li><a href=\"#\">Approvals <span class=\"ds-count ds-count-attn\">1</span></a></li></ul>",
+      "css": ":host{--sheet:#0b1a2e;--floor:#10243d;--raise:#163152;--raise-hover:#1b3a60;--rule:#1d3654;--construction:#4d6b8f;--line:#cfe3ff;--ink:#e3edf9;--muted:#9db2cf;--focus:#8fd0ff;--ok:#5ee08a;--attention:#ffc857;--attention-hover:#ffd77f;--attention-ink:#241900;--unknown:#8193ab;--unknown-text:#a9b8cc;--cond:\"Barlow Condensed\",\"Arial Narrow\",sans-serif;--sans:-apple-system,BlinkMacSystemFont,\"SF Pro Text\",\"Helvetica Neue\",system-ui,sans-serif;--mono:\"JetBrains Mono\",ui-monospace,monospace;--hatch:repeating-linear-gradient(45deg,transparent 0 3px,rgb(129 147 171 / .32) 3px 4.5px)}.ds-rail{list-style:none;margin:0;padding:14px;display:grid;gap:2px;width:188px;background:var(--sheet)}.ds-rail a{display:flex;align-items:center;justify-content:space-between;min-height:40px;padding:6px 10px;border-radius:3px;color:var(--muted);text-decoration:none;font:600 16px var(--cond);letter-spacing:.08em;text-transform:uppercase;transition:background 160ms ease-out,color 160ms ease-out}.ds-rail a:hover{color:var(--line);background:var(--floor)}.ds-rail a[aria-current=page]{color:var(--line);background:var(--floor);box-shadow:inset 0 0 0 1.5px var(--construction)}.ds-rail a:focus-visible{outline:2px solid var(--focus);outline-offset:2px}.ds-count{min-width:22px;padding:0 6px;border-radius:9px;background:var(--rule);color:var(--ink);font:500 11.5px/18px var(--mono);text-align:center;letter-spacing:0}.ds-count-attn{background:var(--attention);color:var(--attention-ink)}"
     },
     {
-      "name": "Status Pills",
+      "name": "State Pills",
       "kind": "chip",
-      "refersTo": "pill-green",
-      "description": "Square state chips; unknown is grey with a dashed inset edge.",
-      "html": "<span class=\"ds-pill ds-green\">Active</span> <span class=\"ds-pill ds-amber\">Doing</span> <span class=\"ds-pill ds-blue\">Todo</span> <span class=\"ds-pill ds-red\">Blocked</span> <span class=\"ds-pill ds-unknown\">Unknown</span>",
-      "css": ":host{--ground:#0d0f14;--panel:#12151c;--raise:#181c25;--rule:#1f2430;--rule-strong:#2b3142;--ink:#e6e9f0;--muted:#9aa3b8;--glow:#7fd4ff;--attention:#ffcf5c;--ok:#4fe07a;--fault:#ff6b5c;--pixel:'Pixelify Sans',ui-monospace,monospace;--sans:-apple-system,'SF Pro Text','Helvetica Neue',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace} .ds-pill{display:inline-block;padding:1px 8px;font:600 12px/1.55 var(--sans);white-space:nowrap}.ds-green{background:#163a22;color:#9ff0b3}.ds-amber{background:#3d2f0c;color:#ffd98a}.ds-blue{background:#0f2c42;color:#a6dcff}.ds-red{background:#3a1a18;color:#ffb3aa}.ds-unknown{background:#2a2f3c;color:#c3c9d6;outline:2px dashed #4a5266;outline-offset:-2px}"
+      "refersTo": "pill-ok",
+      "description": "One hue per verified state; unknown is hatched and dashed, never a colour.",
+      "html": "<span class=\"ds-pill ds-ok\">Working</span> <span class=\"ds-pill ds-amber\">Reviewing</span> <span class=\"ds-pill ds-amber ds-ask\">Asks you</span> <span class=\"ds-pill ds-line\">todo</span> <span class=\"ds-pill ds-red\">Offline</span> <span class=\"ds-pill ds-unknown\">Stale</span>",
+      "css": ":host{--sheet:#0b1a2e;--floor:#10243d;--raise:#163152;--raise-hover:#1b3a60;--rule:#1d3654;--construction:#4d6b8f;--line:#cfe3ff;--ink:#e3edf9;--muted:#9db2cf;--focus:#8fd0ff;--ok:#5ee08a;--attention:#ffc857;--attention-hover:#ffd77f;--attention-ink:#241900;--unknown:#8193ab;--unknown-text:#a9b8cc;--cond:\"Barlow Condensed\",\"Arial Narrow\",sans-serif;--sans:-apple-system,BlinkMacSystemFont,\"SF Pro Text\",\"Helvetica Neue\",system-ui,sans-serif;--mono:\"JetBrains Mono\",ui-monospace,monospace;--hatch:repeating-linear-gradient(45deg,transparent 0 3px,rgb(129 147 171 / .32) 3px 4.5px)}.ds-pill{display:inline-flex;align-items:center;padding:1px 8px;border-radius:3px;font:600 12px/18px var(--sans);white-space:nowrap}.ds-ok{background:#12351f;color:#9ff0bb}.ds-amber{background:#3a2c09;color:#ffd98a}.ds-ask{box-shadow:inset 0 0 0 1.5px var(--attention)}.ds-line{background:#1a3557;color:#d4e6ff}.ds-red{background:#3d1818;color:#ffb4b4}.ds-unknown{background:var(--hatch),#1a2a3f;color:var(--unknown-text);box-shadow:inset 0 0 0 1.5px var(--unknown);outline:1.5px dashed var(--sheet);outline-offset:-1.5px}"
     },
     {
-      "name": "Live Chip",
+      "name": "Stat Chip",
       "kind": "chip",
-      "refersTo": "pill-green",
-      "description": "Header connection state with a square LED; amber blinks in steps while connecting.",
-      "html": "<span class=\"ds-live\"><span class=\"ds-led\"></span>Live</span>",
-      "css": ":host{--ground:#0d0f14;--panel:#12151c;--raise:#181c25;--rule:#1f2430;--rule-strong:#2b3142;--ink:#e6e9f0;--muted:#9aa3b8;--glow:#7fd4ff;--attention:#ffcf5c;--ok:#4fe07a;--fault:#ff6b5c;--pixel:'Pixelify Sans',ui-monospace,monospace;--sans:-apple-system,'SF Pro Text','Helvetica Neue',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace} .ds-live{display:inline-flex;align-items:center;gap:6px;padding:1px 8px;border:2px solid #2f5e3a;background:var(--panel);color:#9ff0b3;font-family:var(--pixel);font-size:13px;line-height:1.3}.ds-led{width:8px;height:8px;background:var(--ok);box-shadow:0 0 8px 1px #4fe07a80}"
+      "refersTo": "stat-chip",
+      "description": "Header task counts: condensed label, mono figure, outlined.",
+      "html": "<a class=\"ds-stat\" href=\"#\">Doing <b>3</b></a>",
+      "css": ":host{--sheet:#0b1a2e;--floor:#10243d;--raise:#163152;--raise-hover:#1b3a60;--rule:#1d3654;--construction:#4d6b8f;--line:#cfe3ff;--ink:#e3edf9;--muted:#9db2cf;--focus:#8fd0ff;--ok:#5ee08a;--attention:#ffc857;--attention-hover:#ffd77f;--attention-ink:#241900;--unknown:#8193ab;--unknown-text:#a9b8cc;--cond:\"Barlow Condensed\",\"Arial Narrow\",sans-serif;--sans:-apple-system,BlinkMacSystemFont,\"SF Pro Text\",\"Helvetica Neue\",system-ui,sans-serif;--mono:\"JetBrains Mono\",ui-monospace,monospace;--hatch:repeating-linear-gradient(45deg,transparent 0 3px,rgb(129 147 171 / .32) 3px 4.5px)}.ds-stat{display:inline-flex;align-items:center;gap:8px;min-height:32px;padding:2px 10px;border:1.5px solid #2f6a47;border-radius:3px;color:var(--muted);text-decoration:none;font:600 14px var(--cond);letter-spacing:.1em;text-transform:uppercase}.ds-stat b{font:500 13px var(--mono);color:var(--ink);letter-spacing:0}.ds-stat:hover{border-color:var(--line);color:var(--line)}.ds-stat:focus-visible{outline:2px solid var(--focus);outline-offset:2px}"
     },
     {
-      "name": "Task Card",
+      "name": "Panel with Schedule Table",
       "kind": "card",
-      "refersTo": "card",
-      "description": "Raised square card on a panel column with a 4px state-coloured top edge.",
-      "html": "<div class=\"ds-column\"><h3>Doing <span>1</span></h3><article class=\"ds-card\"><div class=\"ds-top\"><span class=\"ds-prio\">P0</span><span class=\"ds-age\">36m ago</span></div><p>Wire session presence into the office</p><div class=\"ds-meta\"><span class=\"ds-owner\">claude</span><span class=\"ds-rev\">rev 2</span></div></article></div>",
-      "css": ":host{--ground:#0d0f14;--panel:#12151c;--raise:#181c25;--rule:#1f2430;--rule-strong:#2b3142;--ink:#e6e9f0;--muted:#9aa3b8;--glow:#7fd4ff;--attention:#ffcf5c;--ok:#4fe07a;--fault:#ff6b5c;--pixel:'Pixelify Sans',ui-monospace,monospace;--sans:-apple-system,'SF Pro Text','Helvetica Neue',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace} .ds-column{width:220px;padding:12px;background:var(--panel);border:2px solid var(--rule);border-top:4px solid #2f8a4a;color:var(--ink);font:15px/1.55 var(--sans)}.ds-column h3{display:flex;justify-content:space-between;margin:0 0 10px;font:600 15px var(--pixel)}.ds-column h3 span,.ds-rev{font:12.5px var(--mono);color:var(--muted)}.ds-card{display:flex;flex-direction:column;gap:8px;padding:12px;background:var(--raise);border:2px solid var(--rule-strong)}.ds-card p{margin:0;font-size:14.5px;line-height:1.4}.ds-top{display:flex;gap:8px}.ds-prio{padding:0 6px;background:#a8463f;color:#fff;font:11.5px var(--mono)}.ds-age{margin-left:auto;color:var(--muted);font-size:12.5px}.ds-meta{display:flex;justify-content:space-between;padding-top:8px;border-top:2px solid var(--rule)}.ds-owner{font:14px var(--pixel)}"
+      "refersTo": "panel",
+      "description": "Plan-panel card with a condensed head and the shared schedule table grammar.",
+      "html": "<section class=\"ds-panel\"><h2>Agent schedule <span>8 present</span></h2><table class=\"ds-table\"><thead><tr><th>Agent</th><th>Room</th><th class=\"n\">Signal</th></tr></thead><tbody><tr class=\"sel\"><td>claude</td><td>Workspace</td><td class=\"n\">2m</td></tr><tr><td>codex</td><td>Review</td><td class=\"n\">6m</td></tr><tr class=\"stale\"><td>gemini</td><td>Lounge</td><td class=\"n\">50m</td></tr></tbody></table></section>",
+      "css": ":host{--sheet:#0b1a2e;--floor:#10243d;--raise:#163152;--raise-hover:#1b3a60;--rule:#1d3654;--construction:#4d6b8f;--line:#cfe3ff;--ink:#e3edf9;--muted:#9db2cf;--focus:#8fd0ff;--ok:#5ee08a;--attention:#ffc857;--attention-hover:#ffd77f;--attention-ink:#241900;--unknown:#8193ab;--unknown-text:#a9b8cc;--cond:\"Barlow Condensed\",\"Arial Narrow\",sans-serif;--sans:-apple-system,BlinkMacSystemFont,\"SF Pro Text\",\"Helvetica Neue\",system-ui,sans-serif;--mono:\"JetBrains Mono\",ui-monospace,monospace;--hatch:repeating-linear-gradient(45deg,transparent 0 3px,rgb(129 147 171 / .32) 3px 4.5px)}.ds-panel{width:360px;background:var(--floor);border:1.5px solid var(--construction);border-radius:3px;color:var(--ink);font:13.5px/1.5 var(--sans)}.ds-panel h2{display:flex;justify-content:space-between;align-items:baseline;margin:0;padding:10px 14px;border-bottom:1.5px solid var(--construction);font:600 16px var(--cond);letter-spacing:.1em;text-transform:uppercase;color:var(--line)}.ds-panel h2 span{font:400 12px var(--sans);letter-spacing:0;text-transform:none;color:var(--muted)}.ds-table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}.ds-table th,.ds-table td{padding:5px 10px;text-align:left}.ds-table .n{text-align:right;font-family:var(--mono);font-size:12.5px}.ds-table thead th{font:600 11.5px var(--cond);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);border-bottom:1.5px solid var(--construction)}.ds-table tbody tr+tr>*{border-top:1px solid var(--rule)}.ds-table tbody tr:hover>*{background:rgb(207 227 255 / .03)}.ds-table tr.sel>*{background:var(--raise);box-shadow:inset 0 1px 0 var(--line),inset 0 -1px 0 var(--line)}.ds-table tr.stale>*{color:var(--muted)}"
     },
     {
-      "name": "Office Room",
+      "name": "Plan Room with Agent",
       "kind": "custom",
-      "refersTo": "room-label",
-      "description": "Map room: 4px wall, three-quarter wall face, pixel drop, tab label on the wall.",
-      "html": "<div class=\"ds-room-wrap\"><div class=\"ds-room\"><span class=\"ds-room-label\">Workspace · 1</span><div class=\"ds-wall\"></div></div></div>",
-      "css": ":host{--ground:#0d0f14;--panel:#12151c;--raise:#181c25;--rule:#1f2430;--rule-strong:#2b3142;--ink:#e6e9f0;--muted:#9aa3b8;--glow:#7fd4ff;--attention:#ffcf5c;--ok:#4fe07a;--fault:#ff6b5c;--pixel:'Pixelify Sans',ui-monospace,monospace;--sans:-apple-system,'SF Pro Text','Helvetica Neue',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace} .ds-room-wrap{padding:28px 12px 16px;background:#12151c;image-rendering:pixelated}.ds-room{position:relative;width:260px;height:120px;border:4px solid #4a5266;background:#3a2e26 repeating-linear-gradient(90deg,#3a2e26 0 22px,#33281f 22px 24px);box-shadow:inset 0 4px 0 #2b3040,0 4px 0 #050608}.ds-room-label{position:absolute;left:8px;top:-4px;transform:translateY(-100%);padding:1px 8px;background:#1a1d26;border:2px solid #4a5266;border-bottom:0;font-family:var(--pixel);font-size:13px;color:#d5dbe8;white-space:nowrap}.ds-wall{position:absolute;left:0;right:0;top:0;height:22px;background-color:#1c2130;background-image:linear-gradient(90deg,#171b27 0 2px,transparent 2px);background-size:24px 100%;box-shadow:inset 0 -3px 0 #0e1117,inset 0 -5px 0 #2b3142,inset 0 2px 0 #262c3c}"
-    },
-    {
-      "name": "Speech Bubble and Nametag",
-      "kind": "custom",
-      "refersTo": "nametag",
-      "description": "Mono quote of the agent's verified signal on a light state tone, pixel outline and drop; unknown is grey and dashed.",
-      "html": "<div class=\"ds-stage\"><span class=\"ds-bubble ds-b-green\">om CLI · task updated</span><span class=\"ds-bubble ds-b-gray\">no signal 46m</span><span class=\"ds-tag\">claude</span></div>",
-      "css": ":host{--ground:#0d0f14;--panel:#12151c;--raise:#181c25;--rule:#1f2430;--rule-strong:#2b3142;--ink:#e6e9f0;--muted:#9aa3b8;--glow:#7fd4ff;--attention:#ffcf5c;--ok:#4fe07a;--fault:#ff6b5c;--pixel:'Pixelify Sans',ui-monospace,monospace;--sans:-apple-system,'SF Pro Text','Helvetica Neue',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace} .ds-stage{display:flex;gap:16px;align-items:center;padding:20px;background:#3a2f2a}.ds-bubble{position:relative;padding:3px 8px;border:2px solid #050608;font:11px/1.3 var(--mono);white-space:nowrap;box-shadow:0 3px 0 #050608}.ds-bubble::after{content:\"\";position:absolute;left:50%;bottom:-8px;margin-left:-4px;border:4px solid transparent;border-top-color:#050608}.ds-b-green{background:#c8f2cf;color:#0f3a1b}.ds-b-gray{background:#3a3f4c;color:#d5dae4;border-style:dashed}.ds-tag{padding:0 6px;background:#0b0d12dd;font-family:var(--pixel);font-size:12px;color:#eef1f6}"
+      "refersTo": "panel",
+      "description": "Signature: double-line walls, door swing, room tag, a figure with pip, name plate, signal and signal-age dimension line.",
+      "html": "<svg class=\"ds-plan\" viewBox=\"0 0 260 180\" width=\"390\" height=\"270\"><rect class=\"wo\" x=\"8\" y=\"8\" width=\"244\" height=\"164\"/><rect class=\"fl\" x=\"8\" y=\"8\" width=\"244\" height=\"164\"/><rect class=\"wo\" x=\"8\" y=\"8\" width=\"244\" height=\"164\"/><rect class=\"wi\" x=\"8\" y=\"8\" width=\"244\" height=\"164\"/><rect class=\"gap\" x=\"185\" y=\"167\" width=\"30\" height=\"9\"/><path class=\"sw\" d=\"M185 172v-30A30 30 0 0 1 215 172\"/><text class=\"rn\" x=\"24\" y=\"34\">WORKSPACE</text><text class=\"occ\" x=\"24\" y=\"50\">1 agent</text><g class=\"agent\" transform=\"translate(90 110)\"><circle class=\"ring\" cy=\"-12\" r=\"20\"/><path d=\"M-10 0v-4a10 9 0 0 1 20 0v4z\" fill=\"#d97757\"/><path d=\"M0 -24a6 6 0 1 1 0 12a6 6 0 1 1 0-12z\" fill=\"#f3c0a2\"/><circle class=\"pip\" cx=\"11\" cy=\"-24\" r=\"3.6\"/><rect class=\"plate\" x=\"-38\" y=\"5\" width=\"76\" height=\"18\"/><text class=\"pn\" y=\"18\">claude</text><text class=\"sig\" x=\"-38\" y=\"37\">Wire session presence</text><g class=\"dim\" transform=\"translate(0 47)\"><path d=\"M-30 -3v6M30 -3v6M-30 0H-13M13 0H30\"/><text y=\"3.5\">2m</text></g></g></svg>",
+      "css": ":host{--sheet:#0b1a2e;--floor:#10243d;--raise:#163152;--raise-hover:#1b3a60;--rule:#1d3654;--construction:#4d6b8f;--line:#cfe3ff;--ink:#e3edf9;--muted:#9db2cf;--focus:#8fd0ff;--ok:#5ee08a;--attention:#ffc857;--attention-hover:#ffd77f;--attention-ink:#241900;--unknown:#8193ab;--unknown-text:#a9b8cc;--cond:\"Barlow Condensed\",\"Arial Narrow\",sans-serif;--sans:-apple-system,BlinkMacSystemFont,\"SF Pro Text\",\"Helvetica Neue\",system-ui,sans-serif;--mono:\"JetBrains Mono\",ui-monospace,monospace;--hatch:repeating-linear-gradient(45deg,transparent 0 3px,rgb(129 147 171 / .32) 3px 4.5px)}.ds-plan{display:block;background:var(--sheet);font-family:var(--sans)}.ds-plan .fl{fill:var(--floor)}.ds-plan .wo{fill:none;stroke:var(--line);stroke-width:7}.ds-plan .wi{fill:none;stroke:var(--sheet);stroke-width:4}.ds-plan .gap{fill:var(--floor)}.ds-plan .sw{fill:none;stroke:var(--construction);stroke-width:1}.ds-plan .rn{font:600 16px var(--cond);letter-spacing:.12em;fill:var(--line)}.ds-plan .occ{font-size:11.5px;fill:var(--muted)}.ds-plan .agent path{stroke:var(--sheet);stroke-width:1.4}.ds-plan .pip{fill:var(--ok);stroke:var(--floor);stroke-width:1.5}.ds-plan .ring{fill:none;stroke:var(--line);stroke-width:1.2;stroke-dasharray:2 3}.ds-plan .plate{fill:var(--line);stroke:var(--line);stroke-width:1.2}.ds-plan .pn{font:600 13px var(--cond);letter-spacing:.06em;text-anchor:middle;fill:var(--sheet)}.ds-plan .sig{font-size:11px;fill:var(--ink)}.ds-plan .dim path{fill:none;stroke:var(--line);stroke-width:1}.ds-plan .dim text{font:500 10.5px var(--mono);text-anchor:middle;fill:var(--ink)}"
     }
   ],
   "narrative": {
-    "northStar": "The Night Office",
-    "overview": "**Creative North Star: \"The Night Office\"**\n\nMission Control is a lit office floor at night, seen from above. The pixel-art map is the status board: each agent is an original 12x16 sprite standing in the room its verified state belongs to, and when a committed event changes that state it walks there in stepped motion. Everything around the map (rail, header, Tasks, Agents, Approvals, Memory, Events) is the same building's back office: near-black panels, 2px slate rules, square corners, and the pixel face only where something is named.\n\nDensity is that of an operator console, not a marketing page. Text sits on dark ground at body 15px, ids and revisions drop to a small monospace, and colour is spent almost entirely on state: monitor-glow blue for focus and selection, amber for what needs a human, green for verified activity, red for faults, and dashed grey for anything unknown. The office carries the delight (floors, lamps, plants, blinking racks); the data views carry clarity and stay plain.\n\nThe world is drawn, not decorated. Walls are 4px, rules are 2px, shadows are pixel steps, motion is `steps()`, and nothing has a rounded corner.",
+    "northStar": "The Night Floor Plan",
+    "overview": "**Creative North Star: \"The Night Floor Plan\"**\n\nMission Control is an architect's drawing set read at night. A prussian sheet carries pale, crisp linework. Rooms are drawn with double-line walls and quarter-arc door swings, and the sheet ends in a legend and a title block. Each agent is a small plan figure standing in the room that its verified state belongs to, so the plan itself is the status board. Everything around the plan (rail, header, schedule tables, event list) uses the same drawing grammar: hairline construction rules, condensed uppercase tags, and tabular figures.\n\nHue is reserved for meaning. The linework, panels and type are all one blue-grey family. Green, amber and red appear only where a verified state needs them. \"Unknown\" is never shown as a colour. It is drawn as a diagonal hatch with a dashed outline, so a missing signal looks like a gap in the drawing and not like a status. The one exception to the hue budget is agent identity: each provider's figure has its own fixed body and head colours and its own head silhouette, so you can recognise the provider even when its figure is hatched.\n\nDensity is that of an operator's second screen: compact rows, 13 to 14px reading text, and a plan held at the largest scale that stays legible. Motion is rare and meaningful. When a committed event moves an agent to another room, its figure walks through the doorways and leaves a short-lived amber dashed route behind.",
     "keyCharacteristics": [
-      "Pixel-art night office as the primary view; data views share its palette and square geometry.",
-      "Colour encodes verified state only; unknown is a visible, dashed, desaturated state.",
-      "Three type voices with strict jobs: Pixelify Sans names things, system sans reads, JetBrains Mono identifies.",
-      "Zero radius everywhere; 2px rules for UI, 4px walls for the map.",
-      "All motion is stepped and disappears under reduced motion."
+      "Prussian sheet ground with pale linework. Panels are a single step lighter. There are no drop shadows.",
+      "Hue is spent only on verified state (green working/verified, amber needs-a-human or in flight, red fault). Unknown is hatched and dashed.",
+      "Barlow Condensed uppercase with wide tracking is the drawing's lettering. The system sans is used for reading text. JetBrains Mono is used for ids, revisions and minutes.",
+      "Double-line walls, door arcs, dimension lines, a legend and a title block: real drafting devices, used functionally.",
+      "Corners are crisp at 3px. Strokes are 1.5px construction lines and 1px rules.",
+      "One signature motion: the walked amber route."
     ],
     "rules": [
       {
-        "name": "The Signal Colour Rule",
-        "body": "Hue on this surface means a verified state. Do not use green, amber, blue or red for decoration; the floors and furniture of the office use desaturated woods, carpets and slates so that state colour stays readable on top of them.",
+        "name": "The Hue Is Evidence Rule",
+        "body": "Green, amber and red appear only when a verified state calls for them. Structure, emphasis and navigation use the blue-grey family. Provider figure colours are identity, not state, and they never tint UI chrome.",
         "section": "colors"
       },
       {
-        "name": "The Solid Amber Rule",
-        "body": "A full-strength `attention` fill is reserved for what a human must act on. In-flight work uses the dark amber tone, never the solid fill.",
+        "name": "The Hatched Unknown Rule",
+        "body": "Unknown or stale is never a colour. It is a diagonal hatch (45°, Unknown Grey) with a dashed edge, and it is applied in the same way to pills, figures, plates, legend keys and LEDs.",
         "section": "colors"
       },
       {
-        "name": "The Three Voices Rule",
-        "body": "Pixel names, sans reads, mono identifies. Never set paragraphs in Pixelify Sans and never set ids in the sans.",
+        "name": "The Lettering Rule",
+        "body": "Condensed uppercase is lettering for things that name or label a place, a column or an action. Sentences are always set in the system sans, sentence case.",
         "section": "typography"
       },
       {
-        "name": "The Legible Map Rule",
-        "body": "Text inside the scaled map is sized by the inverse of the map scale, so its rendered size never drops below its 11-13px floor however small the map gets.",
+        "name": "The Measured Number Rule",
+        "body": "Any number that identifies or measures (revision, id, minutes, priority, count) is set in mono. Counts in prose stay in the sans.",
         "section": "typography"
       },
       {
-        "name": "The Flat Chrome Rule",
-        "body": "Outside the map, nothing casts a shadow. Panels separate by tone and a 2px rule.",
-        "section": "elevation"
-      },
-      {
-        "name": "The Pixel Step Rule",
-        "body": "Inside the map, shadows are whole-pixel offsets with no blur. Blur is reserved for light that a source emits.",
+        "name": "The Drawn Depth Rule",
+        "body": "If something needs to stand forward, draw a line or step the tone. Never blur a shadow under it.",
         "section": "elevation"
       }
     ],
     "dos": [
-      "**Do** keep every corner square (0px) and every UI rule 2px; room walls are 4px.",
-      "**Do** spend hue only on verified state, and render unknown as grey, dashed and desaturated rather than hiding it.",
-      "**Do** set names, navigation, titles, labels and buttons in Pixelify Sans, prose in the system sans, and ids, revisions, paths and counts in JetBrains Mono.",
-      "**Do** animate with `steps()` timing only, and remove all animation and transition under `prefers-reduced-motion: reduce`.",
-      "**Do** draw sprites and props as original inline SVG pixel maps at integer scales with `image-rendering: pixelated`.",
-      "**Do** bundle every font and asset locally; the page runs under CSP `default-src 'self'`.",
-      "**Do** give every primary control a 44px target and the shared `glow` focus ring."
+      "**Do** keep every colour on the CSS custom properties in `styles.css`. A new state reuses an existing tone pair; it never introduces a new hue.",
+      "**Do** show unknown or stale with the 45° hatch and a dashed edge, everywhere it appears.",
+      "**Do** set room tags, headings, navigation, buttons and table heads in Barlow Condensed 600 uppercase with 0.06–0.24em tracking; reading text in the system sans; and ids, revisions and minutes in JetBrains Mono.",
+      "**Do** draw borders as 1.5px construction lines and row dividers as 1px rule, with 3px corners.",
+      "**Do** place anything new on the plan in plan units inside the 840×790 sheet, and route movement through doorways.",
+      "**Do** print the agent's name next to every figure mark. The mark is decorative.",
+      "**Do** honour `prefers-reduced-motion`: figures jump and transitions stop, but state stays readable."
     ],
     "donts": [
-      "**Don't** round corners anywhere, including pills, inputs and bubbles.",
-      "**Don't** put shadows on UI chrome; elevation outside the map is tonal.",
-      "**Don't** blur a shadow on the map; use whole-pixel drop steps, and keep blur for emitted light.",
-      "**Don't** use smooth easing curves for movement; agents and scenery move in steps.",
-      "**Don't** fill anything with full-strength `attention` amber unless it waits on a human.",
-      "**Don't** copy third-party tilesets or characters; pixel art here is original.",
-      "**Don't** load fonts, images or scripts from external origins."
+      "**Don't** add drop shadows, glows or blur. Depth is a tonal step or a drawn line.",
+      "**Don't** spend green, amber or red on decoration, navigation or emphasis that isn't state.",
+      "**Don't** give unknown its own colour, or show it as a grey \"status\".",
+      "**Don't** reintroduce the pixel world: no pixel fonts, sprites, stepped sprite animation, square-pixel walls or 0px corners.",
+      "**Don't** set sentences in condensed capitals, or numbers that identify or measure in the sans.",
+      "**Don't** number rooms or add decorative sequence numbers. A room tag carries its name and its live occupancy."
     ]
   }
 }

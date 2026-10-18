@@ -92,8 +92,8 @@ export function Logo({ size = 32 }: { size?: number }) {
     <svg className="logo" width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" focusable="false">
       <path d="M3 3h26v26H17M11 29H3V3" fill="none" stroke="currentColor" strokeWidth="2.5" />
       <path d="M11 29V21a8 8 0 0 1 8 8" fill="none" stroke="currentColor" strokeWidth="1" opacity=".6" />
-      <circle cx="16" cy="12.5" r="3.4" fill="#ffc857" />
-      <path d="M10 21v-1.5a6 5 0 0 1 12 0V21z" fill="#ffc857" />
+      <circle cx="16" cy="12.5" r="3.4" fill="currentColor" />
+      <path d="M10 21v-1.5a6 5 0 0 1 12 0V21z" fill="currentColor" />
     </svg>
   )
 }

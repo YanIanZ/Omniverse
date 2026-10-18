@@ -31,6 +31,9 @@
   --tone-red-fill: #3d1818;
   --tone-red-text: #ffb4b4;
   --tone-gray-fill: #1a2a3f;
+  --edge-ok: #2f6a47;
+  --edge-amber: #6b5420;
+  --edge-red: #6b2a2a;
 
   --cond: 'Barlow Condensed', 'Arial Narrow', sans-serif;
   --sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif;
@@ -423,10 +426,10 @@ select:disabled {
   color: var(--line);
 }
 .stat-doing {
-  border-color: #2f6a47;
+  border-color: var(--edge-ok);
 }
 .stat-review {
-  border-color: #6b5420;
+  border-color: var(--edge-amber);
 }
 .needs-you {
   display: inline-flex;
@@ -452,7 +455,7 @@ select:disabled {
   gap: 16px;
   margin-bottom: 16px;
   padding: 10px 14px;
-  border: 1.5px solid #6b2a2a;
+  border: 1.5px solid var(--edge-red);
   border-radius: 3px;
   background: var(--tone-red-fill);
   color: var(--tone-red-text);
