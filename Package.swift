@@ -20,7 +20,7 @@ let package = Package(
         .product(name: "MongoKitten", package: "MongoKitten"),
         .product(name: "MCP", package: "swift-sdk"),
       ],
-      resources: [.copy("Skills")]),
+      resources: [.copy("Skills"), .copy("REA")]),
     .executableTarget(
       name: "omnimem",
       dependencies: [

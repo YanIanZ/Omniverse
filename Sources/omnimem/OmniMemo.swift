@@ -20,10 +20,10 @@ func output<T: Encodable>(_ value: T) throws {
 struct OmniMemo: AsyncParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "omnimem", abstract: "Local Swift + MongoDB memory and handoff for coding agents.",
-    version: "0.1.0",
+    version: "0.2.0",
     subcommands: [
       Init.self, Status.self, Doctor.self, Project.self, Memory.self, Context.self, Checkpoint.self,
-      Cache.self, MCP.self, Install.self, Uninstall.self,
+      Cache.self, MCP.self, Rea.self, Install.self, Uninstall.self,
     ])
   @OptionGroup var options: Options
   struct Init: AsyncParsableCommand {
@@ -329,11 +329,15 @@ struct OmniMemo: AsyncParsableCommand {
     var configRoot: String?
     @Flag(help: "Apply the preview with backups. Otherwise only print the managed additions.")
     var apply = false
+    @Flag(help: "Include the complete pinned REA skill and a separate REA MCP server.")
+    var withRea = false
+    @Option(help: "REA runtime manifest used by --with-rea.") var reaRuntimeManifest: String?
     func run() async throws {
       let installer = try AgentInstaller(
         configRoot: configRoot ?? options.project, project: options.project,
         executable: CommandLine.arguments[0], dataDir: options.dataDir,
-        agents: agents.split(separator: ",").map(String.init))
+        agents: agents.split(separator: ",").map(String.init), withRea: withRea,
+        reaManifestPath: reaRuntimeManifest)
       if apply { try installer.apply() }
       try output(installer.preview())
     }

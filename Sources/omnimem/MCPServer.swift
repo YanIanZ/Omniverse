@@ -16,7 +16,7 @@ struct ContextInput: Codable {
 enum MCPService {
   static func serve(store: MongoStore, agent: String) async throws {
     let server = Server(
-      name: "OmniMemo", version: "0.1.0", capabilities: .init(tools: .init(listChanged: false)))
+      name: "OmniMemo", version: "0.2.0", capabilities: .init(tools: .init(listChanged: false)))
     await server.withMethodHandler(ListTools.self) { _ in .init(tools: tools) }
     await server.withMethodHandler(CallTool.self) { params in
       do {

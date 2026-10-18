@@ -8,6 +8,8 @@ public struct AdapterPreview: Codable, Sendable {
     case command
     case arguments
     case requiresApply = "requires_apply"
+    case profile
+    case additionalServers = "additional_servers"
   }
 
   public var project: String
@@ -16,6 +18,8 @@ public struct AdapterPreview: Codable, Sendable {
   public var command: String
   public var arguments: [String]
   public var requiresApply = true
+  public var profile: String?
+  public var additionalServers: [String: [String]]?
 }
 public struct AgentInstaller {
   public let root: URL
@@ -23,6 +27,14 @@ public struct AgentInstaller {
   public let executable: String
   public let dataDir: String
   public let agents: [String]
+  public let withRea: Bool
+  public let reaManifestPath: String
+  public var profile: String { withRea ? "memory+rea" : "memory" }
+  public var reaServerID: String { "rea_" + project.id.prefix(12) }
+  private var serverIDs: [String] { withRea ? [serverID, reaServerID] : [serverID] }
+  private var reaArguments: [String] {
+    ["--project", project.root.path, "rea", "mcp", "--runtime-manifest", reaManifestPath]
+  }
   public var serverID: String { "omnimemo_" + project.id.prefix(12) }
   private var manifestURL: URL {
     root.appendingPathComponent(".omnimemo-installer/\(serverID).json")
@@ -31,10 +43,12 @@ public struct AgentInstaller {
     enum CodingKeys: String, CodingKey {
       case serverID = "server_id"
       case files
+      case profile
     }
 
     var serverID: String
     var files: [Change]
+    var profile: String?
   }
   private struct Change: Codable {
     var path: String
@@ -42,15 +56,19 @@ public struct AgentInstaller {
     var content: Data
     var existed: Bool
     var before: Data?
+    var serverIDs: [String]? = nil
   }
   public init(
-    configRoot: String, project: String, executable: String, dataDir: String, agents: [String]
+    configRoot: String, project: String, executable: String, dataDir: String, agents: [String],
+    withRea: Bool = false, reaManifestPath: String? = nil
   ) throws {
     self.root = canonical(configRoot)
     self.project = try ProjectBinding(path: project)
     self.executable = canonical(executable).path
     self.dataDir = canonical(dataDir).path
     self.agents = agents
+    self.withRea = withRea
+    self.reaManifestPath = canonical(reaManifestPath ?? REARuntime.defaultManifestPath()).path
     guard !agents.isEmpty, Set(agents).isSubset(of: ["codex", "claude"]) else {
       throw MemoError.invalid("supported adapters: codex,claude")
     }
@@ -59,11 +77,17 @@ public struct AgentInstaller {
     ["--data-dir", dataDir, "--project", project.root.path, "mcp", "serve", "--stdio"]
   }
   public func preview() -> AdapterPreview {
-    AdapterPreview(
-      project: project.root.path,
-      files: agents.map { $0 == "codex" ? ".codex/config.toml" : ".mcp.json" } + [
-        ".agents/skills/omnimem-recall/SKILL.md", ".agents/skills/omnimem-handoff/SKILL.md",
-      ], serverID: serverID, command: executable, arguments: arguments)
+    var files = agents.map { $0 == "codex" ? ".codex/config.toml" : ".mcp.json" }
+    if let resources = try? bundledSkillFiles() {
+      files += resources.map { ".agents/skills/" + $0.0 + "/" + $0.1 }
+      if agents.contains("claude") {
+        files += Set(resources.map { $0.0 }).sorted().map { ".claude/skills/" + $0 + "/SKILL.md" }
+      }
+    }
+    return AdapterPreview(
+      project: project.root.path, files: files, serverID: serverID, command: executable,
+      arguments: arguments, profile: profile,
+      additionalServers: withRea ? [reaServerID: reaArguments] : nil)
   }
   private func allowed(_ relative: String) throws -> URL {
     let url = root.appendingPathComponent(relative)
@@ -93,12 +117,22 @@ public struct AgentInstaller {
       e.outputFormatting = [.withoutEscapingSlashes]
       return String(decoding: try! e.encode($0), as: UTF8.self)
     }
-    return
-      "# BEGIN OmniMemo \(serverID)\n[mcp_servers.\(serverID)]\ncommand = \(quote(executable))\nargs = [\(arguments.map(quote).joined(separator:", "))]\n# END OmniMemo \(serverID)\n"
+    return serverIDs.map { id in
+      let args = id == serverID ? arguments : reaArguments
+      return
+        "# BEGIN OmniMemo \(id)\n[mcp_servers.\(id)]\ncommand = \(quote(executable))\nargs = [\(args.map(quote).joined(separator:", "))]\n# END OmniMemo \(id)\n"
+    }.joined()
   }
-  private var claudeEntry: [String: Any] {
-    ["type": "stdio", "command": executable, "args": arguments]
+  private var claudeEntries: [String: Any] {
+    var entries: [String: Any] = [
+      serverID: ["type": "stdio", "command": executable, "args": arguments]
+    ]
+    if withRea {
+      entries[reaServerID] = ["type": "stdio", "command": executable, "args": reaArguments]
+    }
+    return entries
   }
+
   private func isSameJSON(_ a: Any, _ b: Any) -> Bool {
     (try? JSONSerialization.data(withJSONObject: a, options: .sortedKeys))
       == (try? JSONSerialization.data(withJSONObject: b, options: .sortedKeys))
@@ -109,17 +143,22 @@ public struct AgentInstaller {
     if let data = try? Data(contentsOf: manifestURL),
       let manifest = try? JSONDecoder().decode(Manifest.self, from: data)
     {
+      guard (manifest.profile ?? "memory") == profile else {
+        throw MemoError.invalid(
+          "profile changed; uninstall the owned entries before installing the new profile")
+      }
       // Repeated install is a no-op only while the managed entries are intact.
       for change in manifest.files { try verify(change) }
       return
     }
+    if withRea { _ = try REARuntime(manifestPath: reaManifestPath).nodeVersion() }
     var changes: [Change] = []
     for agent in agents {
       if agent == "codex" {
         let name = ".codex/config.toml"
         let before = try read(name)
         let text = before.map { String(decoding: $0, as: UTF8.self) } ?? ""
-        guard !text.contains(serverID) else {
+        guard !serverIDs.contains(where: { text.contains($0) }) else {
           throw MemoError.invalid("unmanaged Codex server id collision")
         }
         let content = Data(((text.isEmpty || text.hasSuffix("\n") ? "" : "\n") + codexBlock).utf8)
@@ -138,36 +177,39 @@ public struct AgentInstaller {
           throw MemoError.invalid("mcpServers must be an object")
         }
         var servers = document["mcpServers"] as? [String: Any] ?? [:]
-        guard servers[serverID] == nil else {
+        guard !serverIDs.contains(where: { servers[$0] != nil }) else {
           throw MemoError.invalid("unmanaged Claude server id collision")
         }
-        servers[serverID] = claudeEntry
+        for (id, entry) in claudeEntries { servers[id] = entry }
         document["mcpServers"] = servers
         let output = try JSONSerialization.data(
           withJSONObject: document, options: [.sortedKeys, .prettyPrinted, .withoutEscapingSlashes])
         changes.append(
-          Change(path: name, kind: "json", content: output, existed: before != nil, before: before))
+          Change(
+            path: name, kind: "json", content: output, existed: before != nil, before: before,
+            serverIDs: serverIDs))
       }
     }
-    for (name, text) in [
-      ("omnimem-recall", try Self.loadSkill("omnimem-recall")),
-      ("omnimem-handoff", try Self.loadSkill("omnimem-handoff")),
-    ] {
-      let path = ".agents/skills/\(name)/SKILL.md"
+    for (name, relative, bytes) in try bundledSkillFiles() {
+      let path = ".agents/skills/\(name)/\(relative)"
       let before = try read(path)
       guard before == nil else {
         throw MemoError.invalid("existing skill requires manual merge: \(name)")
       }
-      changes.append(
-        Change(path: path, kind: "file", content: Data(text.utf8), existed: false, before: nil))
-      if agents.contains("claude") {
-        // A short Claude entry point directs the agent to the same canonical skill body.
+      changes.append(Change(path: path, kind: "file", content: bytes, existed: false, before: nil))
+      if agents.contains("claude") && relative == "SKILL.md" {
         let shim = ".claude/skills/\(name)/SKILL.md"
         guard try read(shim) == nil else {
           throw MemoError.invalid("existing Claude skill requires manual merge")
         }
+        let description =
+          name == "omnimem-recall"
+          ? "Recall OmniMemo project context before resuming work."
+          : name == "omnimem-handoff"
+            ? "Save an OmniMemo checkpoint before an agent handoff."
+            : "Reverse engineer shipped artifacts and application behavior with REA."
         let body =
-          "---\nname: \(name)\ndescription: \(name=="omnimem-recall" ? "Recall OmniMemo project context before resuming work.":"Save an OmniMemo checkpoint before an agent handoff.")\n---\nRead `\(root.path)/.agents/skills/\(name)/SKILL.md` and follow it.\n"
+          "---\nname: \(name)\ndescription: \(description)\n---\nRead `\(root.path)/.agents/skills/\(name)/SKILL.md` and follow it.\n"
         changes.append(
           Change(path: shim, kind: "file", content: Data(body.utf8), existed: false, before: nil))
       }
@@ -191,7 +233,9 @@ public struct AgentInstaller {
         written.append(c)
       }
       try protectedWrite(
-        try encodeJSON(Manifest(serverID: serverID, files: changes), pretty: true), to: manifestURL
+        try encodeJSON(
+          Manifest(serverID: serverID, files: changes, profile: profile), pretty: true),
+        to: manifestURL
       )
     } catch {
       for c in written.reversed() {
@@ -219,9 +263,11 @@ public struct AgentInstaller {
       let expected =
         (try JSONSerialization.jsonObject(with: c.content) as? [String: Any])?["mcpServers"]
         as? [String: Any]
-      guard let entry = (object?["mcpServers"] as? [String: Any])?[serverID],
-        let expectedEntry = expected?[serverID], isSameJSON(entry, expectedEntry)
-      else { throw MemoError.invalid("managed Claude entry changed; manual review required") }
+      for id in c.serverIDs ?? [serverID] {
+        guard let entry = (object?["mcpServers"] as? [String: Any])?[id],
+          let expectedEntry = expected?[id], isSameJSON(entry, expectedEntry)
+        else { throw MemoError.invalid("managed MCP entry changed; manual review required") }
+      }
     default:
       guard current == c.content else {
         throw MemoError.invalid("managed skill changed; manual review required")
@@ -229,11 +275,14 @@ public struct AgentInstaller {
     }
   }
   public func uninstall(apply: Bool = false) throws -> AdapterPreview {
-    guard apply else { return preview() }
     _ = try allowed(".omnimemo-installer/\(serverID).json")
     guard let data = try? Data(contentsOf: manifestURL) else { return preview() }
     let manifest = try JSONDecoder().decode(Manifest.self, from: data)
     guard manifest.serverID == serverID else { throw MemoError.denied }
+    var result = preview()
+    result.files = manifest.files.map(\.path)
+    result.profile = manifest.profile ?? "memory"
+    guard apply else { return result }
     for c in manifest.files { try verify(c) }
     for c in manifest.files {
       let p = try allowed(c.path)
@@ -249,7 +298,7 @@ public struct AgentInstaller {
       } else if c.kind == "json" {
         var doc = try JSONSerialization.jsonObject(with: current) as! [String: Any]
         var servers = doc["mcpServers"] as! [String: Any]
-        servers.removeValue(forKey: serverID)
+        for id in c.serverIDs ?? [serverID] { servers.removeValue(forKey: id) }
         doc["mcpServers"] = servers
         if servers.isEmpty, let original = c.before,
           let old = try JSONSerialization.jsonObject(with: original) as? [String: Any],
@@ -275,7 +324,34 @@ public struct AgentInstaller {
       }
     }
     try FileManager.default.removeItem(at: manifestURL)
-    return preview()
+    return result
+  }
+  private func bundledSkillFiles() throws -> [(String, String, Data)] {
+    var files: [(String, String, Data)] = try ["omnimem-recall", "omnimem-handoff"].map {
+      ($0, "SKILL.md", Data(try Self.loadSkill($0).utf8))
+    }
+    if withRea {
+      guard
+        let root = Bundle.module.url(
+          forResource: "reverse-engineer-anything", withExtension: nil, subdirectory: "Skills"),
+        let iterator = FileManager.default.enumerator(
+          at: root, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+      else { throw MemoError.invalid("REA skill bundle is missing") }
+      for case let url as URL in iterator {
+        let attributes = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+        guard attributes.isSymbolicLink != true else {
+          throw MemoError.invalid("REA skill bundle contains a symlink")
+        }
+        if attributes.isRegularFile == true {
+          files.append(
+            (
+              "reverse-engineer-anything", String(url.path.dropFirst(root.path.count + 1)),
+              try Data(contentsOf: url)
+            ))
+        }
+      }
+    }
+    return files.sorted { ($0.0 + "/" + $0.1) < ($1.0 + "/" + $1.1) }
   }
   private static func loadSkill(_ name: String) throws -> String {
     guard

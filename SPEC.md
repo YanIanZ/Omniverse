@@ -1,4 +1,4 @@
-# OmniMemo MVP-1
+# OmniMemo MVP-1 + REA integration
 
 ## §G
 Persist scoped evidence-backed memories; save → retrieve → cross-agent checkpoint via CLI/MCP, local SSD.
@@ -11,11 +11,15 @@ External build/package cache. No global config changes or Git identity mutations
 Source pack rules remain repository-scoped. Missing storage never silently recreated. Cache independent of persistent records.
 Relocation/graph/conflict resolution advanced engine deferred to MVP-2/3; evidence/stale flags + isolation required now.
 
+User extension: include full REA skill/runtime from YanIanZ/rea at a pinned commit; Node is an explicit optional runtime dependency.
+
 ## §I
 I.cli: init, status, doctor, project attach, memory save/search/show/list/delete/export, context, checkpoint, cache info/clear, install/uninstall.
 I.mcp: memory_save, memory_get, memory_context, memory_checkpoint over stdio; authorized project bound at launch.
 I.storage: --data-dir > OMNIMEM_HOME > pointer JSON > OS default. Only init creates datastore.
 I.adapters: install --agents codex,claude --project PATH --config-root PATH; preview default; --apply explicit; backup + exact owned-entry uninstall.
+
+I.rea: rea status/run/mcp; install --with-rea; runtime manifest pins source/version/entrypoint/lock/catalog; no runtime downloads.
 
 ## §V
 V1: Two independent processes share durable committed records; MongoDB unique indexes hold with concurrent writers.
@@ -35,12 +39,21 @@ V13: Root binding rechecked; source reads + storage resources bounded; future DB
 V14: Installer checks existing ancestors before creating config leaves; symlink parents cannot escape config root.
 V15: Generated Codex config is valid TOML, including quoted paths; uninstall detects changed entries.
 
+V16: REA runtime preserves full upstream CLI, MCP tools/prompts and skill references; no partial reimplementation or tool filtering.
+V17: REA runtime manifest must match bundled commit/version/hashes; absent, modified or unsupported runtime fails before execution; no implicit npm fetch.
+V18: --with-rea adds a distinct managed MCP server + full skill tree; install/uninstall idempotent and preserve unrelated entries; base profile remains four memory tools.
+V19: REA launch uses argv directly, bound cwd and external private temp/cache; exit status/stdio preserved. Missing engines are reported, never silently installed.
+
 ## §T
 id|status|goal|cites
 T1|x|MongoDB core, identity/scope/evidence/FTS/cache + CLI|V1,V2,V3,V4,V6,V7,V8,V10,V12,V13,I.storage,I.cli
 T2|x|Bounded context + official MCP stdio + wire tests|V5,V9,I.mcp
 T3|x|Two adapters + recall/handoff skills + config roundtrip tests|V11,I.adapters
 T4|x|Integration tests, release build, reproducible docs and handoff|V1,V2,V3,V4,V5,V6,V7,V8,V9,V10,V11,V12,V13
+
+T5|x|Pin upstream full REA skill, provenance, runtime bootstrap and Swift launcher|V16,V17,V19,I.rea
+T6|x|REA installer profile + full resource tree/owned cleanup|V11,V14,V18,I.adapters
+T7|~|Real REA MCP/static analysis/CLI fixtures, release packaging, docs and Git commits|V16,V17,V18,V19
 
 ## §B
 id|date|cause|fix
