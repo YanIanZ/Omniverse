@@ -3,8 +3,8 @@
 import argparse,json,os,pathlib,selectors,subprocess,tempfile,time
 
 class Session:
-    def __init__(self,binary,data,project,agent):
-        self.proc=subprocess.Popen([binary,'--data-dir',str(data),'--project',str(project),'--agent',agent,'mcp','serve','--stdio'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,bufsize=1)
+    def __init__(self,binary,data,project,agent,command=None):
+        self.proc=subprocess.Popen(command or [binary,'--data-dir',str(data),'--project',str(project),'--agent',agent,'mcp','serve','--stdio'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,bufsize=1)
         self.counter=0
         self.request('initialize',{'protocolVersion':'2025-11-25','capabilities':{},'clientInfo':{'name':agent,'version':'test'}})
         self.notify('notifications/initialized',{})

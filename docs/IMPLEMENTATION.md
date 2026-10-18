@@ -8,3 +8,7 @@ User-approved PRD, amended by direct instructions: Swift + MongoDB. MVP follows 
 4. Build release, run all tests, document commands, scope and limits. Do not claim full PRD, production security, Windows/Linux compatibility, or token ROI without evidence.
 
 Dependency choices: official MCP Swift SDK avoids custom protocol implementation; MongoKitten is a native asynchronous driver (official Mongo Swift driver archived); ArgumentParser handles CLI validation. Foundation/CryptoKit for files/hash on the current macOS MVP. MongoDB process is explicitly required by the user's database choice; no other resident service.
+
+## REA extension
+
+Pin YanIanZ/rea commit 94153f1c757e07a6d092e00903aa8b125d4a0afa, preserve its complete generated investigation skill and references, and build its locked runtime in the external cache. `REARuntime.swift` validates matching provenance and replaces the Swift process with the upstream Node CLI/MCP using argv. `REACommand.swift` exposes status/run/mcp. `AgentInstaller` records a memory+REA profile, two distinct server identities and every owned skill reference, while default memory behavior remains intact. Validate with the actual 184-tool/6-prompt REA server, real static analysis, CLI exit/result equivalence and evidence-to-memory handoff. No engine installation or global agent setup is performed.

@@ -1,8 +1,20 @@
-# OmniMemo 0.1.0
+# OmniMemo 0.2.0
 
 Memory dan handoff lokal untuk coding agent, dibuat dengan **Swift + MongoDB** sesuai revisi pengguna. Ini MVP-1 dari PRD v1.2, bukan seluruh roadmap.
 
 Satu executable menyediakan CLI dan MCP stdio. MongoDB menyimpan record; folder lokal menyimpan pointer store dan cache disposable. Semua agent pada proyek yang sama membaca database yang sama. Tidak membaca history privat agent dan tidak memerlukan LLM/API key.
+
+## REA lengkap
+
+Tambahan 0.2.0: skill dan seluruh referensi [YanIanZ/rea](https://github.com/YanIanZ/rea), runtime yang dipin, **184 tool MCP, 135 perintah CLI, dan 6 prompt**. Core memory tetap Swift + MongoDB; fitur REA memakai runtime Node terpisah melalui `omnimem rea run` / `omnimem rea mcp`. Installer `--with-rea` menambahkan kedua server dan skill lengkap. Default tetap memory-only.
+
+```sh
+python3 scripts/prepare-rea.py
+./scripts/package.sh
+/Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem rea status
+```
+
+[Lihat pemasangan, seluruh kemampuan, evidence → memory, dan prasyarat engine](docs/REA.md). Tool native/runtime mengikuti dukungan OS dan engine upstream; tidak semua provider diklaim sudah diuji.
 
 ## Yang tersedia
 
@@ -30,7 +42,7 @@ cd /Volumes/Ext/MinionsProject/OmniMemo
 ./scripts/package.sh
 ```
 
-Artifact default: `/Volumes/Ext/DevCache/OmniMemo/dist/0.1.0/omnimem`. Simpan executable **bersama bundle skill** di direktori yang sama. Package cache, checkouts, module cache dan hasil build diarahkan ke `/Volumes/Ext/DevCache/OmniMemo/swift`; ubah `OMNIMEM_BUILD_CACHE` untuk mesin lain. Tidak perlu Xcode project atau server aplikasi.
+Artifact default: `/Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem`. Simpan executable **bersama bundle skill** di direktori yang sama. Package cache, checkouts, module cache dan hasil build diarahkan ke `/Volumes/Ext/DevCache/OmniMemo/swift`; ubah `OMNIMEM_BUILD_CACHE` untuk mesin lain. Tidak perlu Xcode project atau server aplikasi.
 
 ## Mulai
 
@@ -39,7 +51,7 @@ Bila belum memiliki server MongoDB yang sesuai, jalankan instance khusus OmniMem
 ```sh
 ./scripts/mongodb.sh start  # loopback 127.0.0.1:27018, dbPath di Ext
 
-BIN=/Volumes/Ext/DevCache/OmniMemo/dist/0.1.0/omnimem
+BIN=/Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem
 DATA=/Volumes/Ext/DevCache/OmniMemo/data
 PROJECT=/Volumes/Ext/MinionsProject/OmniMemo
 
@@ -89,16 +101,18 @@ Tidak ada klaim persentase penghematan, recall@k, RAM atau latency target yang s
 
 ```sh
 ./scripts/test-mongo.sh start  # port 27019; bukan server/data produksi
+OMNIMEM_TEST_REA_MANIFEST=/Volumes/Ext/DevCache/OmniMemo/integrations/rea-runtime.json \
 OMNIMEM_TEST_MONGO_URI=mongodb://127.0.0.1:27019/omnimemo_tests \
 OMNIMEM_TEST_ROOT=/Volumes/Ext/DevCache/OmniMemo/test-workspaces \
   ./scripts/swift.sh test
 
-python3 Tests/mcp_smoke.py /Volumes/Ext/DevCache/OmniMemo/dist/0.1.0/omnimem
-python3.12 Tests/cli_smoke.py /Volumes/Ext/DevCache/OmniMemo/dist/0.1.0/omnimem
+python3 Tests/mcp_smoke.py /Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem
+python3.12 Tests/cli_smoke.py /Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem
+python3 Tests/rea_smoke.py /Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem
 ./scripts/test-mongo.sh stop
 ```
 
-Suite saat build ini: **19 XCTest lulus, 0 gagal, 0 skip**, ditambah kedua smoke test pada artifact release. Python 3.11+ diperlukan untuk parser TOML di smoke test CLI; runtime OmniMemo tidak memerlukan Python.
+Suite 0.1.0: **19 XCTest lulus, 0 gagal, 0 skip**; integrasi REA menambah tes runtime/profile (hasil terbaru di `docs/VALIDATION.md`), ditambah kedua smoke test pada artifact release. Python 3.11+ diperlukan untuk parser TOML di smoke test CLI; core memory OmniMemo tidak memerlukan Python. Tool REA tertentu tetap mengikuti dependency upstream.
 
 Tes MongoDB nyata mencakup beberapa koneksi penulis, persistensi, isolasi, dedup, secret rejection, evidence staleness, cache invalidation dan metadata hilang. Klien Python independen menguji wire MCP dan handoff antara dua subprocess berlabel fixture Codex/Claude. Itu **bukan** klaim uji percakapan live berbayar pada kedua produk. Tanpa `OMNIMEM_TEST_MONGO_URI`, tes database diberi status skip, bukan dianggap lulus.
 

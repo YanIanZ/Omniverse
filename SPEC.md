@@ -53,7 +53,7 @@ T4|x|Integration tests, release build, reproducible docs and handoff|V1,V2,V3,V4
 
 T5|x|Pin upstream full REA skill, provenance, runtime bootstrap and Swift launcher|V16,V17,V19,I.rea
 T6|x|REA installer profile + full resource tree/owned cleanup|V11,V14,V18,I.adapters
-T7|~|Real REA MCP/static analysis/CLI fixtures, release packaging, docs and Git commits|V16,V17,V18,V19
+T7|x|Real REA MCP/static analysis/CLI fixtures, release packaging, docs and Git commits|V16,V17,V18,V19
 
 ## §B
 id|date|cause|fix
