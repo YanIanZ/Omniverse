@@ -37,10 +37,10 @@ V15: Generated Codex config is valid TOML, including quoted paths; uninstall det
 
 ## §T
 id|status|goal|cites
-T1|~|MongoDB core, identity/scope/evidence/FTS/cache + CLI|V1,V2,V3,V4,V6,V7,V8,V10,V12,V13,I.storage,I.cli
-T2|.|Bounded context + official MCP stdio + wire tests|V5,V9,I.mcp
-T3|.|Two adapters + recall/handoff skills + config roundtrip tests|V11,I.adapters
-T4|.|Integration tests, release build, reproducible docs and handoff|V1,V2,V3,V4,V5,V6,V7,V8,V9,V10,V11,V12,V13
+T1|x|MongoDB core, identity/scope/evidence/FTS/cache + CLI|V1,V2,V3,V4,V6,V7,V8,V10,V12,V13,I.storage,I.cli
+T2|x|Bounded context + official MCP stdio + wire tests|V5,V9,I.mcp
+T3|x|Two adapters + recall/handoff skills + config roundtrip tests|V11,I.adapters
+T4|~|Integration tests, release build, reproducible docs and handoff|V1,V2,V3,V4,V5,V6,V7,V8,V9,V10,V11,V12,V13
 
 ## §B
 id|date|cause|fix
@@ -50,3 +50,6 @@ B2|2026-10-18|Swift driver pool existential lacks disconnect; logger factory ove
 
 B3|2026-10-18|Foundation symlink resolution skips nonexistent leaves; adapter escaped root|V14; resolve existing ancestor before write
 B4|2026-10-18|JSONEncoder slash escapes are invalid TOML and hid managed-entry edit in test|V15; disable slash escaping for TOML strings
+B5|2026-10-18|Skill body dedup moved templates to resources without target resource declaration|Declare bundled Skills resource; adapter roundtrip test exercises lookup
+B6|2026-10-18|Swift format lint rejects snake_case stored properties|Use idiomatic Swift names with explicit CodingKeys; preserve JSON/BSON contract
+B7|2026-10-18|Release compile overlapped a model-field rename and saw mismatched modules|Serialize final source edits and verification; rerun release after tests

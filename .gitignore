@@ -5,3 +5,5 @@
 .build/
 .swiftpm/
 .omnimemo-installer/
+__pycache__/
+*.pyc
