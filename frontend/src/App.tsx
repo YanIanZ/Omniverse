@@ -1,343 +1,223 @@
-import { type FormEvent, useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   type Agent,
   ApiError,
+  type Approval,
   type Health,
   type LiveEvent,
-  type Memory,
   type Task,
-  TASK_STATUSES,
-  type TaskStatus,
   api,
 } from './api'
-import { type Connection, useLive } from './useLive'
+import { place } from './office'
+import { Logo } from './OfficeMap'
+import { useLive } from './useLive'
+import { AgentsView, ApprovalsView, EventsView, MemoryView, OfficeView, TasksView } from './views'
 
-const ago = (iso: string) => {
-  const seconds = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000))
-  if (seconds < 60) return `${seconds}s ago`
-  if (seconds < 3600) return `${Math.round(seconds / 60)}m ago`
-  return `${Math.round(seconds / 3600)}h ago`
+const VIEWS = ['office', 'tasks', 'agents', 'approvals', 'memory', 'events'] as const
+export type View = (typeof VIEWS)[number]
+
+const viewFromHash = (): View => {
+  const name = location.hash.replace('#', '') as View
+  return VIEWS.includes(name) ? name : 'office'
 }
 
-const tone: Record<string, string> = {
-  active: 'green',
-  ready: 'green',
-  live: 'green',
-  connected: 'green',
-  unknown: 'yellow',
-  reconnecting: 'yellow',
-  connecting: 'yellow',
-  unavailable: 'red',
-  offline: 'red',
-  blocked: 'red',
-  disconnected: 'gray',
-  disabled: 'gray',
-}
-
-function Badge({ value }: { value: string }) {
-  return <span className={`badge ${tone[value] ?? 'blue'}`}>{value}</span>
+export type Store = {
+  health?: Health
+  agents: Agent[]
+  tasks: Task[]
+  approvals: Approval[]
+  events: LiveEvent[]
+  now: number
+  /** False until the first snapshot arrives, so views never present "nothing" before they know. */
+  loaded: boolean
+  report: (e: unknown) => void
+  refresh: () => Promise<void>
 }
 
 export function App() {
+  const [view, setView] = useState<View>(viewFromHash)
   const [health, setHealth] = useState<Health>()
   const [agents, setAgents] = useState<Agent[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
+  const [approvals, setApprovals] = useState<Approval[]>([])
   const [events, setEvents] = useState<LiveEvent[]>([])
   const [error, setError] = useState<string>()
   const [unauthorized, setUnauthorized] = useState(false)
+  const [now, setNow] = useState(Date.now())
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    const onHash = () => setView(viewFromHash())
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
 
   const report = useCallback((e: unknown) => {
     if (e instanceof ApiError && e.status === 401) setUnauthorized(true)
     else setError(e instanceof Error ? e.message : String(e))
   }, [])
 
-  const snapshot = useCallback(async () => {
+  const refresh = useCallback(async () => {
     try {
-      const [h, a, t] = await Promise.all([api.health(), api.agents(), api.tasks()])
+      const [h, a, t, p] = await Promise.all([api.health(), api.agents(), api.tasks(), api.approvals()])
       setHealth(h)
       setAgents(a)
       setTasks(t)
+      setApprovals(p)
       setUnauthorized(false)
+      const revision = Number(h.revision)
+      const recent = await api.events(Math.max(0, revision - 60))
+      setEvents(recent.reverse())
+      setLoaded(true)
+      setError(undefined)
     } catch (e) {
       report(e)
     }
   }, [report])
 
   useEffect(() => {
-    void snapshot()
-    // Presence ages into `unknown` without new events; refresh slowly, never per frame.
-    const timer = window.setInterval(() => void api.agents().then(setAgents, report), 30_000)
-    return () => window.clearInterval(timer)
-  }, [snapshot, report])
+    void refresh()
+    // Presence ages without new events: re-read sessions slowly, and tick relative times.
+    const slow = window.setInterval(() => void api.agents().then(setAgents, report), 30_000)
+    const tick = window.setInterval(() => setNow(Date.now()), 15_000)
+    return () => {
+      window.clearInterval(slow)
+      window.clearInterval(tick)
+    }
+  }, [refresh, report])
 
   const onEvent = useCallback(
     (event: LiveEvent) => {
-      setEvents((list) => [event, ...list].slice(0, 30))
+      setNow(Date.now())
+      setEvents((list) => (list.some((e) => e.event_id === event.event_id) ? list : [event, ...list].slice(0, 200)))
       setHealth((h) => (h ? { ...h, revision: String(event.revision) } : h))
       if (event.type === 'task.updated') void api.tasks().then(setTasks, report)
       if (event.type === 'agent.status.changed') void api.agents().then(setAgents, report)
+      if (event.type.startsWith('approval.')) void api.approvals().then(setApprovals, report)
     },
     [report],
   )
-  const connection = useLive(health?.project_id, onEvent, snapshot)
+  const connection = useLive(health?.project_id, onEvent, refresh)
+
+  const store: Store = { health, agents, tasks, approvals, events, now, loaded, report, refresh }
+  const office = useMemo(() => place(agents, tasks, approvals, events, now), [agents, tasks, approvals, events, now])
+  const pending = approvals.filter((a) => a.status === 'pending').length
+  const present = agents.filter((a) => a.status !== 'disconnected')
+  const unknown = present.filter((a) => a.status === 'unknown').length
 
   if (unauthorized) {
     return (
-      <main className="shell narrow">
-        <h1>OmniMemo</h1>
-        <p className="muted">
-          This browser is not signed in. Run <kbd>om office</kbd> in your project to open an
-          authenticated session.
+      <main className="signin">
+        <Logo />
+        <h1>OmniMemo is locked</h1>
+        <p>
+          This browser has no session. Run <kbd>om office</kbd> in your project; it opens Mission Control already
+          signed in.
         </p>
       </main>
     )
   }
 
+  const nav: { id: View; label: string; title: string; count?: number; unit?: string; attention?: boolean }[] = [
+    { id: 'office', label: 'Office', title: 'Agent Office' },
+    { id: 'tasks', label: 'Tasks', title: 'Tasks', count: tasks.filter((t) => t.status !== 'done').length, unit: 'open' },
+    { id: 'agents', label: 'Agents', title: 'Agents', count: present.length, unit: 'present' },
+    { id: 'approvals', label: 'Approvals', title: 'Approvals', count: pending, unit: 'waiting for you', attention: pending > 0 },
+    { id: 'memory', label: 'Memory', title: 'Memory' },
+    { id: 'events', label: 'Events', title: 'Events' },
+  ]
+  const liveLabel = { live: 'Live', connecting: 'Connecting', reconnecting: 'Reconnecting', offline: 'Offline' }[connection]
+
   return (
-    <main className="shell">
-      <header className="top">
-        <div>
-          <h1>Mission Control</h1>
-          <p className="muted mono">
-            project {health ? health.project_id.slice(0, 12) : '...'} · revision{' '}
-            {health?.revision ?? '...'}
-          </p>
+    <div className="shell">
+      <a className="skip" href="#work">
+        Skip to content
+      </a>
+      <nav className="rail" aria-label="Mission Control">
+        <div className="brand">
+          <Logo />
+          <div>
+            <div className="brand-name">OmniMemo</div>
+            <div className="brand-sub">Mission Control</div>
+          </div>
         </div>
-        <ConnectionStatus connection={connection} />
-      </header>
-      {error && (
-        <p className="notice" role="alert">
-          {error}{' '}
-          <button className="link" onClick={() => setError(undefined)}>
-            Dismiss
-          </button>
-        </p>
-      )}
-      <div className="grid">
-        <StatusCard health={health} connection={connection} />
-        <AgentsCard agents={agents} />
-        <EventsCard events={events} />
-        <TasksCard tasks={tasks} onError={report} onChanged={snapshot} />
-        <MemoryCard onError={report} />
-      </div>
-    </main>
-  )
-}
-
-function ConnectionStatus({ connection }: { connection: Connection }) {
-  return (
-    <p className="status" aria-live="polite">
-      <span className={`dot ${tone[connection]}`} aria-hidden="true" />
-      {connection === 'live' ? 'Live' : connection}
-    </p>
-  )
-}
-
-function StatusCard({ health, connection }: { health?: Health; connection: Connection }) {
-  return (
-    <section className="card">
-      <h2>Runtime</h2>
-      <dl className="facts">
-        <dt>Server</dt>
-        <dd>{health ? <Badge value={health.status === 'ok' ? 'connected' : 'unavailable'} /> : '...'}</dd>
-        <dt>MongoDB</dt>
-        <dd>{health ? <Badge value="connected" /> : '...'}</dd>
-        <dt>Redis</dt>
-        <dd>{health ? <Badge value={health.redis} /> : '...'}</dd>
-        <dt>Live events</dt>
-        <dd>
-          <Badge value={connection} />
-        </dd>
-        <dt>Memories</dt>
-        <dd className="mono">{health?.records ?? '...'}</dd>
-      </dl>
-    </section>
-  )
-}
-
-function AgentsCard({ agents }: { agents: Agent[] }) {
-  return (
-    <section className="card">
-      <h2>Agents</h2>
-      {agents.length === 0 ? (
-        <p className="muted">
-          No observed sessions. Agents appear after a supported hook or <kbd>om wake</kbd> reports
-          one.
-        </p>
-      ) : (
-        <ul className="rows">
-          {agents.map((a) => (
-            <li key={a.agent + a.session_id}>
-              <div>
-                <strong>{a.agent}</strong>
-                <span className="muted mono"> {a.session_id.slice(0, 8)}</span>
-                <p className="muted small">
-                  {a.source === 'claude_hook' ? 'verified hook' : a.source} · seen {ago(a.last_seen)}
-                </p>
-              </div>
-              <Badge value={a.status} />
+        <ul>
+          {nav.map((item) => (
+            <li key={item.id}>
+              <a href={'#' + item.id} aria-current={view === item.id ? 'page' : undefined}>
+                {item.label}
+                {item.count ? (
+                  <span className={'count' + (item.attention ? ' attention' : '')}>
+                    {item.count}
+                    <span className="sr-only"> {item.unit}</span>
+                  </span>
+                ) : null}
+              </a>
             </li>
           ))}
         </ul>
-      )}
-    </section>
-  )
-}
+        <dl className="rail-meta">
+          <dt>Project</dt>
+          <dd className="mono">{health ? health.project_id.slice(0, 12) : '…'}</dd>
+          <dt>Revision</dt>
+          <dd className="mono">{health?.revision ?? '…'}</dd>
+          <dt>Live</dt>
+          <dd className={'live live-' + connection}>{connection === 'live' ? 'Connected' : liveLabel}</dd>
+        </dl>
+      </nav>
 
-function TasksCard({
-  tasks,
-  onError,
-  onChanged,
-}: {
-  tasks: Task[]
-  onError: (e: unknown) => void
-  onChanged: () => Promise<void>
-}) {
-  const [title, setTitle] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  const add = async (e: FormEvent) => {
-    e.preventDefault()
-    if (!title.trim()) return
-    setBusy(true)
-    try {
-      await api.createTask(title.trim())
-      setTitle('')
-    } catch (err) {
-      onError(err)
-    } finally {
-      setBusy(false)
-    }
-  }
-  const move = async (task: Task, status: TaskStatus) => {
-    try {
-      await api.moveTask(task, status)
-    } catch (err) {
-      // A stale revision means another agent moved it first: reload instead of overwriting.
-      if (err instanceof ApiError && err.status === 409) await onChanged()
-      onError(err)
-    }
-  }
-
-  return (
-    <section className="card wide">
-      <h2>Tasks</h2>
-      <form className="inline" onSubmit={add}>
-        <label className="sr-only" htmlFor="task-title">
-          New task
-        </label>
-        <input
-          id="task-title"
-          value={title}
-          maxLength={240}
-          placeholder="Describe a task for an agent"
-          onChange={(e) => setTitle(e.target.value)}
-        />
-        <button className="primary" disabled={busy || !title.trim()}>
-          Add task
-        </button>
-      </form>
-      <div className="board">
-        {TASK_STATUSES.map((status) => (
-          <div className="column" key={status}>
-            <h3>
-              {status} <span className="muted">{tasks.filter((t) => t.status === status).length}</span>
-            </h3>
-            {tasks
-              .filter((t) => t.status === status)
-              .map((task) => (
-                <article className="task" key={task.id}>
-                  <p>{task.title}</p>
-                  <p className="muted small mono">
-                    rev {task.revision}
-                    {task.owner ? ` · ${task.owner}` : ''}
-                  </p>
-                  <label className="sr-only" htmlFor={`move-${task.id}`}>
-                    Move {task.title}
-                  </label>
-                  <select
-                    id={`move-${task.id}`}
-                    value={task.status}
-                    onChange={(e) => void move(task, e.target.value as TaskStatus)}
-                  >
-                    {TASK_STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </article>
-              ))}
+      <main id="work" className="work">
+        <header className="topbar">
+          <h1>{nav.find((n) => n.id === view)?.title}</h1>
+          <p className="summary">
+            <span className={'live-chip live-' + connection}>
+              <span className="live-led" aria-hidden="true" />
+              {liveLabel}
+            </span>
+            {loaded ? (
+              <>
+                {present.length} {present.length === 1 ? 'session' : 'sessions'} present
+                {unknown ? ` · ${unknown} with no recent signal` : ''}
+              </>
+            ) : (
+              'Reading the project…'
+            )}
+          </p>
+          <div className="topbar-right">
+            {(['todo', 'doing', 'review'] as const).map((s) => (
+              <a key={s} className={'stat stat-' + s} href="#tasks">
+                {s} <b>{loaded ? tasks.filter((t) => t.status === s).length : '…'}</b>
+              </a>
+            ))}
+            {pending > 0 && (
+              <a className="needs-you" href="#approvals">
+                Needs you · {pending}
+              </a>
+            )}
           </div>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function MemoryCard({ onError }: { onError: (e: unknown) => void }) {
-  const [query, setQuery] = useState('')
-  const [results, setResults] = useState<Memory[]>()
-
-  const search = async (e: FormEvent) => {
-    e.preventDefault()
-    try {
-      setResults(await api.search(query))
-    } catch (err) {
-      onError(err)
-    }
-  }
-  return (
-    <section className="card wide">
-      <h2>Memory</h2>
-      <form className="inline" onSubmit={search}>
-        <label className="sr-only" htmlFor="memory-query">
-          Search memory
-        </label>
-        <input
-          id="memory-query"
-          value={query}
-          maxLength={200}
-          placeholder="Search this project"
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        <button>Search</button>
-      </form>
-      {results && results.length === 0 && <p className="muted">No matching memories.</p>}
-      <ul className="rows">
-        {results?.map((m) => (
-          <li key={m.id}>
-            <div>
-              <strong>{m.title}</strong>
-              <p className="muted small">{m.summary}</p>
-              {m.source_refs && <p className="mono small">{m.source_refs.join(', ')}</p>}
+        </header>
+        {error && (
+          <div className="notice" role="alert">
+            <p>
+              <b>Something went wrong.</b> {error}
+            </p>
+            <div className="notice-actions">
+              <button type="button" className="link" onClick={() => void refresh()}>
+                Reload data
+              </button>
+              <button type="button" className="link" onClick={() => setError(undefined)}>
+                Dismiss
+              </button>
             </div>
-            <Badge value={m.state === 'active' ? 'connected' : m.state} />
-          </li>
-        ))}
-      </ul>
-    </section>
-  )
-}
-
-function EventsCard({ events }: { events: LiveEvent[] }) {
-  return (
-    <section className="card">
-      <h2>Live events</h2>
-      {events.length === 0 ? (
-        <p className="muted">Waiting for committed events.</p>
-      ) : (
-        <ol className="events">
-          {events.map((e) => (
-            <li key={e.event_id}>
-              <span className="mono small">#{e.revision}</span> {e.type}{' '}
-              <span className="muted small">
-                {e.data.status ?? ''} · {new Date(e.timestamp).toLocaleTimeString()}
-              </span>
-            </li>
-          ))}
-        </ol>
-      )}
-    </section>
+          </div>
+        )}
+        {view === 'office' && <OfficeView store={store} office={office} />}
+        {view === 'tasks' && <TasksView store={store} />}
+        {view === 'agents' && <AgentsView store={store} office={office} />}
+        {view === 'approvals' && <ApprovalsView store={store} />}
+        {view === 'memory' && <MemoryView store={store} />}
+        {view === 'events' && <EventsView store={store} />}
+      </main>
+    </div>
   )
 }

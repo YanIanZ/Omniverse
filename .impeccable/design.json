@@ -1,0 +1,774 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-18T18:45:36+00:00",
+  "title": "Design System: OmniMemo Mission Control",
+  "extensions": {
+    "colorMeta": {
+      "ground": {
+        "role": "neutral",
+        "displayName": "Night Ground",
+        "canonical": "oklch(16.9% 0.011 268.0)",
+        "tonalRamp": [
+          "#090b10",
+          "#23252b",
+          "#3f4248",
+          "#5e6168",
+          "#7f8289",
+          "#a2a5ac",
+          "#c6c9d1",
+          "#ebeef6"
+        ]
+      },
+      "panel": {
+        "role": "neutral",
+        "displayName": "Panel Slate",
+        "canonical": "oklch(19.6% 0.015 266.8)",
+        "tonalRamp": [
+          "#080b12",
+          "#22252d",
+          "#3e424a",
+          "#5d616a",
+          "#7e828c",
+          "#a1a5af",
+          "#c5c9d3",
+          "#eaeef9"
+        ]
+      },
+      "raise": {
+        "role": "neutral",
+        "displayName": "Raised Slate",
+        "canonical": "oklch(22.7% 0.019 266.2)",
+        "tonalRamp": [
+          "#080b13",
+          "#21252e",
+          "#3d424c",
+          "#5c616c",
+          "#7d828e",
+          "#a0a5b1",
+          "#c3c9d6",
+          "#e9effb"
+        ]
+      },
+      "raise-hover": {
+        "role": "neutral",
+        "displayName": "Raised Slate Hover",
+        "canonical": "oklch(25.7% 0.026 268.2)",
+        "tonalRamp": [
+          "#070b16",
+          "#202532",
+          "#3c4250",
+          "#5b6170",
+          "#7c8292",
+          "#9ea5b6",
+          "#c2c9db",
+          "#e8eefe"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Slate Rule",
+        "canonical": "oklch(26.1% 0.024 267.1)",
+        "tonalRamp": [
+          "#070b15",
+          "#202531",
+          "#3c424f",
+          "#5b616f",
+          "#7c8291",
+          "#9ea5b5",
+          "#c2c9d9",
+          "#e8eefe"
+        ]
+      },
+      "rule-strong": {
+        "role": "neutral",
+        "displayName": "Strong Rule",
+        "canonical": "oklch(31.5% 0.032 269.4)",
+        "tonalRamp": [
+          "#060a18",
+          "#1f2435",
+          "#3b4153",
+          "#5a6174",
+          "#7b8296",
+          "#9da5ba",
+          "#c1c9df",
+          "#e8eefe"
+        ]
+      },
+      "rule-hover": {
+        "role": "neutral",
+        "displayName": "Rule Hover",
+        "canonical": "oklch(39.5% 0.047 271.4)",
+        "tonalRamp": [
+          "#05091f",
+          "#1d233c",
+          "#39415b",
+          "#57607d",
+          "#78819f",
+          "#9aa4c3",
+          "#bec8e9",
+          "#e9eeff"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Paper Ink",
+        "canonical": "oklch(93.4% 0.010 267.4)",
+        "tonalRamp": [
+          "#090b0f",
+          "#23252a",
+          "#404247",
+          "#5f6167",
+          "#808289",
+          "#a2a5ab",
+          "#c6c9d0",
+          "#ebeef5"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Dusk Grey",
+        "canonical": "oklch(71.5% 0.032 267.1)",
+        "tonalRamp": [
+          "#060a19",
+          "#1e2535",
+          "#3a4254",
+          "#596174",
+          "#7a8296",
+          "#9ca5ba",
+          "#c0c9df",
+          "#e8eefe"
+        ]
+      },
+      "glow": {
+        "role": "primary",
+        "displayName": "Monitor Glow",
+        "canonical": "oklch(83.2% 0.102 231.8)",
+        "tonalRamp": [
+          "#000d16",
+          "#02293a",
+          "#024863",
+          "#006a90",
+          "#348db5",
+          "#5bb0da",
+          "#84d5fe",
+          "#ddf2ff"
+        ]
+      },
+      "glow-hover": {
+        "role": "primary",
+        "displayName": "Monitor Glow Hover",
+        "canonical": "oklch(88.2% 0.073 229.4)",
+        "tonalRamp": [
+          "#000d15",
+          "#012939",
+          "#044961",
+          "#2e6982",
+          "#518ba5",
+          "#74aeca",
+          "#97d3ef",
+          "#dcf3fe"
+        ]
+      },
+      "glow-ink": {
+        "role": "primary",
+        "displayName": "Glow Ink",
+        "canonical": "oklch(23.4% 0.041 233.0)",
+        "tonalRamp": [
+          "#000d16",
+          "#0e2836",
+          "#2b4654",
+          "#4a6675",
+          "#6a8797",
+          "#8caabb",
+          "#b0cee0",
+          "#def2fe"
+        ]
+      },
+      "attention": {
+        "role": "secondary",
+        "displayName": "Attention Amber",
+        "canonical": "oklch(87.5% 0.142 86.3)",
+        "tonalRamp": [
+          "#110a00",
+          "#302300",
+          "#543e00",
+          "#7a5c04",
+          "#a37c03",
+          "#cc9d1b",
+          "#f2c24e",
+          "#feedc6"
+        ]
+      },
+      "attention-hover": {
+        "role": "secondary",
+        "displayName": "Attention Amber Hover",
+        "canonical": "oklch(91.5% 0.106 89.3)",
+        "tonalRamp": [
+          "#100a00",
+          "#2f2300",
+          "#523f03",
+          "#785d03",
+          "#9c7f2b",
+          "#bfa251",
+          "#e5c676",
+          "#feedc1"
+        ]
+      },
+      "attention-ink": {
+        "role": "secondary",
+        "displayName": "Amber Ink",
+        "canonical": "oklch(20.3% 0.042 86.2)",
+        "tonalRamp": [
+          "#110a00",
+          "#2e230b",
+          "#4c4128",
+          "#6c6046",
+          "#8d8166",
+          "#b1a488",
+          "#d5c8ab",
+          "#fbedd0"
+        ]
+      },
+      "ok": {
+        "role": "tertiary",
+        "displayName": "Verified Green",
+        "canonical": "oklch(80.6% 0.188 149.7)",
+        "tonalRamp": [
+          "#001003",
+          "#012e10",
+          "#015021",
+          "#017533",
+          "#019d46",
+          "#28c460",
+          "#5bea83",
+          "#c8ffd1"
+        ]
+      },
+      "fault": {
+        "role": "tertiary",
+        "displayName": "Fault Red",
+        "canonical": "oklch(70.9% 0.184 28.4)",
+        "tonalRamp": [
+          "#1f0000",
+          "#4d0001",
+          "#800205",
+          "#b21e19",
+          "#da493d",
+          "#fe7465",
+          "#feb3a8",
+          "#fee9e6"
+        ]
+      },
+      "map-void": {
+        "role": "neutral",
+        "displayName": "Map Void",
+        "canonical": "oklch(14.1% 0.009 273.2)",
+        "tonalRamp": [
+          "#0a0b0f",
+          "#23252a",
+          "#404247",
+          "#5f6166",
+          "#808288",
+          "#a3a5ab",
+          "#c7c9cf",
+          "#eceef5"
+        ]
+      },
+      "pixel-shadow": {
+        "role": "neutral",
+        "displayName": "Pixel Shadow",
+        "canonical": "oklch(12.2% 0.006 261.6)",
+        "tonalRamp": [
+          "#0a0b0e",
+          "#232528",
+          "#404245",
+          "#5f6165",
+          "#808286",
+          "#a3a5a9",
+          "#c7c9cd",
+          "#eceff3"
+        ]
+      },
+      "room-wall": {
+        "role": "neutral",
+        "displayName": "Room Wall",
+        "canonical": "oklch(43.9% 0.035 267.9)",
+        "tonalRamp": [
+          "#060a1a",
+          "#1e2436",
+          "#3a4255",
+          "#596175",
+          "#798298",
+          "#9ca5bb",
+          "#bfc9e1",
+          "#e8eefe"
+        ]
+      },
+      "tone-green-fill": {
+        "role": "state",
+        "displayName": "Tone Green Fill",
+        "canonical": "oklch(31.4% 0.060 152.3)",
+        "tonalRamp": [
+          "#001004",
+          "#082d16",
+          "#274b32",
+          "#476b51",
+          "#678d71",
+          "#89b093",
+          "#add5b6",
+          "#d1fbdb"
+        ]
+      },
+      "tone-green-text": {
+        "role": "state",
+        "displayName": "Tone Green Text",
+        "canonical": "oklch(88.7% 0.116 151.3)",
+        "tonalRamp": [
+          "#001004",
+          "#012e12",
+          "#025025",
+          "#1f733e",
+          "#46965e",
+          "#6aba80",
+          "#8edfa3",
+          "#c7ffd3"
+        ]
+      },
+      "tone-green-edge": {
+        "role": "state",
+        "displayName": "Tone Green Edge",
+        "canonical": "oklch(43.8% 0.079 149.7)",
+        "tonalRamp": [
+          "#001003",
+          "#002e10",
+          "#1e4d2a",
+          "#3f6e49",
+          "#609069",
+          "#82b38b",
+          "#a5d8ae",
+          "#cafed3"
+        ]
+      },
+      "tone-amber-fill": {
+        "role": "state",
+        "displayName": "Tone Amber Fill",
+        "canonical": "oklch(31.3% 0.054 86.6)",
+        "tonalRamp": [
+          "#110a00",
+          "#302300",
+          "#4e401e",
+          "#6f5f3d",
+          "#90815d",
+          "#b4a37f",
+          "#d8c7a2",
+          "#feedc6"
+        ]
+      },
+      "tone-amber-text": {
+        "role": "state",
+        "displayName": "Tone Amber Text",
+        "canonical": "oklch(90.1% 0.106 84.7)",
+        "tonalRamp": [
+          "#110a00",
+          "#312200",
+          "#553e02",
+          "#7b5c02",
+          "#a07d2b",
+          "#c4a051",
+          "#e9c475",
+          "#ffecc7"
+        ]
+      },
+      "tone-amber-edge": {
+        "role": "state",
+        "displayName": "Tone Amber Edge",
+        "canonical": "oklch(45.9% 0.075 84.9)",
+        "tonalRamp": [
+          "#110a00",
+          "#312201",
+          "#543e04",
+          "#755e2a",
+          "#977f4c",
+          "#bba26e",
+          "#e0c691",
+          "#ffedc8"
+        ]
+      },
+      "tone-blue-fill": {
+        "role": "state",
+        "displayName": "Tone Blue Fill",
+        "canonical": "oklch(28.3% 0.053 244.3)",
+        "tonalRamp": [
+          "#000c1a",
+          "#0a273d",
+          "#28455c",
+          "#47657e",
+          "#6786a1",
+          "#89a9c5",
+          "#adceea",
+          "#e1f1ff"
+        ]
+      },
+      "tone-blue-text": {
+        "role": "state",
+        "displayName": "Tone Blue Text",
+        "canonical": "oklch(86.9% 0.074 237.1)",
+        "tonalRamp": [
+          "#000d18",
+          "#00283d",
+          "#104764",
+          "#346786",
+          "#5689a9",
+          "#78acce",
+          "#9bd1f4",
+          "#dff2fe"
+        ]
+      },
+      "tone-red-fill": {
+        "role": "state",
+        "displayName": "Tone Red Fill",
+        "canonical": "oklch(26.3% 0.051 24.8)",
+        "tonalRamp": [
+          "#1c0202",
+          "#3a1a18",
+          "#5a3734",
+          "#7c5653",
+          "#9f7773",
+          "#c39995",
+          "#e9bdb9",
+          "#fee9e7"
+        ]
+      },
+      "tone-red-text": {
+        "role": "state",
+        "displayName": "Tone Red Text",
+        "canonical": "oklch(83.6% 0.090 26.7)",
+        "tonalRamp": [
+          "#1f0000",
+          "#480b0a",
+          "#6a2c27",
+          "#8d4b45",
+          "#b26d65",
+          "#d88f87",
+          "#ffb3aa",
+          "#ffe9e6"
+        ]
+      },
+      "tone-red-edge": {
+        "role": "state",
+        "displayName": "Tone Red Edge",
+        "canonical": "oklch(37.7% 0.094 26.1)",
+        "tonalRamp": [
+          "#1f0001",
+          "#490909",
+          "#6b2a26",
+          "#8f4a44",
+          "#b46b64",
+          "#da8e86",
+          "#ffb3ab",
+          "#fee9e6"
+        ]
+      },
+      "tone-gray-fill": {
+        "role": "state",
+        "displayName": "Tone Gray Fill",
+        "canonical": "oklch(30.6% 0.025 268.5)",
+        "tonalRamp": [
+          "#070b16",
+          "#202531",
+          "#3c424f",
+          "#5b6170",
+          "#7c8292",
+          "#9ea5b5",
+          "#c2c9da",
+          "#e8eefe"
+        ]
+      },
+      "tone-gray-text": {
+        "role": "state",
+        "displayName": "Tone Gray Text",
+        "canonical": "oklch(83.5% 0.019 266.0)",
+        "tonalRamp": [
+          "#070b13",
+          "#21252f",
+          "#3d424d",
+          "#5c616d",
+          "#7d828e",
+          "#9fa5b2",
+          "#c3c9d6",
+          "#e8effc"
+        ]
+      },
+      "tone-gray-edge": {
+        "role": "state",
+        "displayName": "Tone Gray Edge",
+        "canonical": "oklch(43.9% 0.035 267.9)",
+        "tonalRamp": [
+          "#060a1a",
+          "#1e2436",
+          "#3a4255",
+          "#596175",
+          "#798298",
+          "#9ca5bb",
+          "#bfc9e1",
+          "#e8eefe"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Page title in the header; sign-in title."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Selected agent name, approval titles, memory and empty-state titles."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Panel and board column titles, button labels."
+      },
+      "nav": {
+        "displayName": "Nav",
+        "purpose": "Rail navigation links (15px under 900px)."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Prose and table text with tabular numerals."
+      },
+      "body-dense": {
+        "displayName": "Body Dense",
+        "purpose": "Event rows, list rows and notes."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Room labels, control labels, nametags, tags, map hints."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Ids, revisions, paths, counts, kbd."
+      },
+      "mono-map": {
+        "displayName": "Mono Map",
+        "purpose": "Speech-bubble quotes and room plates; inverse-scaled with the map."
+      }
+    },
+    "shadows": [
+      {
+        "name": "pixel-drop",
+        "value": "0 4px 0 #050608",
+        "purpose": "Map rooms, desks, meeting table (3px under bubbles, 2px under the cable tray). Map only; never on UI chrome."
+      },
+      {
+        "name": "wall-face",
+        "value": "inset 0 -3px 0 #0e1117, inset 0 -5px 0 #2b3142, inset 0 2px 0 #262c3c",
+        "purpose": "Three-quarter top wall of each room."
+      },
+      {
+        "name": "room-vignette",
+        "value": "inset 0 0 0 4px rgb(0 0 0 / 0.16), inset 0 0 0 8px rgb(0 0 0 / 0.1), inset 0 0 0 14px rgb(0 0 0 / 0.06)",
+        "purpose": "Stepped darkening toward room walls."
+      },
+      {
+        "name": "selection-outline",
+        "value": "filter: drop-shadow(2px 0 0 #7fd4ff) drop-shadow(-2px 0 0 #7fd4ff) drop-shadow(0 2px 0 #7fd4ff) drop-shadow(0 -2px 0 #7fd4ff)",
+        "purpose": "Pixel outline around the selected agent sprite."
+      },
+      {
+        "name": "led-emission",
+        "value": "0 0 8px 1px #4fe07a80",
+        "purpose": "Live LED only; blur reserved for emitted light."
+      }
+    ],
+    "motion": [
+      {
+        "name": "agent-walk",
+        "value": "transform 1.1s steps(9, end)",
+        "purpose": "Agent and its tag move to the room of its new verified state."
+      },
+      {
+        "name": "sprite-frames",
+        "value": "1.2s steps(1, end) infinite",
+        "purpose": "Two-frame idle for fresh agents only."
+      },
+      {
+        "name": "led-blink",
+        "value": "1s steps(1, end) infinite",
+        "purpose": "Amber LED while connecting or reconnecting."
+      },
+      {
+        "name": "pending",
+        "value": "1.6s steps(2, jump-none) infinite",
+        "purpose": "Skeleton bars while loading."
+      },
+      {
+        "name": "scenery",
+        "value": "0.36s-11s steps(1, end) infinite",
+        "purpose": "Screens, carets, rack LEDs, plants, fans; only under prefers-reduced-motion: no-preference."
+      },
+      {
+        "name": "edge-fade",
+        "value": "opacity 0.15s steps(2)",
+        "purpose": "Map scroll edge hints."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "animation: none; transition: none",
+        "purpose": "All motion removed under prefers-reduced-motion: reduce; agents jump."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact",
+        "value": "max-width: 900px"
+      },
+      {
+        "name": "wide",
+        "value": "min-width: 1280px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Button",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "Default square key with a pixel label; 44px target.",
+      "html": "<button class=\"ds-btn\">Deny</button>",
+      "css": ":host{--ground:#0d0f14;--panel:#12151c;--raise:#181c25;--rule:#1f2430;--rule-strong:#2b3142;--ink:#e6e9f0;--muted:#9aa3b8;--glow:#7fd4ff;--attention:#ffcf5c;--ok:#4fe07a;--fault:#ff6b5c;--pixel:'Pixelify Sans',ui-monospace,monospace;--sans:-apple-system,'SF Pro Text','Helvetica Neue',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace} .ds-btn{min-height:44px;padding:8px 16px;border:2px solid var(--rule-strong);border-radius:0;background:var(--raise);color:var(--ink);font-family:var(--pixel);font-size:16px;cursor:pointer}.ds-btn:hover{border-color:#3d4560;background:#1e2330}.ds-btn:focus-visible{outline:2px solid var(--glow);outline-offset:2px}.ds-btn:active{transform:translateY(1px)}"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Monitor-glow fill for the one committing action in a view.",
+      "html": "<button class=\"ds-btn-primary\">Approve</button>",
+      "css": ":host{--ground:#0d0f14;--panel:#12151c;--raise:#181c25;--rule:#1f2430;--rule-strong:#2b3142;--ink:#e6e9f0;--muted:#9aa3b8;--glow:#7fd4ff;--attention:#ffcf5c;--ok:#4fe07a;--fault:#ff6b5c;--pixel:'Pixelify Sans',ui-monospace,monospace;--sans:-apple-system,'SF Pro Text','Helvetica Neue',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace} .ds-btn-primary{min-height:44px;padding:8px 16px;border:2px solid var(--glow);border-radius:0;background:var(--glow);color:#06212e;font-family:var(--pixel);font-size:16px;cursor:pointer}.ds-btn-primary:hover{background:#a6e2ff;border-color:#a6e2ff}.ds-btn-primary:focus-visible{outline:2px solid var(--glow);outline-offset:2px}.ds-btn-primary:active{transform:translateY(1px)}"
+    },
+    {
+      "name": "Needs You",
+      "kind": "button",
+      "refersTo": "needs-you",
+      "description": "The only solid-amber control: what waits on the human.",
+      "html": "<a class=\"ds-needs-you\" href=\"#\">Needs you · 2</a>",
+      "css": ":host{--ground:#0d0f14;--panel:#12151c;--raise:#181c25;--rule:#1f2430;--rule-strong:#2b3142;--ink:#e6e9f0;--muted:#9aa3b8;--glow:#7fd4ff;--attention:#ffcf5c;--ok:#4fe07a;--fault:#ff6b5c;--pixel:'Pixelify Sans',ui-monospace,monospace;--sans:-apple-system,'SF Pro Text','Helvetica Neue',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace} .ds-needs-you{display:inline-block;padding:6px 12px;background:var(--attention);color:#1f1500;font-family:var(--sans);font-weight:600;text-decoration:none}.ds-needs-you:hover{background:#ffe08f}.ds-needs-you:focus-visible{outline:2px solid var(--glow);outline-offset:2px}"
+    },
+    {
+      "name": "Search Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Ground-coloured well with a 2px slate edge that turns glow on focus.",
+      "html": "<input class=\"ds-input\" type=\"search\" placeholder=\"Search memory\">",
+      "css": ":host{--ground:#0d0f14;--panel:#12151c;--raise:#181c25;--rule:#1f2430;--rule-strong:#2b3142;--ink:#e6e9f0;--muted:#9aa3b8;--glow:#7fd4ff;--attention:#ffcf5c;--ok:#4fe07a;--fault:#ff6b5c;--pixel:'Pixelify Sans',ui-monospace,monospace;--sans:-apple-system,'SF Pro Text','Helvetica Neue',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace} .ds-input{min-height:44px;padding:8px 10px;background:var(--ground);border:2px solid var(--rule-strong);border-radius:0;color:var(--ink);font:15px/1.55 var(--sans)}.ds-input::placeholder{color:#7d869c}.ds-input:hover{border-color:#3d4560}.ds-input:focus-visible{outline:2px solid var(--glow);outline-offset:0;border-color:var(--glow)}"
+    },
+    {
+      "name": "Rail Navigation",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "Pixel-type rail links with right-aligned counts; amber count only for approvals.",
+      "html": "<nav class=\"ds-rail\"><a href=\"#\" aria-current=\"page\">Office</a><a href=\"#\">Tasks <span class=\"ds-count\">7</span></a><a href=\"#\">Approvals <span class=\"ds-count ds-count-attn\">2</span></a></nav>",
+      "css": ":host{--ground:#0d0f14;--panel:#12151c;--raise:#181c25;--rule:#1f2430;--rule-strong:#2b3142;--ink:#e6e9f0;--muted:#9aa3b8;--glow:#7fd4ff;--attention:#ffcf5c;--ok:#4fe07a;--fault:#ff6b5c;--pixel:'Pixelify Sans',ui-monospace,monospace;--sans:-apple-system,'SF Pro Text','Helvetica Neue',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace} .ds-rail{display:flex;flex-direction:column;gap:4px;width:200px;padding:16px;background:var(--ground)}.ds-rail a{display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 12px;border:2px solid transparent;color:var(--muted);font-family:var(--pixel);font-size:17px;text-decoration:none}.ds-rail a:hover{color:var(--ink);background:var(--panel)}.ds-rail a:focus-visible{outline:2px solid var(--glow);outline-offset:2px}.ds-rail a[aria-current=page]{color:#fff;background:var(--raise);border-color:var(--rule-strong)}.ds-count{margin-left:auto;min-width:26px;padding:0 6px;text-align:center;font-family:var(--mono);font-size:12px;background:var(--rule-strong);color:var(--ink)}.ds-count-attn{background:var(--attention);color:#1f1500;font-weight:600}"
+    },
+    {
+      "name": "Status Pills",
+      "kind": "chip",
+      "refersTo": "pill-green",
+      "description": "Square state chips; unknown is grey with a dashed inset edge.",
+      "html": "<span class=\"ds-pill ds-green\">Active</span> <span class=\"ds-pill ds-amber\">Doing</span> <span class=\"ds-pill ds-blue\">Todo</span> <span class=\"ds-pill ds-red\">Blocked</span> <span class=\"ds-pill ds-unknown\">Unknown</span>",
+      "css": ":host{--ground:#0d0f14;--panel:#12151c;--raise:#181c25;--rule:#1f2430;--rule-strong:#2b3142;--ink:#e6e9f0;--muted:#9aa3b8;--glow:#7fd4ff;--attention:#ffcf5c;--ok:#4fe07a;--fault:#ff6b5c;--pixel:'Pixelify Sans',ui-monospace,monospace;--sans:-apple-system,'SF Pro Text','Helvetica Neue',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace} .ds-pill{display:inline-block;padding:1px 8px;font:600 12px/1.55 var(--sans);white-space:nowrap}.ds-green{background:#163a22;color:#9ff0b3}.ds-amber{background:#3d2f0c;color:#ffd98a}.ds-blue{background:#0f2c42;color:#a6dcff}.ds-red{background:#3a1a18;color:#ffb3aa}.ds-unknown{background:#2a2f3c;color:#c3c9d6;outline:2px dashed #4a5266;outline-offset:-2px}"
+    },
+    {
+      "name": "Live Chip",
+      "kind": "chip",
+      "refersTo": "pill-green",
+      "description": "Header connection state with a square LED; amber blinks in steps while connecting.",
+      "html": "<span class=\"ds-live\"><span class=\"ds-led\"></span>Live</span>",
+      "css": ":host{--ground:#0d0f14;--panel:#12151c;--raise:#181c25;--rule:#1f2430;--rule-strong:#2b3142;--ink:#e6e9f0;--muted:#9aa3b8;--glow:#7fd4ff;--attention:#ffcf5c;--ok:#4fe07a;--fault:#ff6b5c;--pixel:'Pixelify Sans',ui-monospace,monospace;--sans:-apple-system,'SF Pro Text','Helvetica Neue',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace} .ds-live{display:inline-flex;align-items:center;gap:6px;padding:1px 8px;border:2px solid #2f5e3a;background:var(--panel);color:#9ff0b3;font-family:var(--pixel);font-size:13px;line-height:1.3}.ds-led{width:8px;height:8px;background:var(--ok);box-shadow:0 0 8px 1px #4fe07a80}"
+    },
+    {
+      "name": "Task Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Raised square card on a panel column with a 4px state-coloured top edge.",
+      "html": "<div class=\"ds-column\"><h3>Doing <span>1</span></h3><article class=\"ds-card\"><div class=\"ds-top\"><span class=\"ds-prio\">P0</span><span class=\"ds-age\">36m ago</span></div><p>Wire session presence into the office</p><div class=\"ds-meta\"><span class=\"ds-owner\">claude</span><span class=\"ds-rev\">rev 2</span></div></article></div>",
+      "css": ":host{--ground:#0d0f14;--panel:#12151c;--raise:#181c25;--rule:#1f2430;--rule-strong:#2b3142;--ink:#e6e9f0;--muted:#9aa3b8;--glow:#7fd4ff;--attention:#ffcf5c;--ok:#4fe07a;--fault:#ff6b5c;--pixel:'Pixelify Sans',ui-monospace,monospace;--sans:-apple-system,'SF Pro Text','Helvetica Neue',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace} .ds-column{width:220px;padding:12px;background:var(--panel);border:2px solid var(--rule);border-top:4px solid #2f8a4a;color:var(--ink);font:15px/1.55 var(--sans)}.ds-column h3{display:flex;justify-content:space-between;margin:0 0 10px;font:600 15px var(--pixel)}.ds-column h3 span,.ds-rev{font:12.5px var(--mono);color:var(--muted)}.ds-card{display:flex;flex-direction:column;gap:8px;padding:12px;background:var(--raise);border:2px solid var(--rule-strong)}.ds-card p{margin:0;font-size:14.5px;line-height:1.4}.ds-top{display:flex;gap:8px}.ds-prio{padding:0 6px;background:#a8463f;color:#fff;font:11.5px var(--mono)}.ds-age{margin-left:auto;color:var(--muted);font-size:12.5px}.ds-meta{display:flex;justify-content:space-between;padding-top:8px;border-top:2px solid var(--rule)}.ds-owner{font:14px var(--pixel)}"
+    },
+    {
+      "name": "Office Room",
+      "kind": "custom",
+      "refersTo": "room-label",
+      "description": "Map room: 4px wall, three-quarter wall face, pixel drop, tab label on the wall.",
+      "html": "<div class=\"ds-room-wrap\"><div class=\"ds-room\"><span class=\"ds-room-label\">Workspace · 1</span><div class=\"ds-wall\"></div></div></div>",
+      "css": ":host{--ground:#0d0f14;--panel:#12151c;--raise:#181c25;--rule:#1f2430;--rule-strong:#2b3142;--ink:#e6e9f0;--muted:#9aa3b8;--glow:#7fd4ff;--attention:#ffcf5c;--ok:#4fe07a;--fault:#ff6b5c;--pixel:'Pixelify Sans',ui-monospace,monospace;--sans:-apple-system,'SF Pro Text','Helvetica Neue',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace} .ds-room-wrap{padding:28px 12px 16px;background:#12151c;image-rendering:pixelated}.ds-room{position:relative;width:260px;height:120px;border:4px solid #4a5266;background:#3a2e26 repeating-linear-gradient(90deg,#3a2e26 0 22px,#33281f 22px 24px);box-shadow:inset 0 4px 0 #2b3040,0 4px 0 #050608}.ds-room-label{position:absolute;left:8px;top:-4px;transform:translateY(-100%);padding:1px 8px;background:#1a1d26;border:2px solid #4a5266;border-bottom:0;font-family:var(--pixel);font-size:13px;color:#d5dbe8;white-space:nowrap}.ds-wall{position:absolute;left:0;right:0;top:0;height:22px;background-color:#1c2130;background-image:linear-gradient(90deg,#171b27 0 2px,transparent 2px);background-size:24px 100%;box-shadow:inset 0 -3px 0 #0e1117,inset 0 -5px 0 #2b3142,inset 0 2px 0 #262c3c}"
+    },
+    {
+      "name": "Speech Bubble and Nametag",
+      "kind": "custom",
+      "refersTo": "nametag",
+      "description": "Mono quote of the agent's verified signal on a light state tone, pixel outline and drop; unknown is grey and dashed.",
+      "html": "<div class=\"ds-stage\"><span class=\"ds-bubble ds-b-green\">om CLI · task updated</span><span class=\"ds-bubble ds-b-gray\">no signal 46m</span><span class=\"ds-tag\">claude</span></div>",
+      "css": ":host{--ground:#0d0f14;--panel:#12151c;--raise:#181c25;--rule:#1f2430;--rule-strong:#2b3142;--ink:#e6e9f0;--muted:#9aa3b8;--glow:#7fd4ff;--attention:#ffcf5c;--ok:#4fe07a;--fault:#ff6b5c;--pixel:'Pixelify Sans',ui-monospace,monospace;--sans:-apple-system,'SF Pro Text','Helvetica Neue',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace} .ds-stage{display:flex;gap:16px;align-items:center;padding:20px;background:#3a2f2a}.ds-bubble{position:relative;padding:3px 8px;border:2px solid #050608;font:11px/1.3 var(--mono);white-space:nowrap;box-shadow:0 3px 0 #050608}.ds-bubble::after{content:\"\";position:absolute;left:50%;bottom:-8px;margin-left:-4px;border:4px solid transparent;border-top-color:#050608}.ds-b-green{background:#c8f2cf;color:#0f3a1b}.ds-b-gray{background:#3a3f4c;color:#d5dae4;border-style:dashed}.ds-tag{padding:0 6px;background:#0b0d12dd;font-family:var(--pixel);font-size:12px;color:#eef1f6}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Night Office",
+    "overview": "**Creative North Star: \"The Night Office\"**\n\nMission Control is a lit office floor at night, seen from above. The pixel-art map is the status board: each agent is an original 12x16 sprite standing in the room its verified state belongs to, and when a committed event changes that state it walks there in stepped motion. Everything around the map (rail, header, Tasks, Agents, Approvals, Memory, Events) is the same building's back office: near-black panels, 2px slate rules, square corners, and the pixel face only where something is named.\n\nDensity is that of an operator console, not a marketing page. Text sits on dark ground at body 15px, ids and revisions drop to a small monospace, and colour is spent almost entirely on state: monitor-glow blue for focus and selection, amber for what needs a human, green for verified activity, red for faults, and dashed grey for anything unknown. The office carries the delight (floors, lamps, plants, blinking racks); the data views carry clarity and stay plain.\n\nThe world is drawn, not decorated. Walls are 4px, rules are 2px, shadows are pixel steps, motion is `steps()`, and nothing has a rounded corner.",
+    "keyCharacteristics": [
+      "Pixel-art night office as the primary view; data views share its palette and square geometry.",
+      "Colour encodes verified state only; unknown is a visible, dashed, desaturated state.",
+      "Three type voices with strict jobs: Pixelify Sans names things, system sans reads, JetBrains Mono identifies.",
+      "Zero radius everywhere; 2px rules for UI, 4px walls for the map.",
+      "All motion is stepped and disappears under reduced motion."
+    ],
+    "rules": [
+      {
+        "name": "The Signal Colour Rule",
+        "body": "Hue on this surface means a verified state. Do not use green, amber, blue or red for decoration; the floors and furniture of the office use desaturated woods, carpets and slates so that state colour stays readable on top of them.",
+        "section": "colors"
+      },
+      {
+        "name": "The Solid Amber Rule",
+        "body": "A full-strength `attention` fill is reserved for what a human must act on. In-flight work uses the dark amber tone, never the solid fill.",
+        "section": "colors"
+      },
+      {
+        "name": "The Three Voices Rule",
+        "body": "Pixel names, sans reads, mono identifies. Never set paragraphs in Pixelify Sans and never set ids in the sans.",
+        "section": "typography"
+      },
+      {
+        "name": "The Legible Map Rule",
+        "body": "Text inside the scaled map is sized by the inverse of the map scale, so its rendered size never drops below its 11-13px floor however small the map gets.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Chrome Rule",
+        "body": "Outside the map, nothing casts a shadow. Panels separate by tone and a 2px rule.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Pixel Step Rule",
+        "body": "Inside the map, shadows are whole-pixel offsets with no blur. Blur is reserved for light that a source emits.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** keep every corner square (0px) and every UI rule 2px; room walls are 4px.",
+      "**Do** spend hue only on verified state, and render unknown as grey, dashed and desaturated rather than hiding it.",
+      "**Do** set names, navigation, titles, labels and buttons in Pixelify Sans, prose in the system sans, and ids, revisions, paths and counts in JetBrains Mono.",
+      "**Do** animate with `steps()` timing only, and remove all animation and transition under `prefers-reduced-motion: reduce`.",
+      "**Do** draw sprites and props as original inline SVG pixel maps at integer scales with `image-rendering: pixelated`.",
+      "**Do** bundle every font and asset locally; the page runs under CSP `default-src 'self'`.",
+      "**Do** give every primary control a 44px target and the shared `glow` focus ring."
+    ],
+    "donts": [
+      "**Don't** round corners anywhere, including pills, inputs and bubbles.",
+      "**Don't** put shadows on UI chrome; elevation outside the map is tonal.",
+      "**Don't** blur a shadow on the map; use whole-pixel drop steps, and keep blur for emitted light.",
+      "**Don't** use smooth easing curves for movement; agents and scenery move in steps.",
+      "**Don't** fill anything with full-strength `attention` amber unless it waits on a human.",
+      "**Don't** copy third-party tilesets or characters; pixel art here is original.",
+      "**Don't** load fonts, images or scripts from external origins."
+    ]
+  }
+}

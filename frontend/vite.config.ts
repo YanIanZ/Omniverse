@@ -17,5 +17,6 @@ export default defineConfig({
       '/ws': { target, changeOrigin: true, ws: true },
     },
   },
-  build: { outDir: 'dist', sourcemap: false },
+  // CSP font-src/img-src 'self' rejects data: URIs, so never inline assets.
+  build: { outDir: 'dist', sourcemap: false, assetsInlineLimit: 0 },
 })
