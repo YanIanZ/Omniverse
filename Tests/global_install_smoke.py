@@ -21,7 +21,7 @@ with tempfile.TemporaryDirectory(prefix='global fixture ',dir=workspace) as fold
     codex=home/'.codex/config.toml';codex.parent.mkdir();codex.write_text('model = "keep-me"\n[mcp_servers.other]\ncommand = "unchanged"\n')
     original={p:p.read_bytes() for p in [codex,*paths.values()]}
     args=[sys.executable,str(script),'--home',str(home),'--hosts','codex,'+','.join(paths),
-          '--binary','/Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem','--data-dir',str(root/'data'),
+          '--binary','/Volumes/Ext/DevCache/OmniMemo/dist/0.3.0/omnimem','--data-dir',str(root/'data'),
           '--state-dir',str(state),'--opencode-layout','v2']
     def run(*extra,ok=True):
         p=subprocess.run(args+list(extra),text=True,capture_output=True,timeout=30)
@@ -66,7 +66,7 @@ with tempfile.TemporaryDirectory(prefix='global fixture ',dir=workspace) as fold
     before=json.loads(settings.read_text())
     gemini_before=json.loads(paths['gemini'].read_text())
     hargs=[sys.executable,str(script),'--home',str(home),'--hosts','codex,gemini,opencode','--opencode-layout','v2','--with-hooks',
-           '--binary','/Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem','--data-dir',str(root/'data space'),
+           '--binary','/Volumes/Ext/DevCache/OmniMemo/dist/0.3.0/omnimem','--data-dir',str(root/'data space'),
            '--state-dir',str(hstate)]
     p=subprocess.run(hargs,text=True,capture_output=True,timeout=30);assert p.returncode==0,p.stderr
     assert json.loads(settings.read_text())==before, 'preview must not write'

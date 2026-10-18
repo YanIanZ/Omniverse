@@ -39,7 +39,7 @@ with tempfile.TemporaryDirectory(prefix='install space ', dir=workspace) as fold
     binary = [str(launcher), '--data-dir', str(data), '--project', str(project)]
     def cli(*args):
         return subprocess.check_output(binary + list(args), text=True)
-    assert cli('--version').strip() == '0.2.0'
+    assert cli('--version').strip() == '0.3.0'
     assert (project / '.mcp.json').is_file()
     assert (project / '.codex/config.toml').is_file()
     saved = json.loads(cli('memory', 'save', '--title', 'Installer persistence', '--content', 'Keep this record', '--source', 'source.swift'))

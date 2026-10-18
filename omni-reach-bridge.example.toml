@@ -1,4 +1,4 @@
-# OmniMemo v1.6 proposed configuration, not Agent Reach's own config file.
+# OmniMemo Omni Reach proposed configuration, not Agent Reach's own config file.
 [reach]
 enabled = false
 mode = "read_only"

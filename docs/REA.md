@@ -1,4 +1,4 @@
-# REA integration (OmniMemo 0.2.0)
+# REA integration (OmniMemo 0.3.0)
 
 OmniMemo includes the complete public investigation skill from [YanIanZ/rea](https://github.com/YanIanZ/rea), pinned at `94153f1c757e07a6d092e00903aa8b125d4a0afa` (package version 6.4.0). The generated skill, six reference documents, upstream license and third-party notices are versioned in the Swift package. Upstream maintainer-only skills are not investigation features and are not installed into user projects.
 
@@ -10,7 +10,7 @@ The upstream runtime is built unchanged and launched through Swift with `execv`.
 cd /Volumes/Ext/MinionsProject/OmniMemo
 python3 scripts/prepare-rea.py
 ./scripts/package.sh
-BIN=/Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem
+BIN=/Volumes/Ext/DevCache/OmniMemo/dist/0.3.0/omnimem
 "$BIN" rea status
 ```
 

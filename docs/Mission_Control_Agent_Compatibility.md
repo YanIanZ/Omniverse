@@ -1,4 +1,4 @@
-# OmniMemo v1.9 — Agent Integration Compatibility Plan
+# OmniMemo — Agent Integration Compatibility Plan
 
 **Never promise identical automatic hooks across providers.** Probe installed versions and supported config APIs on each user's machine.
 

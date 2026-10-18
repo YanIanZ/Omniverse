@@ -3,7 +3,7 @@ name: omnimemo-hybrid-storage
 description: Use only for MongoDB+Redis or SQLite backend configuration, migration, diagnostics, performance or recovery in OmniMemo.
 ---
 
-# OmniMemo Hybrid Storage v1.8 (Proposed Workflow)
+# OmniMemo Storage Profiles (MongoDB, Redis, SQLite)
 
 1. Before touching databases, read `AGENTS.md` and `docs/OmniMemo_Hybrid_Storage_Technical_Spec_v1.8.md`.
 2. Choose explicit `hybrid`, `mongodb`, or `sqlite` profile; never auto-fallback writes to SQLite.

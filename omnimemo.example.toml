@@ -1,4 +1,4 @@
-# OmniMemo v1.9 reference configuration; commands/config parser NOT implemented yet.
+# OmniMemo reference configuration (proposal); the CLI does not read this file yet.
 # Supply secret values through environment or OS keychain, never commit them.
 
 [runtime]

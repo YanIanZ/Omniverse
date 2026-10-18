@@ -81,9 +81,9 @@ sanitized errors. Results: 27 XCTest passed, 0 failed, 0 skipped (real MongoDB, 
 `/Volumes/Ext`. Packaging under `/private/tmp` makes `cli_smoke` fail only because
 Foundation's `resolvingSymlinksInPath()` rewrites `/private/tmp` to `/tmp`.
 
-## v1.9 vertical slice (2026-10-18)
+## 0.3.0: Mission Control vertical slice (2026-10-18)
 
-Implemented PRD v1.9 P0-A/B/C: `om` alias and commands (`wake`, `context --first-prompt`,
+Implemented the Mission Control vertical slice: `om` alias and commands (`wake`, `context --first-prompt`,
 `recall`, `agents`, `tasks`, `serve`, `office`, `stop`, `hook claude`); MongoDB sessions, ordered
 events and revision-checked tasks; optional Redis Pub/Sub hint (RediStack 1.6.3, tested against
 local Redis 8.10.2); Vapor 4.122.2 REST/WebSocket server; React 19 + TypeScript 7 + Vite 8 UI;
@@ -101,7 +101,7 @@ Not verified: a live paid Claude Code session firing the installed hooks (fixtur
 documented stdin JSON), Codex/Gemini/OpenCode lifecycle hooks, approvals, 2D office, multi-process
 server deployment, TLS/remote access (unsupported by design).
 
-## v1.9 P1: Agent Office, approvals and host adapters (2026-10-19)
+## 0.3.0: Agent Office, approvals and host adapters (2026-10-19)
 
 Built: pixel-art Agent Office (original 12x16 sprites; Claude Design canvas "OmniMemo Pixel
 Office"), Tasks Kanban with priority and owner, Agents, Approvals (browser-session-only
@@ -160,3 +160,11 @@ Bugs found by real use and fixed: a signed shift in the sprite palette crashed t
 agent names; Vite inlined small fonts as data: URIs that the CSP blocks; duplicate tasks from a
 concurrent probe before indexes existed. Full suite after the backend changes: 44 XCTest and all
 nine smoke tests passed on a fresh package.
+
+## 0.3.0 release numbering (2026-10-19)
+
+Requirement-document labels (v1.x) were removed from the active rules, README, installation
+guide, skills, example configs and tests; features are named instead and OmniMemo is versioned by
+its releases. `omnimem --version`, the MCP server version, the default package path
+(`dist/0.3.0`) and the frontend package are 0.3.0. Re-run after the change: 44 XCTest passed and
+all nine smoke tests passed against `dist/0.3.0/omnimem`.

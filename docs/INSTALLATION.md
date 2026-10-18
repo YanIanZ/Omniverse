@@ -115,15 +115,17 @@ reviewing which hosts use them. Native Xcode skill links and canonical shared sk
 separate review/removal. Remove the installer-owned executable only after uninstalling entries
 that refer to it. Never remove a live MongoDB dbPath as part of uninstall.
 
-## Supplied v1.4 documents
+## Supplied requirement documents
 
-The original full PRD and standalone Omni Agent technical PRD are included unchanged, with
-archive/member hashes in `rules-v1.4-provenance.json`. Their Rust/SQLite examples are historical;
-the user's Swift + MongoDB amendment applies. The active repository rules include v1.3/v1.4
-safety policies. `omni-agent.example.toml` is a proposed configuration, not a working delegation
-engine. This installer does not implement Omni Agent scheduling, task leases or provider launches.
+The supplied requirement documents in `docs/` are kept unchanged as references, with
+archive/member hashes in `rules-v1.4-provenance.json` (the name is the supplier's document
+number, not an OmniMemo release). Their Rust examples are historical: OmniMemo is Swift, with
+MongoDB or the explicit SQLite profile. The active repository rules include their safety
+policies. `omni-agent.example.toml` is a proposed configuration, not a working delegation engine.
+OmniMemo 0.3.0 coordinates agents through tasks, revisions and approvals; it does not launch
+provider sessions.
 
-## Claude Code hooks and Mission Control (v1.9)
+## Agent hooks and Mission Control
 
 `--with-hooks` (only with `--global`) merges hook entries for detected hosts, each running
 `<binary> --data-dir <data> hook <host>`: Claude Code `~/.claude/settings.json` (or

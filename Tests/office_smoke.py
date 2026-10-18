@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""v1.9 vertical slice against the packaged release: Claude hook -> MongoDB -> Vapor
+"""Mission Control vertical slice against the packaged release: Claude hook -> MongoDB -> Vapor
 WebSocket -> React bundle, plus office reuse, WebSocket guards and Redis on/off.
 Uses its own temporary Redis server; never touches a user-managed Redis or MongoDB."""
 import base64, json, os, pathlib, shutil, socket, subprocess, sys, tempfile, time, urllib.request

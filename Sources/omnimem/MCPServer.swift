@@ -42,7 +42,7 @@ enum MCPService {
       agent == "cli" ? (await presence.agent ?? agent) : agent
     }
     let server = Server(
-      name: "OmniMemo", version: "0.2.0", capabilities: .init(tools: .init(listChanged: false)))
+      name: "OmniMemo", version: "0.3.0", capabilities: .init(tools: .init(listChanged: false)))
     await server.withMethodHandler(ListTools.self) { _ in .init(tools: tools) }
     await server.withMethodHandler(CallTool.self) { params in
       await presence.used()

@@ -40,7 +40,7 @@ Applicable to Codex, Claude Code, Gemini CLI, OpenCode, and any future coding ag
 See `docs/OmniMemo_PRD_v1.9_Swift_Vapor_React.md` sections 24–55 for binding guardrails, multi-agent operations, and acceptance criteria.
 
 
-## 4. Multi-Agent Mission Control (v1.3, MUST if enabled)
+## 4. Multi-Agent Mission Control (MUST if enabled)
 
 1. Treat Mission Control as **optional**; do not start a UI server, background collector, or new agent unless the user explicitly opts in.
 2. Share evidence-backed task checkpoints through OmniMemo, not raw session transcripts or credentials.
@@ -53,7 +53,7 @@ See `docs/OmniMemo_PRD_v1.9_Swift_Vapor_React.md` sections 24–55 for binding g
 9. Build first: two agents -> one task -> claim -> checkpoint -> review -> UI status. Add animation and advanced orchestration only when requested.
 10. Status = unknown unless supported by trustworthy hooks/adapters; don't label an unobserved agent working/idle.
 
-## 5. Omni Agent Universal Delegation (v1.4, MUST if enabled)
+## 5. Omni Agent Universal Delegation (MUST if enabled)
 
 1. Omni Agent is a provider-neutral task delegation layer, not an independent AI model. Native subagents and cross-provider worker processes have different lifecycles; never claim unsupported control of IDE sessions.
 2. Default to one agent. Delegate only explicitly requested or genuinely independent, measurable subtasks; no speculative spawn, recursive Omni Agent workers, or redundant reviewers for trivial changes.
@@ -66,7 +66,7 @@ See `docs/OmniMemo_PRD_v1.9_Swift_Vapor_React.md` sections 24–55 for binding g
 9. Never launch hidden background workers, daemons, provider installers or always-on monitoring. Launch requires explicit user authorization, even after task assignment.
 10. Keep OmniMemo usable without Omni Agent, Mission Control, provider installation, remote APIs, or external cloud services.
 
-## 6. Omni REA Bridge (v1.5; MUST IF ENABLED)
+## 6. Omni REA Bridge (MUST if enabled)
 
 1. Use REA **only when needed**, for targets the user owns or is specifically authorized to examine. Never equate possession/public access with unrestricted authorization.
 2. Run the upstream REA MCP/CLI as a **separate optional process**. Do not reimplement disassemblers, auto-install providers, or add REA to the Swift core.
@@ -82,7 +82,7 @@ See `docs/OmniMemo_PRD_v1.9_Swift_Vapor_React.md` sections 24–55 for binding g
 12. Never claim actual active REA sessions, provider readiness, reconstructed original source, successful tests or token savings without direct evidence. If REA is absent, keep ordinary OmniMemo running and report optional integration unavailable.
 
 
-## 7. Omni Reach Bridge (v1.6; MUST IF ENABLED)
+## 7. Omni Reach Bridge (MUST if enabled)
 
 1. Omni Reach is a **read-only optional external research capability**; it must be OFF by default, independent of the Swift/MongoDB core, and started only when external information is necessary.
 2. Reuse authorized dedicated tools/connectors where available. Agent Reach provides capability discovery and health checks; its built-in MCP tool at the inspected version offers `get_status` only. Web/read calls require separately tested source adapters or upstream tools.
@@ -98,7 +98,7 @@ See `docs/OmniMemo_PRD_v1.9_Swift_Vapor_React.md` sections 24–55 for binding g
 12. Offline/unavailable Reach must not break OmniMemo, REA, Mission Control or Omni Agent. Report what was actually tested and observed; never fabricate web access, token savings, uptime or success.
 
 
-## 8. OmniBias Guard (v1.7, MUST)
+## 8. OmniBias Guard (MUST)
 
 1. Never imply an agent can be perfectly unbiased; prioritize evidence-based, accurate, fair, and appropriately uncertain outputs. Do not invent bias-free percentages or unmeasured confidence.
 2. Preserve the distinction between `verified fact`, `supported inference`, `hypothesis`, `user preference`, `unknown`, `stale`, and `disputed`. A prior agent summary is **not** independent primary evidence.
@@ -115,7 +115,7 @@ See `docs/OmniMemo_PRD_v1.9_Swift_Vapor_React.md` sections 24–55 for binding g
 
 See `docs/OmniMemo_PRD_v1.9_Swift_Vapor_React.md` §§83–99. Optional on-demand `skills/omnimem-bias-guard/SKILL.md` describes the evidence workflow without forcing second-model inference.
 
-## 9. Hybrid MongoDB + Redis Storage (v1.8; MUST IF ENABLED)
+## 9. Storage Profiles: MongoDB, Redis and SQLite (MUST)
 
 1. Explicit storage choice: `hybrid` = MongoDB durable source of truth + Redis cache/events; `mongodb` = MongoDB with local cache; `sqlite` = standalone lightweight. Never write secretly to a fallback store.
 2. MongoDB owns memories, evidence, graph, tasks, leases, checkpoints and approvals. Redis entries are derived/ephemeral; never treat a Redis key as verified task approval or persistent memory.
@@ -128,10 +128,10 @@ See `docs/OmniMemo_PRD_v1.9_Swift_Vapor_React.md` §§83–99. Optional on-deman
 9. Preserve the SQLite-only capability for lightweight use but avoid overengineering a third replicated store, Redis-only task queue, auto-scaling clusters, vector infrastructure or daemon without evidence.
 10. `YanIanZ` Git identity, separately verified authenticated push identity and human approval for **each push** remain non-negotiable; no DB approval record alone authorizes push.
 
-See `docs/OmniMemo_PRD_v1.8_MongoDB_Redis.md` §§100–111 and `docs/OmniMemo_Hybrid_Storage_Technical_Spec_v1.8.md`. No database has been configured by this documentation pack.
+See `docs/OmniMemo_PRD_v1.8_MongoDB_Redis.md` §§100–111 and `docs/OmniMemo_Hybrid_Storage_Technical_Spec_v1.8.md`. Implemented in OmniMemo 0.3.0: `om init --backend mongodb|sqlite`, `om redis enable`, opt-in `om autosave`.
 
 
-## 10. Swift + Vapor + React and Auto-Activation (v1.9; CANONICAL)
+## 10. Swift + Vapor + React and Auto-Activation (CANONICAL)
 
 1. This section takes priority over any earlier Rust language / backend framework suggestions. Backend/core/CLI/MCP MUST be Swift 6; **Vapor 4 stays the HTTP/REST/WebSocket backend**, and **React + TypeScript + Vite is the frontend**. No React-only HTTP server and no separate production Node server.
 2. `om` is the intended native executable; MCP/agent hooks may call `om wake`, `om context --first-prompt`, and `om checkpoint`. Do not run heavy indexing on every prompt.
@@ -142,6 +142,6 @@ See `docs/OmniMemo_PRD_v1.8_MongoDB_Redis.md` §§100–111 and `docs/OmniMemo_H
 7. MongoDB remains durable truth; Redis remains cache/signaling; use tested, maintained Swift clients matching actual server version. Driver compatibility is a gate, not an assumption.
 8. Preserve every anti-overengineering rule, explicit startup consent, evidence/bias guard, authorized optional Reach/REA, restricted secrets, and GitHub `YanIanZ` identity with **fresh approval for every push**.
 9. **First delivery** is Swift save/recall -> one provider's automatic first prompt -> one Vapor WebSocket event -> one React live status card. Do not build full 2D office before this test passes.
-10. The v1.9 PRD `docs/OmniMemo_PRD_v1.9_Swift_Vapor_React.md` is the current authority. History cannot override it.
+10. The current requirements document `docs/OmniMemo_PRD_v1.9_Swift_Vapor_React.md` is the authority; older requirement documents cannot override it. OmniMemo itself is versioned by its releases (currently 0.3.0), not by requirement documents.
 
-User override (2026-10-18): Swift + MongoDB supersede Rust + SQLite/FTS5 throughout the supplied v1.4–v1.9 proposals and specs (v1.9 itself is Swift-first; any remaining Rust/SQLite wording in older docs is superseded). Mission Control, Omni Agent, REA Bridge, Omni Reach and OmniBias Guard remain proposed, optional features. Global host installation is explicitly authorized; preserve unrelated settings and project isolation.
+User override (2026-10-18): Swift + MongoDB supersede Rust + SQLite/FTS5 throughout the supplied requirement documents and specs (the current one is Swift-first; remaining Rust wording in older documents is superseded; SQLite is an explicit storage profile). Mission Control, agent hooks and task/approval coordination are implemented in OmniMemo 0.3.0; Omni Agent provider launches, REA Bridge evidence flows, Omni Reach and OmniBias Guard remain proposed, optional features. Global host installation is explicitly authorized; preserve unrelated settings and project isolation.

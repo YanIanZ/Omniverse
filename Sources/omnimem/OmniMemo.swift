@@ -20,7 +20,7 @@ func output<T: Encodable>(_ value: T) throws {
 struct OmniMemo: AsyncParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "omnimem", abstract: "Local Swift + MongoDB memory and handoff for coding agents.",
-    version: "0.2.0",
+    version: "0.3.0",
     subcommands: [
       Init.self, Status.self, Doctor.self, Project.self, Memory.self, Context.self, Checkpoint.self,
       Cache.self, MCP.self, Rea.self, Install.self, Uninstall.self, Wake.self, Recall.self,

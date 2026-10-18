@@ -1,6 +1,6 @@
-# OmniMemo 0.2.0
+# OmniMemo 0.3.0
 
-Local memory and handoff for coding agents, built with **Swift + MongoDB**, with an optional **Vapor 4** HTTP/WebSocket server and **React + TypeScript + Vite** Mission Control (PRD v1.9 vertical slice). Redis is optional and never stores durable data.
+Local memory and handoff for coding agents, built with **Swift + MongoDB**, with an optional **Vapor 4** HTTP/WebSocket server and **React + TypeScript + Vite** Mission Control. Redis is optional and never stores durable data.
 
 One executable provides a CLI and MCP stdio server. MongoDB stores records; local directories hold storage pointers and disposable caches. Agents working on the same project share its database. OmniMemo does not read private agent histories or require an LLM/API key.
 
@@ -21,7 +21,7 @@ om autosave status
 
 Auto-save records only verifiable state: a checkpoint when a session ends (hook `SessionEnd`, Codex `Stop`, MCP disconnect) with branch, commit, changed files from `git status` and the tasks the agent owns; a memory for task review/done/blocked and approval requests/decisions; and a short summary of each prompt. Prompt summaries are skipped when the secret filter matches, are never the full text, and are excluded from context capsules so they add no prompt tokens. Repeated checkpoints with unchanged state are merged.
 
-## Mission Control and `om` (v1.9 vertical slice)
+## Mission Control and `om`
 
 `om` is a short alias of `omnimem`. Bare `om` prints status and never starts a server.
 
@@ -57,12 +57,12 @@ om --agent claude context --first-prompt --session <id>
 
 ## REA integration
 
-Version 0.2.0 includes the complete public investigation skill and references from [YanIanZ/rea](https://github.com/YanIanZ/rea), plus a pinned runtime exposing **184 MCP tools, 135 CLI commands, and 6 prompts**. The memory core uses Swift + MongoDB; REA runs through a separate Node runtime using `omnimem rea run` and `omnimem rea mcp`. Installing with `--with-rea` registers both servers and the complete skill. The default profile enables memory only.
+Version 0.3.0 includes the complete public investigation skill and references from [YanIanZ/rea](https://github.com/YanIanZ/rea), plus a pinned runtime exposing **184 MCP tools, 135 CLI commands, and 6 prompts**. The memory core uses Swift + MongoDB; REA runs through a separate Node runtime using `omnimem rea run` and `omnimem rea mcp`. Installing with `--with-rea` registers both servers and the complete skill. The default profile enables memory only.
 
 ```sh
 python3 scripts/prepare-rea.py
 ./scripts/package.sh
-/Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem rea status
+/Volumes/Ext/DevCache/OmniMemo/dist/0.3.0/omnimem rea status
 ```
 
 See [REA setup, capabilities, evidence-to-memory workflows, and engine prerequisites](docs/REA.md). Native/runtime tools depend on upstream OS and engine support; every provider has not been tested.
@@ -169,7 +169,7 @@ cd /Volumes/Ext/MinionsProject/OmniMemo
 ./scripts/package.sh
 ```
 
-Default artifact: `/Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem`. Keep the executable and its skill resource bundles in the same directory. Package caches, checkouts, module caches, and build output use `/Volumes/Ext/DevCache/OmniMemo/swift`; set `OMNIMEM_BUILD_CACHE` for another location. No Xcode project or application server is required.
+Default artifact: `/Volumes/Ext/DevCache/OmniMemo/dist/0.3.0/omnimem`. Keep the executable and its skill resource bundles in the same directory. Package caches, checkouts, module caches, and build output use `/Volumes/Ext/DevCache/OmniMemo/swift`; set `OMNIMEM_BUILD_CACHE` for another location. No Xcode project or application server is required.
 
 ## Getting started
 
@@ -178,7 +178,7 @@ If you do not already have a suitable MongoDB server, start the dedicated OmniMe
 ```sh
 ./scripts/mongodb.sh start  # loopback 127.0.0.1:27018; dbPath on Ext
 
-BIN=/Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem
+BIN=/Volumes/Ext/DevCache/OmniMemo/dist/0.3.0/omnimem
 DATA=/Volumes/Ext/DevCache/OmniMemo/data
 PROJECT=/Volumes/Ext/MinionsProject/OmniMemo
 
@@ -233,14 +233,14 @@ OMNIMEM_TEST_MONGO_URI=mongodb://127.0.0.1:27019/omnimemo_tests \
 OMNIMEM_TEST_ROOT=/Volumes/Ext/DevCache/OmniMemo/test-workspaces \
   ./scripts/swift.sh test
 
-python3 Tests/mcp_smoke.py /Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem
-python3.12 Tests/cli_smoke.py /Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem
-python3 Tests/rea_smoke.py /Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem
-python3 Tests/office_smoke.py /Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem  # needs redis-server on PATH
+python3 Tests/mcp_smoke.py /Volumes/Ext/DevCache/OmniMemo/dist/0.3.0/omnimem
+python3.12 Tests/cli_smoke.py /Volumes/Ext/DevCache/OmniMemo/dist/0.3.0/omnimem
+python3 Tests/rea_smoke.py /Volumes/Ext/DevCache/OmniMemo/dist/0.3.0/omnimem
+python3 Tests/office_smoke.py /Volumes/Ext/DevCache/OmniMemo/dist/0.3.0/omnimem  # needs redis-server on PATH
 ./scripts/test-mongo.sh stop
 ```
 
-Version 0.2.0 validation: **35 XCTest cases passed, zero failures, zero skips**, plus eight independent smoke tests (including `Tests/office_smoke.py` for the v1.9 slice) against the packaged release. See [validation scope and results](docs/VALIDATION.md). Python 3.11+ is required for the CLI smoke test's TOML parser; the memory core does not require Python. Individual REA tools retain their upstream dependencies.
+Version 0.3.0 validation: **44 XCTest cases passed, zero failures, zero skips**, plus nine independent smoke tests (including `Tests/office_smoke.py` and `Tests/agents_smoke.py`) against the packaged release. See [validation scope and results](docs/VALIDATION.md). Python 3.11+ is required for the CLI smoke test's TOML parser; the memory core does not require Python. Individual REA tools retain their upstream dependencies.
 
 Real MongoDB tests cover multiple writer connections, persistence, isolation, deduplication, secret rejection, evidence staleness, cache invalidation, and missing metadata. An independent Python client tests MCP wire behavior and handoff between two subprocesses labeled as Codex/Claude fixtures. These are not live paid conversations with either product. Without `OMNIMEM_TEST_MONGO_URI`, database tests are reported as skipped.
 
@@ -250,7 +250,7 @@ Real MongoDB tests cover multiple writer connections, persistence, isolation, de
 
 Not implemented: transactional MongoDB migration/relocation, physical drive-disconnection recovery, automatic conflict resolution/revision ledgers, graphs, automatic capture hooks, HTTP, complete adapters for all four hosts, embeddings, cloud sync, or ROI benchmarks. Do not move a WiredTiger dbPath while its server is running. Use appropriate MongoDB backup/restore procedures; the cache directory is not a database backup.
 
-The v1.4–v1.9 rules packs are included: v1.4 PRDs, cumulative v1.7–v1.9 PRDs, and technical specs for REA Bridge (v1.5), Omni Reach (v1.6), OmniBias Guard (v1.7), hybrid MongoDB+Redis storage (v1.8) and Swift/Vapor/React (v1.9), with example configs and on-demand skills in `skills/`. The v1.9 P0 slice above is implemented; Omni Agent delegation, REA Bridge, Omni Reach, OmniBias Guard and the P1/P2 Mission Control views remain proposed. Your Swift + MongoDB amendments remain authoritative.
+The supplied requirement documents are kept in `docs/` as references (their file names carry the supplier's document numbers, not OmniMemo releases), together with technical specs for the REA Bridge, Omni Reach, OmniBias Guard, hybrid MongoDB+Redis storage and Swift/Vapor/React, with example configs and on-demand skills in `skills/`. Mission Control, hooks, approvals and the storage profiles above are implemented in 0.3.0; Omni Agent delegation, REA Bridge, Omni Reach, OmniBias Guard and the P1/P2 Mission Control views remain proposed. Your Swift + MongoDB amendments remain authoritative.
 
 Project rules are in `AGENTS.md`. The original supplied PRD is retained in `docs/OmniMemo_PRD_v1.2_Guardrails.md`, with user amendments recorded in `SPEC.md`. Historical source documents retain their original language. Git uses the owner's configured identity; remote changes and pushes require explicit approval.
 
