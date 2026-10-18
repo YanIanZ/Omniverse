@@ -22,6 +22,36 @@ Preparation is rerun against the pinned fork and locked dependencies with no age
 
 See `SPEC.md` §V for invariants and §B for failures considered during implementation.
 
+## Automatic and global installation (2026-10-18)
+
+The new source-installer fixture builds and packages the real executable, verifies paths with
+spaces, refuses an unrelated launcher, and repeats project setup without losing a saved
+memory or changing the managed MCP configuration. Dry-run creates no installation or data.
+The standard pinned skills CLI discovers all three skills and installs them for eight
+selected hosts in an isolated home, retaining all six REA references.
+
+Global configuration fixtures validate TOML and eight JSON host layouts, preserve unrelated
+settings, reject edited managed entries before uninstall, check private backup permissions,
+and verify idempotent apply and preserving uninstall. A real independent MCP client launches
+the global command in two Git projects sharing one store: cross-project retrieval is denied,
+same-project retrieval survives restart, missing storage stays missing, and a non-project cwd
+fails without a fallback project.
+
+A real user-level installation registered eleven detected/configured profiles on this machine,
+including separate native Xcode Codex/Claude profiles. Existing settings were compared with
+private backups. JetBrains AI Assistant's Global path was verified through its supported
+settings UI, then registered in `~/.ai/mcp/mcp.json`. Codex's supported `mcp get` recognizes its entry. This verifies registration,
+not live agent-chat acceptance in every IDE. Older JetBrains versions can require a Global import; a portable JSON file is prepared. Editor-only installations
+such as Sublime Text require an MCP-capable agent/plugin. Default global MCP exposure remains
+four memory tools; the complete pinned REA runtime is available through the installed CLI.
+
+The unchanged Swift core was retested: 25 XCTest cases, zero failures, zero skips. The three
+original release smoke fixtures and four new installation/distribution/global fixtures pass.
+The CLI config-path fixture must receive the real `lib/omnimemo/omnimem` executable: a shell
+launcher hands execution to that binary, which correctly registers its own stable path.
+ShellCheck and documented shell syntax checks pass. No runtime provider, dashboard, startup
+service, Git hook, Git identity, or new push was enabled by these installation tests.
+
 ## Explicit limits
 
 Public-source preparation on 2026-10-18 reran all 25 XCTest cases with real
@@ -38,3 +68,15 @@ No live paid Codex/Claude conversation is used. Client names in the wire test ar
 The storage-unavailable test removes the local metadata anchor, not a physical mounted disk. Concurrent-write tests use several driver connections and CLI subprocesses; the server uses single-document atomicity and unique indexes, not multi-document transactions requiring a replica set.
 
 `active` means source hash matched; `agent`, test descriptions and semantic assertions remain claims. Project-scoped MCP filtering does not replace MongoDB authentication or OS-level permissions.
+
+## Bug-fix pass (2026-10-18)
+
+Fixed: `init` now honors `OMNIMEM_MONGO_URI` before `--mongo-uri`, matching later reads
+(previously setup could write metadata for one database while reads used another);
+install/REA paths resolve a bare `omnimem` invoked via `PATH` to an absolute executable;
+source denylist checks only path components inside the project; `delete`/`export` return
+sanitized errors. Results: 27 XCTest passed, 0 failed, 0 skipped (real MongoDB, pinned REA);
+`mcp_smoke`, `cli_smoke`, `rea_smoke`, `global_mcp_smoke`, `install_smoke`,
+`global_install_smoke`, `skills_smoke` all PASS against a release packaged under
+`/Volumes/Ext`. Packaging under `/private/tmp` makes `cli_smoke` fail only because
+Foundation's `resolvingSymlinksInPath()` rewrites `/private/tmp` to `/tmp`.

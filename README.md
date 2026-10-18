@@ -34,6 +34,55 @@ Tested on macOS Apple Silicon with Swift 6.4 and MongoDB 7.0.31. The package dec
 
 A running local MongoDB server is required. Swift + MongoDB supersede the original PRD's Rust/SQLite and no-database-service requirements. MongoKitten is used because MongoDB's official Swift driver was archived. The pinned MCP SDK 0.12.1 supports 2025-era handshakes; 2026 protocol compatibility is not claimed.
 
+## Automatic installation
+
+With Swift 6+, Git, and MongoDB already installed on macOS:
+
+```sh
+git clone https://github.com/YanIanZ/OmniMemo.git
+cd OmniMemo
+./install.sh --dry-run
+./install.sh
+```
+
+The installer builds a release, keeps resource bundles beside the executable, and installs
+`~/.local/bin/omnimem`. It uses Ext for caches when available, otherwise the macOS user
+cache. It does not edit your shell profile; add `~/.local/bin` to `PATH` if needed.
+
+For automatic memory setup and global registration in detected agent/IDE profiles:
+
+```sh
+./install.sh --global --setup --start-mongo --project "$PWD"
+# Optional project-only profile with the complete separate REA MCP server:
+./install.sh --with-rea --setup --project "$PWD"
+```
+
+`--global --setup` also sets the CLI default storage pointer, preserving a backup.
+Global installation requires Python 3.11+ and Node/npm for the standard skills installer.
+Use `--prefix`, `--cache-dir`, and `--data-dir` for custom locations. An existing MongoDB
+server can be selected with `--mongo-uri` instead of `--start-mongo`. Dependencies must
+be installed separately; the script does not install Xcode, providers, or login services.
+See [installation, supported global profiles, backups, and uninstall](docs/INSTALLATION.md).
+
+## Install skills with npx
+
+The repository works directly with the standard [Agent Skills CLI](https://github.com/vercel-labs/skills):
+
+```sh
+npx skills add YanIanZ/OmniMemo --list
+npx skills add YanIanZ/OmniMemo
+# Global, noninteractive installation for selected hosts:
+npx skills add YanIanZ/OmniMemo --global --agent codex claude-code opencode gemini-cli --skill '*' --yes
+# From a local checkout; the wrapper pins skills CLI 1.5.12:
+./scripts/install-skills.sh --global --agent codex claude-code --skill '*' --yes
+```
+
+Available skills: `omnimem-recall`, `omnimem-handoff`, and `reverse-engineer-anything`
+(with all six references). Installing skill instructions does not install Swift, MongoDB,
+MCP servers, the REA runtime, or external engines. Use the automatic installer for those
+OmniMemo components. Universal hosts share `~/.agents/skills`; host-specific links are
+created where required by the skills CLI.
+
 ## Build
 
 For a fresh macOS clone with Swift and `mongod` available:
@@ -139,7 +188,7 @@ python3 Tests/rea_smoke.py /Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem
 ./scripts/test-mongo.sh stop
 ```
 
-Version 0.2.0 validation: **25 XCTest cases passed, zero failures, zero skips**, plus three independent smoke tests against the packaged release. See [validation scope and results](docs/VALIDATION.md). Python 3.11+ is required for the CLI smoke test's TOML parser; the memory core does not require Python. Individual REA tools retain their upstream dependencies.
+Version 0.2.0 validation: **27 XCTest cases passed, zero failures, zero skips**, plus seven independent smoke tests against the packaged release. See [validation scope and results](docs/VALIDATION.md). Python 3.11+ is required for the CLI smoke test's TOML parser; the memory core does not require Python. Individual REA tools retain their upstream dependencies.
 
 Real MongoDB tests cover multiple writer connections, persistence, isolation, deduplication, secret rejection, evidence staleness, cache invalidation, and missing metadata. An independent Python client tests MCP wire behavior and handoff between two subprocesses labeled as Codex/Claude fixtures. These are not live paid conversations with either product. Without `OMNIMEM_TEST_MONGO_URI`, database tests are reported as skipped.
 
@@ -148,6 +197,8 @@ Real MongoDB tests cover multiple writer connections, persistence, isolation, de
 `active` means a source file still matches its hash; it does not prove a semantic interpretation or a test claim. Memory is untrusted data. Agent provenance is a label, not authentication. Project filtering enforces the MCP contract; local processes with direct MongoDB/filesystem access remain subject to database and OS permissions. The instance script binds only to loopback; configure MongoDB authentication and OS permissions for your environment. Secret detection is heuristic and cannot guarantee recognition of every secret format.
 
 Not implemented: transactional MongoDB migration/relocation, physical drive-disconnection recovery, automatic conflict resolution/revision ledgers, graphs, automatic capture hooks, HTTP, complete adapters for all four hosts, embeddings, cloud sync, or ROI benchmarks. Do not move a WiredTiger dbPath while its server is running. Use appropriate MongoDB backup/restore procedures; the cache directory is not a database backup.
+
+The v1.4–v1.7 rules packs are included: both v1.4 PRDs, the cumulative v1.7 PRD, and technical specs for REA Bridge (v1.5), Omni Reach (v1.6) and OmniBias Guard (v1.7), with example configs and on-demand skills in `skills/`. Omni Agent delegation, Mission Control, REA Bridge, Omni Reach and OmniBias Guard remain proposed features. Your Swift + MongoDB amendments remain authoritative.
 
 Project rules are in `AGENTS.md`. The original supplied PRD is retained in `docs/OmniMemo_PRD_v1.2_Guardrails.md`, with user amendments recorded in `SPEC.md`. Historical source documents retain their original language. Git uses the owner's configured identity; remote changes and pushes require explicit approval.
 

@@ -1,0 +1,21 @@
+{
+  "archive": "OmniMemo_Omni_Agent_Rules_Pack_v1.4.zip",
+  "sha256": "23d1fc7b41eeb462415b0d5d3aef346e32c1c711b4302c49506b6cf54d038135",
+  "members": {
+    "OmniMemo_Rules_v1.4/.githooks/pre-commit": "ea367035fe70b51211ea59c1907f6848d5c640f8beff99ce1594889d6bc21ea8",
+    "OmniMemo_Rules_v1.4/.githooks/pre-push": "37d19a17573bd61003408042e5211d036214c015d30678ea684a51ee37ebaa0d",
+    "OmniMemo_Rules_v1.4/AGENTS.md": "8d64716c9c273c1dc8c898036f62b895150cf8b975dc9be125ffa3aeaad9dc16",
+    "OmniMemo_Rules_v1.4/CLAUDE.md": "fdf2cf138adcedb4fa22c1594855b57bec16be788fcd1faf09da3d709fa7ff00",
+    "OmniMemo_Rules_v1.4/GEMINI.md": "e6c598992aec9def7df895440ebe3c387a0dac7d4b6067c744f0ace688337551",
+    "OmniMemo_Rules_v1.4/README.md": "7346532c7770ed7e19114322c5e22280734007efacecc267791df06391b559a3",
+    "OmniMemo_Rules_v1.4/docs/Mission_Control_Agent_Compatibility.md": "981bb2038e5ecdbb7f5771e8b3d5592501d2187d91e68e380c3806ca6e46573f",
+    "OmniMemo_Rules_v1.4/docs/OmniAgent_Technical_PRD_v1.4.md": "fb377b86f35ef0b6c3f7f5265499d463805fbe1c51f1bf74d6b59ce9975f551e",
+    "OmniMemo_Rules_v1.4/docs/OmniMemo_PRD_v1.4_Omni_Agent.md": "2b23eab3076fd9fcf88c41a5fa5018543ac4394616c8313732deb6e0738de913",
+    "OmniMemo_Rules_v1.4/omni-agent.example.toml": "cac04807a6a68f62317d2fd81300daa394c4928d861755b70953440554cf964f"
+  },
+  "standalone_prds_match_archive": true,
+  "amendments": [
+    "Swift + MongoDB retained",
+    "Global host installation explicitly authorized"
+  ]
+}

@@ -1,0 +1,20 @@
+# Omni Agent sample configuration — proposed values, NOT an existing executable
+[omni_agent]
+execution_mode = "manual"
+strategy = "balanced"
+max_concurrent = 2
+max_depth = 1
+persist_transcripts = false
+
+[omni_agent.context]
+capsule_default_tokens = 450
+capsule_max_tokens = 1200
+
+[omni_agent.security]
+allow_cross_project = false
+allow_unattended_write = false
+allow_auto_commit = false
+allow_auto_merge = false
+allow_auto_push = false
+require_explicit_launch_approval = true
+allowed_github_owner = "YanIanZ"

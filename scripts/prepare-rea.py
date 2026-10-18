@@ -44,6 +44,7 @@ if __name__=='__main__':
         dest=root/'Sources/OmniMemoCore/Skills/reverse-engineer-anything'
         if dest.exists():shutil.rmtree(dest)
         shutil.copytree(source/'skills/reverse-engineer-anything',dest)
+        shutil.copy2(source/'LICENSE',dest/'LICENSE')
         resources=root/'Sources/OmniMemoCore/REA';resources.mkdir(exist_ok=True)
         for name in ['LICENSE','THIRD_PARTY_NOTICES.md']:shutil.copy2(source/name,resources/name)
         (resources/'provenance.json').write_text(json.dumps(bundle,indent=2)+'\n')

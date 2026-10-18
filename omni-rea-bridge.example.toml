@@ -1,0 +1,16 @@
+# PROPOSED OmniMemo-owned configuration (not upstream REA config)
+# Leave disabled until the user authorizes the integration and installed REA version is verified.
+[rea_bridge]
+enabled = false
+mode = "static"
+max_concurrent_investigations = 1
+context_max_tokens = 600
+max_findings = 8
+# path roots must be absolute and explicitly approved per project
+allowed_roots = []
+require_approval_for_runtime = true
+require_explicit_target_authorization = true
+archive_enabled = false
+archive_quota_mib = 512
+archive_cleanup = "manual"
+# Omnimemo-managed evidence uses OMNIMEMO_HOME; REA's own caches are NOT automatically managed.

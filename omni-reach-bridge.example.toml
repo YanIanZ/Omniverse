@@ -1,0 +1,25 @@
+# OmniMemo v1.6 proposed configuration, not Agent Reach's own config file.
+[reach]
+enabled = false
+mode = "read_only"
+prefer_existing_connectors = true
+max_sources = 4
+max_queries = 3
+max_tokens = 600
+max_concurrent_fetches = 2
+max_reach_cache_mib = 8  # part of global 32 MiB budget
+allow_authenticated_sources = false
+store_raw_content = false
+
+[reach.channels]
+web = true
+github = true
+youtube = false
+rss = false
+social = false
+
+[reach.security]
+allow_private_network_targets = false
+require_approval_for_install = true
+require_approval_for_new_channel = true
+persist_credentials = false

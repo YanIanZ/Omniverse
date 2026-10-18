@@ -7,11 +7,13 @@ Persist scoped evidence-backed memories; save → retrieve → cross-agent check
 User corrections: Swift + MongoDB replace Rust + SQLite/FTS5. Earlier offline/no-service constraints superseded for local MongoDB.
 PRD v1.2 §24.3 supersedes earlier MVP breadth: 4 MCP tools; 2 adapters (Codex/Claude); 2 skills.
 One Swift binary; MongoDB text indexes; official Swift MCP SDK; no HTTP server, embeddings, auto-capture or cloud. Local MongoDB required by user override.
-External build/package cache. No global config changes or Git identity mutations. User requested local Git version control; commits use existing owner-configured identity. No push.
+External build/package cache. Global config changes only on explicit user request; no Git identity mutations. User requested local Git version control; commits use existing owner-configured identity. Per-push approval required.
 Source pack rules remain repository-scoped. Missing storage never silently recreated. Cache independent of persistent records.
 Relocation/graph/conflict resolution advanced engine deferred to MVP-2/3; evidence/stale flags + isolation required now.
 
 User extension: include full REA skill/runtime from YanIanZ/rea at a pinned commit; Node is an explicit optional runtime dependency.
+
+User extension (2026-10-18): automatic source installer, standard npx skills distribution, global setup for installed/configured hosts. Integrate supplied v1.4 policies/specifications; Swift + MongoDB remain authoritative. Omni Agent/Mission Control implementation is outside this installation change.
 
 ## §I
 I.cli: init, status, doctor, project attach, memory save/search/show/list/delete/export, context, checkpoint, cache info/clear, install/uninstall.
@@ -20,6 +22,8 @@ I.storage: --data-dir > OMNIMEM_HOME > pointer JSON > OS default. Only init crea
 I.adapters: install --agents codex,claude --project PATH --config-root PATH; preview default; --apply explicit; backup + exact owned-entry uninstall.
 
 I.rea: rea status/run/mcp; install --with-rea; runtime manifest pins source/version/entrypoint/lock/catalog; no runtime downloads.
+
+I.bootstrap: install.sh --prefix/--cache-dir/--setup/--global/--start-mongo/--with-rea/--dry-run; scripts/install-skills.sh passes through standard skills CLI options; scripts/install-global.sh previews/applies/uninstalls supported user MCP entries.
 
 ## §V
 V1: Two independent processes share durable committed records; MongoDB unique indexes hold with concurrent writers.
@@ -44,6 +48,10 @@ V17: REA runtime manifest must match bundled commit/version/hashes; absent, modi
 V18: --with-rea adds a distinct managed MCP server + full skill tree; install/uninstall idempotent and preserve unrelated entries; base profile remains four memory tools.
 V19: REA launch uses argv directly, bound cwd and external private temp/cache; exit status/stdio preserved. Missing engines are reported, never silently installed.
 
+V20: Source/global installation preserves unrelated files and settings; no-write preview; private backups; repeat apply idempotent; edited owned entries refuse unsafe replacement/uninstall.
+V21: Global MCP resolves one launch Git root or explicit OMNIMEM_PROJECT; never binds every project to the installation repo, initializes missing storage, or chooses a fallback project.
+V22: Standard npx skills discovers all three skills and retains six REA references plus standalone license notices across supported global skill destinations.
+
 ## §T
 id|status|goal|cites
 T1|x|MongoDB core, identity/scope/evidence/FTS/cache + CLI|V1,V2,V3,V4,V6,V7,V8,V10,V12,V13,I.storage,I.cli
@@ -54,6 +62,8 @@ T4|x|Integration tests, release build, reproducible docs and handoff|V1,V2,V3,V4
 T5|x|Pin upstream full REA skill, provenance, runtime bootstrap and Swift launcher|V16,V17,V19,I.rea
 T6|x|REA installer profile + full resource tree/owned cleanup|V11,V14,V18,I.adapters
 T7|x|Real REA MCP/static analysis/CLI fixtures, release packaging, docs and Git commits|V16,V17,V18,V19
+
+T8|x|Source installer + npx skill flow + tested global host registration and v1.4 rules/documents|V11,V14,V17,V20,V21,V22,I.bootstrap
 
 ## §B
 id|date|cause|fix
@@ -66,3 +76,11 @@ B4|2026-10-18|JSONEncoder slash escapes are invalid TOML and hid managed-entry e
 B5|2026-10-18|Skill body dedup moved templates to resources without target resource declaration|Declare bundled Skills resource; adapter roundtrip test exercises lookup
 B6|2026-10-18|Swift format lint rejects snake_case stored properties|Use idiomatic Swift names with explicit CodingKeys; preserve JSON/BSON contract
 B7|2026-10-18|Release compile overlapped a model-field rename and saw mismatched modules|Serialize final source edits and verification; rerun release after tests
+
+B8|2026-10-18|Test assumed legacy per-host skill folders; skills 1.5.12 uses shared ~/.agents/skills for universal hosts|V22; assert canonical resources plus non-universal host links
+
+B9|2026-10-18|Release config-path fixture was invoked with a shell launcher but asserts the Swift executable path|Run that fixture against lib/omnimemo/omnimem; wrapper behavior covered by installer/global-wire fixtures, V20,V21
+
+B10|2026-10-18|npx distributes individual skill folders without repository-level license notices|V22; include each skill LICENSE and retain upstream REA notice during re-vendor
+
+B11|2026-10-18|Initial host table omitted the installed JetBrains Global path exposed by its supported settings UI|V20; register ~/.ai/mcp/mcp.json; allow only additive host-profile extension

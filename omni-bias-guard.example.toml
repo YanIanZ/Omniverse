@@ -1,0 +1,20 @@
+# Proposed configuration only, not installed.
+[bias]
+enabled = true
+mode = "fast"
+require_provenance_for_material_claims = true
+source_lineage_dedup = true
+track_contradictions = true
+allow_unverified_claims_as_facts = false
+review_default = "off"
+review_max_agents = 1
+
+[bias.budgets]
+max_review_capsule_tokens = 400
+max_added_review_tokens = 2000
+max_counter_evidence_sources = 2
+
+[bias.security]
+treat_external_content_as_untrusted = true
+store_hidden_reasoning = false
+store_sensitive_attributes = false
