@@ -1,7 +1,8 @@
 import type { Agent, Approval, LiveEvent, Task } from './api'
 
-// The office is a fixed 1056 x 640 map; rooms and slots are in map pixels.
-export const MAP = { w: 1056, h: 640 }
+// The office is a drawn floor plan on a fixed 840 x 790 sheet; rooms, doors and
+// slots are in plan units. The strip below the building holds the legend and title block.
+export const PLAN = { w: 840, h: 790 }
 
 export type RoomId =
   | 'briefing'
@@ -13,35 +14,86 @@ export type RoomId =
   | 'pantry'
   | 'server'
 
-export type Room = { id: RoomId; label: string; x: number; y: number; w: number; h: number; floor: string }
+type Corridor = 'north' | 'south'
+type Door = { corridor: Corridor; x: number }
+
+export type Room = { id: RoomId; label: string; x: number; y: number; w: number; h: number; doors: Door[] }
+
+// Two corridors run east-west between the rows of rooms; the west hall joins them.
+export const CORRIDOR: Record<Corridor, number> = { north: 206, south: 493 }
+export const HALL_X = 34
+export const BUILDING = { x: 16, y: 16, w: 808, h: 648 }
 
 export const ROOMS: Room[] = [
-  { id: 'briefing', label: 'Briefing', x: 16, y: 32, w: 248, h: 200, floor: 'carpet' },
-  { id: 'handoffs', label: 'Handoffs', x: 280, y: 32, w: 300, h: 200, floor: 'plum' },
-  { id: 'approvals', label: 'Approvals', x: 596, y: 32, w: 444, h: 200, floor: 'plum' },
-  { id: 'workspace', label: 'Workspace', x: 16, y: 268, w: 540, h: 252, floor: 'wood' },
-  { id: 'review', label: 'Review', x: 572, y: 268, w: 468, h: 252, floor: 'tech' },
-  { id: 'lounge', label: 'Lounge', x: 16, y: 548, w: 360, h: 84, floor: 'warm' },
-  { id: 'pantry', label: 'Pantry', x: 392, y: 548, w: 168, h: 84, floor: 'check' },
-  { id: 'server', label: 'Server room', x: 576, y: 548, w: 464, h: 84, floor: 'grate' },
+  { id: 'briefing', label: 'Briefing', x: 16, y: 16, w: 244, h: 174, doors: [{ corridor: 'north', x: 138 }] },
+  { id: 'handoffs', label: 'Handoffs', x: 260, y: 16, w: 240, h: 174, doors: [{ corridor: 'north', x: 380 }] },
+  { id: 'approvals', label: 'Approvals', x: 500, y: 16, w: 324, h: 174, doors: [{ corridor: 'north', x: 712 }] },
+  {
+    id: 'workspace',
+    label: 'Workspace',
+    x: 52,
+    y: 222,
+    w: 384,
+    h: 254,
+    doors: [
+      { corridor: 'north', x: 304 },
+      { corridor: 'south', x: 304 },
+    ],
+  },
+  {
+    id: 'review',
+    label: 'Review',
+    x: 436,
+    y: 222,
+    w: 388,
+    h: 254,
+    doors: [
+      { corridor: 'north', x: 690 },
+      { corridor: 'south', x: 690 },
+    ],
+  },
+  { id: 'lounge', label: 'Lounge', x: 16, y: 510, w: 504, h: 154, doors: [{ corridor: 'south', x: 412 }] },
+  { id: 'pantry', label: 'Pantry', x: 520, y: 510, w: 110, h: 154, doors: [{ corridor: 'south', x: 575 }] },
+  { id: 'server', label: 'Server room', x: 630, y: 510, w: 194, h: 154, doors: [{ corridor: 'south', x: 790 }] },
 ]
 
-// Where a 36 x 48 agent sprite stands in each room (top-left corner), in fill order.
+// Where an agent figure stands in each room (its feet), in fill order. Pantry and
+// the server room are never a state, so nobody is placed there.
 const SLOTS: Partial<Record<RoomId, [number, number][]>> = {
-  briefing: [[68, 92], [128, 92], [188, 92], [68, 150], [128, 150], [188, 150]],
-  handoffs: [[340, 92], [404, 92], [468, 92], [520, 92]],
-  approvals: [[716, 70], [776, 70], [836, 70], [896, 70], [956, 70]],
-  workspace: [[100, 296], [196, 296], [340, 296], [436, 296], [100, 416], [196, 416], [340, 416], [436, 416]],
-  review: [[640, 362], [700, 362], [760, 362], [820, 362], [880, 362]],
-  lounge: [[124, 572], [264, 572], [316, 572], [40, 572], [176, 572]],
+  briefing: [[88, 126], [188, 126]],
+  handoffs: [[330, 126], [430, 126]],
+  approvals: [[562, 126], [662, 126], [762, 126]],
+  workspace: [[124, 318], [244, 318], [364, 318], [124, 426], [244, 426], [364, 426]],
+  review: [[510, 318], [630, 318], [750, 318], [510, 426], [630, 426], [750, 426]],
+  lounge: [[76, 602], [172, 602], [268, 602], [364, 602], [460, 602]],
 }
 
-export type Tone = 'green' | 'amber' | 'blue' | 'gray'
-
-export type Plate = {
-  count: number
-  text: string
+/** Waypoints an agent walks from one room to another: through its door, along the
+ * corridors (by the west hall when the rooms share none), and in through the other door. */
+export function route(from: Room, to: Room, start: [number, number], end: [number, number]): [number, number][] {
+  if (from.id === to.id) return [start, end]
+  // Walk to the door's x inside the room, out through the threshold, then along the corridors.
+  const out = (door: Door, at: [number, number]): [number, number][] => [[door.x, at[1]], [door.x, CORRIDOR[door.corridor]]]
+  const shared = from.doors.find((d) => to.doors.some((e) => e.corridor === d.corridor))
+  if (shared) {
+    const target = to.doors.find((e) => e.corridor === shared.corridor)!
+    return [start, ...out(shared, start), ...out(target, end).reverse(), end]
+  }
+  const a = from.doors[0]
+  const b = to.doors[0]
+  return [
+    start,
+    ...out(a, start),
+    [HALL_X, CORRIDOR[a.corridor]],
+    [HALL_X, CORRIDOR[b.corridor]],
+    ...out(b, end).reverse(),
+    end,
+  ]
 }
+
+/** State colour families: amber waits on a human, flight is work in review or handoff,
+ * working is a verified active signal, neutral is a quiet waiting session, unknown is stale. */
+export type Tone = 'attention' | 'flight' | 'working' | 'neutral' | 'unknown'
 
 export type Placement = {
   key: string
@@ -49,18 +101,14 @@ export type Placement = {
   room: RoomId
   x: number
   y: number
-  bubble: string
+  /** Current signal printed under the figure, cut to the free width there; the panel and aria-label carry the full text. */
+  signal: string
   tone: Tone
   state: string
   fresh: boolean
   task?: Task
   approval?: Approval
-  /** When a room has two or more stale agents, each of those placements carries
-   * the shared room plate so the map can show one summary instead of stacked bubbles. */
-  plate?: Plate
 }
-
-const short = (text: string, n = 26) => (text.length > n ? text.slice(0, n - 1) + '…' : text)
 
 export function minutesAgo(iso: string, now = Date.now()) {
   return Math.max(0, Math.round((now - Date.parse(iso)) / 60000))
@@ -115,53 +163,54 @@ export function place(
     const seenSeconds = (now - Date.parse(agent.last_seen)) / 1000
 
     let room: RoomId
-    let bubble: string
+    let signal: string
     let tone: Tone
     let state: string
     let task: Task | undefined
     if (approval) {
       room = 'approvals'
-      bubble = 'Needs you: ' + short(approval.action, 20)
-      tone = 'blue'
-      state = 'waiting for approval'
+      signal = 'Asks: ' + approval.action
+      tone = 'attention'
+      state = 'asks you'
+      task = reviewing ?? doing
+    } else if (agent.status === 'stale') {
+      // No recent signal outranks task ownership: owning a task never proves current work.
+      room = 'lounge'
+      signal = 'No recent signal'
+      tone = 'unknown'
+      state = 'stale'
       task = reviewing ?? doing
     } else if (reviewing) {
       room = 'review'
-      bubble = short(reviewing.title)
-      tone = 'amber'
+      signal = reviewing.title
+      tone = 'flight'
       state = 'reviewing'
       task = reviewing
     } else if (doing) {
       room = 'workspace'
-      bubble = short(doing.title)
-      tone = 'green'
-      state = 'working'
+      signal = doing.title
+      tone = 'working'
+      state = 'doing'
       task = doing
-    } else if (agent.status === 'stale') {
-      room = 'lounge'
-      // Short so crowded lounges stay legible; the panel and aria-label carry the full state.
-      bubble = `? ${minutesAgo(agent.last_seen, now)}m`
-      tone = 'gray'
-      state = 'stale'
     } else if (agent.status === 'blocked') {
       room = 'approvals'
-      bubble = 'Blocked'
-      tone = 'amber'
+      signal = 'Blocked'
+      tone = 'attention'
       state = 'blocked'
     } else if (handoff) {
       room = 'handoffs'
-      bubble = 'Handoff saved'
-      tone = 'blue'
+      signal = 'Handoff saved'
+      tone = 'flight'
       state = 'handing off'
     } else if (agent.status === 'working') {
       room = 'workspace'
-      bubble = agent.tool_category ? 'Tool: ' + agent.tool_category.replace('_', ' ') : 'Prompt received'
-      tone = 'green'
-      state = 'working, no task claimed'
+      signal = agent.tool_category ? 'Tool: ' + agent.tool_category.replace('_', ' ') : 'Prompt received'
+      tone = 'working'
+      state = 'working'
     } else {
       room = 'briefing'
-      bubble = 'Waiting'
-      tone = 'gray'
+      signal = 'Waiting for work'
+      tone = 'neutral'
       state = 'waiting'
     }
 
@@ -179,30 +228,13 @@ export function place(
       room,
       x,
       y,
-      bubble,
+      signal,
       tone,
       state,
       fresh: seenSeconds < 60 && (room === 'workspace' || room === 'review'),
       task,
       approval,
     })
-  }
-
-  // Stale agents get a shared room plate instead of per-agent bubbles so the
-  // label is never covered, even when there is only one of them.
-  const staleByRoom = new Map<RoomId, Placement[]>()
-  for (const p of placed) {
-    if (p.agent.status !== 'stale') continue
-    staleByRoom.set(p.room, [...(staleByRoom.get(p.room) ?? []), p])
-  }
-  for (const [, list] of staleByRoom) {
-    if (list.length === 0) continue
-    const oldest = list.reduce((a, b) => (a.agent.last_seen < b.agent.last_seen ? a : b))
-    const text =
-      list.length === 1
-        ? `? ${minutesAgo(oldest.agent.last_seen, now)}m`
-        : `${list.length} · no signal ${minutesAgo(oldest.agent.last_seen, now)}m`
-    for (const p of list) p.plate = { count: list.length, text }
   }
 
   return { placed, overflow }

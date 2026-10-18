@@ -1,525 +1,356 @@
-/* Pixel office detail layer. Loaded before styles.css, so every rule is scoped under
-   .map to win. Scenery motion only; agents animate solely from office.ts (`fresh`). */
+/* Floor plan sheet. Every value is in plan units; the SVG scales the whole sheet. */
 
-/* Map text stays legible even when the scaled layer shrinks: inverse scale so the
-   rendered size never drops below the original 11–13 px. */
-.map {
-  --map-text: calc(11px / var(--map-scale, 1));
-}
-.map .room-label {
-  font-size: calc(13px / var(--map-scale, 1));
-}
-.map .room-more {
-  font-size: calc(12px / var(--map-scale, 1));
-}
-.map .rack-tag {
-  font-size: var(--map-text);
-}
-.map .bubble {
-  font-size: var(--map-text);
-}
-.map .nametag {
-  font-size: calc(12px / var(--map-scale, 1));
+.plan {
+  display: block;
+  width: 100%;
+  height: auto;
+  font-family: var(--sans);
+  user-select: none;
 }
 
-/* Scrollable frame wrapper and edge hints. */
-.map-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+/* Walls are drawn as a double line: a pale stroke with the floor cut through it. */
+.plan .wall-outer {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 7;
 }
-.map-wrap .map-frame {
-  position: relative;
+.plan .wall-inner {
+  fill: none;
+  stroke: var(--sheet);
+  stroke-width: 4;
 }
-.map-wrap .map-frame::before,
-.map-wrap .map-frame::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 28px;
-  pointer-events: none;
+.plan .room-floor {
+  fill: var(--floor);
+}
+.plan .door-gap {
+  fill: var(--sheet);
+}
+.plan .room .door-gap {
+  fill: var(--floor);
+}
+.plan .door-swing {
+  fill: none;
+  stroke: var(--construction);
+  stroke-width: 1;
+}
+.plan .furniture {
+  fill: none;
+  stroke: var(--construction);
+  stroke-width: 1.2;
+}
+.plan .corridor-label {
+  font: 600 10px var(--cond);
+  letter-spacing: 0.24em;
+  fill: var(--construction-text);
+  paint-order: stroke;
+  stroke: var(--sheet);
+  stroke-width: 5px;
+  stroke-linejoin: round;
+}
+
+.plan .room-name {
+  font: 600 16px var(--cond);
+  letter-spacing: 0.12em;
+  fill: var(--line);
+}
+.plan .room-name.is-asking {
+  fill: var(--attention);
+}
+.plan .room-occupancy {
+  font-size: 11.5px;
+  fill: var(--muted);
+}
+.plan .room-more {
+  font: 500 11px var(--mono);
+  fill: var(--attention);
+}
+
+/* Server rack */
+.plan .led {
+  stroke-width: 1.2;
+}
+.plan .led-ok {
+  fill: var(--ok);
+}
+.plan .led-fault {
+  fill: var(--fault);
+}
+.plan .led-unknown {
+  fill: none;
+  stroke: var(--unknown);
+  stroke-dasharray: 1.6 1.6;
+}
+.plan .rack-text {
+  font: 500 11.5px var(--mono);
+  fill: var(--ink);
+}
+.plan .rack-text.is-quiet {
+  fill: var(--muted);
+}
+
+/* Hatch for unknown */
+.plan .hatch-ground {
+  fill: var(--floor);
+}
+.plan .hatch-line {
+  stroke: var(--unknown);
+  stroke-width: 1.4;
+}
+
+/* Agents */
+.plan .agent {
+  cursor: pointer;
+  outline: none;
+}
+.plan .agent .hit {
+  fill: transparent;
+}
+.plan .agent .figure path,
+.plan .agent .figure circle {
+  stroke: var(--sheet);
+  stroke-width: 1.4;
+}
+.plan .agent .figure-unknown path {
+  stroke: inherit;
+  stroke-dasharray: 2 1.6;
+  stroke-width: 1.3;
+}
+.plan .agent .pip {
+  stroke: var(--floor);
+  stroke-width: 1.5;
+}
+.plan .tone-working .pip {
+  fill: var(--ok);
+}
+.plan .tone-attention .pip {
+  fill: var(--attention);
+}
+.plan .tone-flight .pip {
+  fill: var(--floor);
+  stroke: var(--attention);
+  stroke-width: 1.8;
+}
+.plan .tone-neutral .pip {
+  fill: var(--muted);
+}
+.plan .tone-unknown .pip {
+  fill: none;
+  stroke: var(--unknown);
+  stroke-dasharray: 1.5 1.5;
+}
+
+.plan .plate {
+  fill: var(--floor);
+  stroke: var(--line);
+  stroke-width: 1.2;
+}
+.plan .plate-name {
+  font: 600 13px var(--cond);
+  letter-spacing: 0.06em;
+  text-anchor: middle;
+  fill: var(--line);
+}
+.plan .tone-attention .plate {
+  stroke: var(--attention);
+  stroke-width: 1.6;
+}
+.plan .tone-unknown .plate {
+  stroke: var(--unknown);
+  stroke-dasharray: 3 2;
+}
+.plan .tone-unknown .plate-name {
+  fill: var(--unknown-text);
+}
+.plan .signal {
+  font-size: 11px;
+  fill: var(--muted);
+}
+.plan .tone-attention .signal {
+  fill: var(--attention);
+}
+.plan .tone-working .signal {
+  fill: var(--ink);
+}
+
+.plan .dimension path {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.plan .dimension text {
+  font: 500 10.5px var(--mono);
+  text-anchor: middle;
+  fill: var(--ink);
+}
+.plan .tone-unknown .dimension path {
+  stroke: var(--unknown);
+}
+.plan .tone-unknown .dimension text {
+  fill: var(--unknown-text);
+}
+
+.plan .select-ring,
+.plan .focus-ring {
+  fill: none;
   opacity: 0;
-  transition: opacity 0.15s steps(2);
-  z-index: 7;
 }
-.map-wrap .map-frame::before {
-  left: 0;
-  background: linear-gradient(90deg, #08090d 0, transparent 100%);
+.plan .select-ring {
+  stroke: var(--line);
+  stroke-width: 1.2;
+  stroke-dasharray: 2 3;
 }
-.map-wrap .map-frame::after {
-  right: 0;
-  background: linear-gradient(270deg, #08090d 0, transparent 100%);
+.plan .focus-ring {
+  stroke: var(--focus);
+  stroke-width: 2.5;
 }
-.map-wrap .map-frame.is-scroll-left::before,
-.map-wrap .map-frame.is-scroll-right::after {
+.plan .agent.is-selected .select-ring {
   opacity: 1;
 }
-
-.map-hint {
-  display: flex;
-  justify-content: center;
-  font-family: var(--pixel);
-  font-size: 12px;
-  color: var(--muted);
+.plan .agent.is-selected .plate {
+  fill: var(--line);
+  stroke: var(--line);
 }
-.map-hint span {
-  padding: 2px 10px;
-  border: 2px dashed var(--rule-strong);
+.plan .agent.is-selected .plate-name {
+  fill: var(--sheet);
 }
-
-/* Pad the scroll track so name tags on the bottom row are not clipped. */
-.map-size {
-  /* content-box: the inline height is the map; the padding is extra room below it. */
-  box-sizing: content-box;
-  padding-bottom: 36px;
+.plan .agent:focus-visible .focus-ring {
+  opacity: 1;
+}
+.plan .agent:hover .plate {
+  stroke-width: 2;
 }
 
-/* Compact room jump buttons under the map. */
-.map-rooms {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+/* Signature move: the walked route */
+.plan .route {
+  fill: none;
+  stroke: var(--attention);
+  stroke-width: 2;
+  stroke-dasharray: 7 5;
+  stroke-linejoin: round;
+  animation: route-fade 6s ease-out forwards;
 }
-.map-room {
-  min-height: 36px;
-  padding: 4px 10px;
-  border: 2px solid var(--rule-strong);
-  background: var(--raise);
-  color: var(--muted);
-  font-family: var(--pixel);
-  font-size: 13px;
-  cursor: pointer;
+.plan .route-callout-back {
+  fill: var(--sheet);
+  stroke: var(--attention);
+  stroke-width: 1;
+  animation: route-fade 6s ease-out forwards;
 }
-.map-room:hover {
-  border-color: #3d4560;
-  background: #1e2330;
-  color: var(--ink);
+.plan .route-callout {
+  font: 500 11.5px var(--mono);
+  fill: var(--attention);
+  paint-order: stroke;
+  stroke: var(--sheet);
+  stroke-width: 5px;
+  stroke-linejoin: round;
+  animation: route-fade 6s ease-out forwards;
 }
-.map-room-count {
-  margin-left: 6px;
-  padding: 0 5px;
-  background: var(--rule-strong);
-  color: var(--ink);
-  font-family: var(--mono);
-  font-size: 11px;
+.plan .route-head {
+  fill: var(--attention);
 }
-
-/* Corridors between rooms: dark floor tiles. */
-.map .hall {
-  position: absolute;
-  inset: 0;
-  background-color: #12151c;
-  background-image:
-    linear-gradient(#0d0f14 0 2px, transparent 2px),
-    linear-gradient(90deg, #0d0f14 0 2px, transparent 2px);
-  background-size: 32px 32px;
-}
-
-/* Stepped pixel vignette so floors read as lit from the middle. */
-.map .room::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  box-shadow:
-    inset 0 0 0 4px rgb(0 0 0 / 0.16),
-    inset 0 0 0 8px rgb(0 0 0 / 0.1),
-    inset 0 0 0 14px rgb(0 0 0 / 0.06);
-}
-
-/* Top wall face (three-quarter view) with panel seams and a baseboard. */
-.map .room .wall {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 22px;
-  background-color: #1c2130;
-  background-image: linear-gradient(90deg, #171b27 0 2px, transparent 2px);
-  background-size: 24px 100%;
-  box-shadow:
-    inset 0 -3px 0 #0e1117,
-    inset 0 -5px 0 #2b3142,
-    inset 0 2px 0 #262c3c;
-}
-.map .room-short .wall {
-  height: 10px;
-}
-
-/* Doorways cut through the 4px room walls. */
-.map .door {
-  position: absolute;
-  width: 40px;
-  height: 4px;
-  background: #12151c;
-  border-left: 4px solid #7c8494;
-  border-right: 4px solid #7c8494;
-}
-
-/* Furniture surfaces */
-.map .rug {
-  background-color: #3b2f56;
-  background-image:
-    linear-gradient(45deg, transparent 0 44%, #4a3c6a 44% 56%, transparent 56%),
-    linear-gradient(-45deg, transparent 0 44%, #4a3c6a 44% 56%, transparent 56%);
-  background-size: 16px 16px;
-  box-shadow:
-    inset 0 0 0 4px #3b2f56,
-    inset 0 0 0 6px #b08a50,
-    inset 0 0 0 10px #3b2f56;
-}
-.map .lounge-rug {
-  background-color: #4a3022;
-  background-image:
-    linear-gradient(45deg, transparent 0 44%, #5a3b2a 44% 56%, transparent 56%),
-    linear-gradient(-45deg, transparent 0 44%, #5a3b2a 44% 56%, transparent 56%);
-  border-color: #6b4a33;
-  box-shadow:
-    inset 0 0 0 2px #4a3022,
-    inset 0 0 0 4px #c98d5f;
-}
-.map .desk {
-  background-image: linear-gradient(90deg, transparent 0 calc(50% - 1px), #74492a calc(50% - 1px) calc(50% + 1px), transparent 0);
-}
-.map .meeting-table {
-  background-image:
-    linear-gradient(#5d3f2b, #5d3f2b),
-    linear-gradient(90deg, transparent 0 33%, #5d3f2b 33% calc(33% + 2px), transparent 0 66%, #5d3f2b 66% calc(66% + 2px), transparent 0);
-  background-size:
-    100% 2px,
-    100% 100%;
-  background-position:
-    0 50%,
-    0 0;
-  background-repeat: no-repeat;
-}
-.map .counter {
-  box-shadow:
-    inset 0 -6px 0 #444a56,
-    inset 2px 0 0 #6a7280;
-  background-image: linear-gradient(90deg, transparent 0 8px, #3d434f 8px 40px, transparent 40px);
-  background-size: 100% 4px;
-  background-position: 0 6px;
-  background-repeat: no-repeat;
-}
-
-/* Light pools: stepped rings, screen-blended onto the floor. */
-.map .glow {
-  position: absolute;
-  pointer-events: none;
-  mix-blend-mode: screen;
-}
-.map .glow-warm {
-  background: radial-gradient(
-    closest-side,
-    rgb(255 214 150 / 0.1) 0 45%,
-    rgb(255 214 150 / 0.06) 45% 72%,
-    rgb(255 214 150 / 0.03) 72% 98%,
-    transparent 100%
-  );
-}
-.map .glow-cool {
-  background: radial-gradient(
-    closest-side,
-    rgb(127 212 255 / 0.13) 0 45%,
-    rgb(127 212 255 / 0.07) 45% 72%,
-    rgb(127 212 255 / 0.03) 72% 98%,
-    transparent 100%
-  );
-}
-.map .glow-led-on {
-  background: radial-gradient(closest-side, rgb(79 224 122 / 0.12) 0 50%, rgb(79 224 122 / 0.05) 50% 98%, transparent 100%);
-}
-.map .glow-led-fault {
-  background: radial-gradient(closest-side, rgb(255 107 92 / 0.14) 0 50%, rgb(255 107 92 / 0.06) 50% 98%, transparent 100%);
-}
-
-/* Server room cabling */
-.map .cable-tray {
-  position: absolute;
-  left: 604px;
-  top: 604px;
-  width: 404px;
-  height: 8px;
-  background-color: #0b0d12;
-  background-image:
-    linear-gradient(#1f4d66, #1f4d66),
-    linear-gradient(#8a7030, #8a7030),
-    linear-gradient(#3a4256, #3a4256);
-  background-size: 100% 2px;
-  background-position:
-    0 1px,
-    0 3px,
-    0 5px;
-  background-repeat: no-repeat;
-  box-shadow: 0 2px 0 #050608;
-}
-.map .cable-drop {
-  position: absolute;
-  top: 597px;
-  width: 2px;
-  height: 8px;
-  background: #1f4d66;
-}
-.map .rack-tag {
-  position: absolute;
-  top: 613px;
-  font-family: var(--pixel);
-  font-size: 10px;
-  line-height: 12px;
-  color: #9aa3b8;
-  text-align: center;
-  pointer-events: none;
-}
-
-/* Decor sits under agents; table-top props (.prop, z 3) sit over furniture. */
-.map .decor {
-  position: absolute;
-  z-index: 0;
-}
-.map .decor svg {
-  display: block;
-}
-.map .fan {
-  width: 36px;
-  height: 30px;
-}
-.map .fan svg {
-  position: absolute;
-  left: 0;
-  top: 0;
-}
-.map .fan .fan-b {
-  opacity: 0;
-}
-
-/* Room-level plate for crowds of unknown agents. */
-.map .room-plates {
-  position: absolute;
-  inset: 0;
-  z-index: 5;
-  pointer-events: none;
-}
-.map .room-plate {
-  position: absolute;
-  display: grid;
-  place-items: start center;
-  padding-top: 4px;
-  pointer-events: auto;
-}
-.map .room-short .room-plate {
-  padding-top: 2px;
-}
-.map .room-plate-text {
-  padding: 3px 10px;
-  border: 2px dashed #4a5266;
-  background: #0b0d12dd;
-  font-family: var(--mono);
-  font-size: var(--map-text);
-  color: #d5dae4;
-  white-space: nowrap;
-}
-
-/* Bubbles and name tags: a layer above all furniture, following each agent. */
-.map .agent-tags {
-  position: absolute;
-  inset: 0;
-  z-index: 6;
-  pointer-events: none;
-}
-.map .agent-tag {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 36px;
-  height: 48px;
-  z-index: 1;
-  transition: transform 1.1s steps(9, end);
-}
-.map .agent-tag.is-open {
-  z-index: 2;
-}
-.map .agent-tag.is-plated .bubble {
-  display: none;
-}
-.map .agent-tag .bubble,
-.map .agent-tag .nametag {
-  pointer-events: auto;
-  cursor: pointer;
-}
-.map .agent-tag .bubble-text {
-  display: block;
-  max-width: var(--bw, 260px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.map .agent-tag.is-open .bubble-text {
-  max-width: none;
-}
-.map .agent-tag.lift .bubble {
-  bottom: 80px;
-}
-.map .agent-tag.lift .bubble::before {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 100%;
-  margin-left: -1px;
-  width: 2px;
-  height: 22px;
-  background: #050608;
-}
-
-/* Anchor bubbles toward the room interior so they never cross a wall or the map edge. */
-.map .agent-tag.anchor-left .bubble {
-  left: 18px;
-  transform: none;
-  text-align: left;
-}
-.map .agent-tag.anchor-right .bubble {
-  left: auto;
-  right: 18px;
-  transform: none;
-  text-align: right;
-}
-.map .agent-tag.anchor-left .bubble::after {
-  left: 12px;
-}
-.map .agent-tag.anchor-right .bubble::after {
-  left: auto;
-  right: 12px;
-}
-.map .agent-tag .nametag {
-  max-width: 92px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Ambient scenery motion: stepped, slow, and only when motion is welcome. */
-@media (prefers-reduced-motion: no-preference) {
-  .map .px-screen {
-    animation: om-screen 6s steps(1, end) infinite;
-    animation-delay: var(--d, 0s);
-  }
-  .map .px-caret {
-    animation: om-caret 1.1s steps(1, end) infinite;
-  }
-  .map .px-star {
-    animation: om-twinkle 3.4s steps(1, end) infinite;
-    animation-delay: var(--d, 0s);
-  }
-  .map .px-lit {
-    animation: om-lit 11s steps(1, end) infinite;
-    animation-delay: var(--d, 0s);
-  }
-  .map .rack-on .px-led {
-    animation: om-led 1.3s steps(1, end) infinite;
-    animation-delay: var(--d, 0s);
-  }
-  .map .rack-fault .px-led {
-    animation: om-caret 1.6s steps(1, end) infinite;
-  }
-  .map .plant-top {
-    animation: om-sway 5s steps(1, end) infinite;
-    animation-delay: var(--d, 0s);
-  }
-  .map .fan .fan-a {
-    animation: om-caret 0.36s steps(1, end) infinite;
-  }
-  .map .fan .fan-b {
-    animation: om-caret 0.36s steps(1, end) infinite reverse;
-  }
-}
-@keyframes om-screen {
+@keyframes route-fade {
   0%,
+  70% {
+    opacity: 1;
+  }
   100% {
-    opacity: 1;
-  }
-  38% {
-    opacity: 0.55;
-  }
-  42% {
-    opacity: 1;
-  }
-  71% {
-    opacity: 0.8;
-  }
-  73% {
-    opacity: 1;
-  }
-}
-@keyframes om-caret {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
     opacity: 0;
   }
 }
-@keyframes om-twinkle {
-  0%,
+
+/* A fresh verified signal: the status pip breathes once every few seconds. */
+.plan .agent.is-fresh .pip {
+  animation: pip 2.4s ease-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+@keyframes pip {
+  0% {
+    transform: scale(1);
+  }
+  20% {
+    transform: scale(1.6);
+  }
+  60%,
   100% {
-    opacity: 1;
-  }
-  60% {
-    opacity: 0.25;
-  }
-  70% {
-    opacity: 1;
+    transform: scale(1);
   }
 }
-@keyframes om-lit {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  80% {
-    opacity: 0.15;
-  }
-  92% {
-    opacity: 1;
-  }
+
+/* Legend and title block */
+.plan .legend text {
+  font-size: 11.5px;
+  fill: var(--muted);
 }
-@keyframes om-led {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  30% {
-    opacity: 0.3;
-  }
-  45% {
-    opacity: 1;
-  }
-  70% {
-    opacity: 0.45;
-  }
-  80% {
-    opacity: 1;
-  }
+.plan .legend .sheet-head {
+  font: 600 12px var(--cond);
+  letter-spacing: 0.2em;
+  fill: var(--line);
 }
-@keyframes om-sway {
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-  25% {
-    transform: translateX(1px);
-  }
-  50% {
-    transform: translateX(0);
-  }
-  75% {
-    transform: translateX(-1px);
-  }
+.plan .key-working {
+  fill: var(--ok);
 }
+.plan .key-attention {
+  fill: var(--attention);
+}
+.plan .key-flight {
+  fill: none;
+  stroke: var(--attention);
+  stroke-width: 1.8;
+}
+.plan .key-fault {
+  fill: var(--fault);
+}
+.plan .key-unknown {
+  fill: url(#plan-hatch);
+  stroke: var(--unknown);
+  stroke-dasharray: 2 1;
+}
+.plan .legend .dimension text {
+  fill: var(--ink);
+}
+.plan .title-block rect,
+.plan .title-block path {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1.2;
+}
+.plan .tb-key {
+  font: 600 10px var(--cond);
+  letter-spacing: 0.2em;
+  fill: var(--muted);
+}
+.plan .tb-value {
+  font: 600 15px var(--cond);
+  letter-spacing: 0.1em;
+  fill: var(--line);
+}
+.plan .tb-mono {
+  font: 500 13px var(--mono);
+  fill: var(--ink);
+}
+.plan .tb-mono.is-live {
+  fill: var(--ok);
+}
+.plan .tb-mono.is-off {
+  fill: var(--attention);
+}
+.plan .tb-rev {
+  font: 600 22px var(--cond);
+  fill: var(--line);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .map .agent-tag {
-    transition: none;
+  .plan .agent.is-fresh .pip {
+    animation: none;
   }
-  .map .fan .fan-b {
-    opacity: 0;
+  .plan .route,
+  .plan .route-callout-back {
+  fill: var(--sheet);
+  stroke: var(--attention);
+  stroke-width: 1;
+  animation: route-fade 6s ease-out forwards;
+}
+.plan .route-callout {
+    animation: route-fade 6s steps(1, end) forwards;
   }
 }

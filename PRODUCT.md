@@ -25,7 +25,7 @@ Runs on loopback (`om office`, default 127.0.0.1:8787) next to terminals and IDE
 ## Capabilities and Constraints
 
 - Real data: agent sessions (ready/active/disconnected/unknown), tasks with revision-checked status (todo/doing/review/done/blocked), ordered events, memory search, storage health.
-- Mission Control is visual-first: the 2D pixel office is the primary view; detailed data lives in other views.
+- Mission Control is visual-first: the office floor plan is the primary view; detailed data lives in other views.
 - CSP `default-src 'self'`: no external fonts, scripts or images at runtime; assets must be bundled.
 - No database credentials or raw prompts in the browser bundle or payloads.
 - Approvals record human decisions only; they never trigger Git pushes.
@@ -33,8 +33,7 @@ Runs on loopback (`om office`, default 127.0.0.1:8787) next to terminals and IDE
 
 ## Brand Commitments
 
-- Name: OmniMemo. Visual reference chosen by the owner: a pixel-art "real-time AI agent office" (rooms, desks, chibi agent sprites, speech bubbles). Pixel art must be original; no copied tilesets or third-party characters.
-- Design comps: Claude Design canvas "OmniMemo Pixel Office" (https://claude.ai/artifact/5RLoD3W6igdYgowyWVpv1r).
+- Name: OmniMemo. Visual direction chosen by the owner (2026-10-19, replacing the earlier pixel-art office): "Night Floor Plan", an architect's drawing of the office at night where each agent stands in the room of its verified state. Kept from before: agent-as-place map, a distinct figure per provider, dark theme. All drawing is original.
 
 ## Evidence on Hand
 

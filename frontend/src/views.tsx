@@ -1,4 +1,4 @@
-import { type FormEvent, type ReactNode, useEffect, useState } from 'react'
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react'
 import type { Store } from './App'
 import {
   type Agent,
@@ -12,9 +12,9 @@ import {
   type TaskStatus,
   api,
 } from './api'
-import { ago, type Placement, ROOMS, type RoomId } from './office'
+import { AgentMark } from './Figure'
+import { ago, PLAN, type Placement, ROOMS, type RoomId } from './office'
 import { OfficeMap } from './OfficeMap'
-import { AgentSprite } from './Sprite'
 
 type Office = { placed: Placement[]; overflow: Partial<Record<RoomId, number>> }
 type Event = Store['events'][number]
@@ -150,7 +150,7 @@ function EventLine({ e, store }: { e: Event; store: Store }) {
         ) : null}
       </span>
       <span className="event-who">
-        <AgentSprite agent={who} scale={1} />
+        <AgentMark agent={who} size={16} />
         {who}
       </span>
       {e.data.status ? (
@@ -167,19 +167,75 @@ function EventLine({ e, store }: { e: Event; store: Store }) {
 
 /* Office */
 
+/** One state vocabulary for the plan, the schedule and the Agents table; each maps to a verified record. */
+const PLAN_STATES: [string, Placement['tone'], string][] = [
+  ['asks you', 'attention', 'The agent requested an approval that is waiting on you.'],
+  ['blocked', 'attention', 'The host reported the session is blocked, with no pending approval.'],
+  ['doing', 'working', 'The agent owns a task in doing; its host status shows whether it is active now.'],
+  ['working', 'working', 'The host reported a prompt or tool call; no task is claimed.'],
+  ['reviewing', 'flight', 'The agent owns a task in review.'],
+  ['handing off', 'flight', 'The agent saved a checkpoint in the last three minutes.'],
+  ['waiting', 'neutral', 'The session reported in and is waiting for work.'],
+  ['stale', 'unknown', 'No recent signal, even if it owns a task. It may still be running; OmniMemo cannot tell.'],
+]
+
+const stateLabel = (p: Placement) => p.state[0].toUpperCase() + p.state.slice(1)
+
 export function OfficeView({ store, office }: { store: Store; office: Office }) {
   const [selected, setSelected] = useState<string>()
+  const scroller = useRef<HTMLDivElement>(null)
+  const [scrollable, setScrollable] = useState(false)
   const current = office.placed.find((p) => p.key === selected) ?? office.placed[0]
+  // On narrow screens the plan scrolls: open it at the room that waits on you, else the selection.
+  const focusRoom = (office.placed.find((p) => p.approval) ?? current)?.room
+  useEffect(() => {
+    const el = scroller.current
+    if (!el) return
+    const fit = () => {
+      const over = el.scrollWidth > el.clientWidth + 1
+      setScrollable(over)
+      const room = ROOMS.find((r) => r.id === focusRoom)
+      if (!over || !room) return
+      const scale = el.scrollWidth / PLAN.w
+      el.scrollLeft = (room.x + room.w / 2) * scale - el.clientWidth / 2
+    }
+    fit()
+    const observer = new ResizeObserver(fit)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [focusRoom])
+  // Schedule order: what asks you first, then live work, then quiet and unknown sessions.
+  const order: Placement['tone'][] = ['attention', 'working', 'flight', 'neutral', 'unknown']
+  const schedule = [...office.placed].sort(
+    (a, b) => order.indexOf(a.tone) - order.indexOf(b.tone) || b.agent.last_seen.localeCompare(a.agent.last_seen),
+  )
+  const hidden = Object.values(office.overflow).reduce((a, b) => a + (b ?? 0), 0)
   return (
     <div className="office">
-      <section className="office-map" aria-label="Office map">
-        <OfficeMap
-          placed={office.placed}
-          overflow={office.overflow}
-          health={store.health}
-          selected={current?.key}
-          onSelect={setSelected}
-        />
+      <section className={'sheet' + (scrollable ? ' is-scrollable' : '')} aria-label="Office floor plan">
+        <div className="sheet-scroll" ref={scroller}>
+          <OfficeMap
+            placed={office.placed}
+            overflow={office.overflow}
+            health={store.health}
+            selected={current?.key}
+            now={store.now}
+            live={store.live}
+            onSelect={setSelected}
+          />
+        </div>
+        <div className="sheet-cue" aria-hidden="true">
+          <p>
+            <span>Swipe for more rooms</span>
+            <span>{office.placed.length} on the plan</span>
+          </p>
+          <ul className="sheet-key">
+            <li className="key-working">working</li>
+            <li className="key-attention">asks you</li>
+            <li className="key-flight">reviewing</li>
+            <li className="key-unknown">stale</li>
+          </ul>
+        </div>
         {store.loaded && office.placed.length === 0 && (
           <div className="map-empty">
             <p>
@@ -195,26 +251,66 @@ export function OfficeView({ store, office }: { store: Store; office: Office }) 
         )}
       </section>
       <aside className="office-side">
+        <section className="panel schedule" aria-labelledby="schedule-title">
+          <h2 id="schedule-title">
+            Agent schedule <span className="panel-note">{office.placed.length + hidden} present</span>
+          </h2>
+          {!store.loaded ? (
+            <span className="skeleton-bar" aria-hidden="true" />
+          ) : schedule.length === 0 ? (
+            <p className="muted panel-body">Nobody on the plan.</p>
+          ) : (
+            <table className="table dense">
+              <thead>
+                <tr>
+                  <th scope="col">Agent</th>
+                  <th scope="col">Room</th>
+                  <th scope="col">State</th>
+                  <th scope="col" className="num">
+                    Signal
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {schedule.map((p) => (
+                  <tr key={p.key} className={current?.key === p.key ? 'is-selected' : undefined}>
+                    <th scope="row">
+                      <button type="button" className="row-select" aria-pressed={current?.key === p.key} onClick={() => setSelected(p.key)}>
+                        <AgentMark agent={p.agent.agent} size={16} unknown={p.tone === 'unknown'} />
+                        {p.agent.agent}
+                      </button>
+                    </th>
+                    <td>{roomLabel(p.room)}</td>
+                    <td>
+                      <span className={'pill pill-tone-' + p.tone}>{stateLabel(p)}</span>
+                    </td>
+                    <td className="num mono">{ago(p.agent.last_seen, store.now).replace(' ago', '')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {hidden > 0 && (
+            <p className="panel-foot muted small">
+              {hidden} more in full rooms. <a href="#agents">All agents</a>
+            </p>
+          )}
+        </section>
         <section className="panel detail" aria-live="polite">
           {current ? (
             <>
-              <div className="detail-head">
-                <span className="portrait">
-                  <AgentSprite agent={current.agent.agent} scale={4} />
+              <h2>
+                <span className="detail-name">
+                  <AgentMark agent={current.agent.agent} size={22} unknown={current.tone === 'unknown'} />
+                  {current.agent.agent}
                 </span>
-                <div className="detail-id">
-                  <h2>{current.agent.agent}</h2>
-                  <span className={'pill pill-tone-' + current.tone}>{current.state}</span>
-                  <p className="mono muted">{current.agent.session_id}</p>
-                </div>
-              </div>
+                <span className="panel-note mono">{current.agent.session_id}</span>
+              </h2>
               <dl className="facts">
-                <dt>Signal</dt>
-                <dd>{sourceLabel(current.agent.source)}</dd>
-                <dt>Last seen</dt>
-                <dd>{ago(current.agent.last_seen, store.now)}</dd>
-                <dt>Context</dt>
-                <dd><ContextIndicator agent={current.agent} now={store.now} /></dd>
+                <dt>State</dt>
+                <dd>
+                  <span className={'pill pill-tone-' + current.tone}>{stateLabel(current)}</span>
+                </dd>
                 <dt>Room</dt>
                 <dd>{roomLabel(current.room)}</dd>
                 <dt>Task</dt>
@@ -229,37 +325,40 @@ export function OfficeView({ store, office }: { store: Store; office: Office }) 
                 </dd>
                 {current.approval && (
                   <>
-                    <dt>Waiting on</dt>
+                    <dt>Asks you</dt>
                     <dd>
                       <a href="#approvals">{current.approval.action}</a>
                     </dd>
                   </>
                 )}
+                <dt>Signal</dt>
+                <dd>{sourceLabel(current.agent.source)}</dd>
+                <dt>Last seen</dt>
+                <dd>{ago(current.agent.last_seen, store.now)}</dd>
+                <dt>Context</dt>
+                <dd>
+                  <ContextIndicator agent={current.agent} now={store.now} />
+                </dd>
               </dl>
             </>
           ) : (
-            <p className="muted">
-              {store.loaded ? 'Select an agent on the map to see where its status comes from.' : 'Loading sessions…'}
+            <p className="muted panel-body">
+              {store.loaded ? 'Select an agent on the plan to see where its status comes from.' : 'Loading sessions…'}
             </p>
           )}
         </section>
-        <section className="panel">
-          <h2>Latest events</h2>
+        <section className="panel" aria-labelledby="latest-title">
+          <h2 id="latest-title">
+            Latest events <a className="panel-note" href="#events">All events</a>
+          </h2>
           {store.events.length === 0 ? (
-            <p className="muted">{store.loaded ? 'No committed events yet.' : 'Loading events…'}</p>
+            <p className="muted panel-body">{store.loaded ? 'No committed events yet.' : 'Loading events…'}</p>
           ) : (
-            <>
-              {/* Six rows, not eight: each rail row now also carries the agent and
-                  the resulting state, and the map stays the hero of this view. */}
-              <ol className="events compact">
-                {store.events.slice(0, 6).map((e) => (
-                  <EventLine key={e.event_id} e={e} store={store} />
-                ))}
-              </ol>
-              <a className="more" href="#events">
-                All events
-              </a>
-            </>
+            <ol className="events compact">
+              {store.events.slice(0, 5).map((e) => (
+                <EventLine key={e.event_id} e={e} store={store} />
+              ))}
+            </ol>
           )}
         </section>
       </aside>
@@ -285,20 +384,31 @@ const COLUMN_EMPTY: Record<TaskStatus, ReactNode> = {
   blocked: 'Nothing blocked.',
 }
 
-function TaskCard({ task, store, owners }: { task: Task; store: Store; owners: string[] }) {
+function TaskRow({
+  task,
+  store,
+  owners,
+  conflict,
+  setConflict,
+}: {
+  task: Task
+  store: Store
+  owners: string[]
+  conflict?: number
+  setConflict: (id: string, revision?: number) => void
+}) {
   const [saving, setSaving] = useState(false)
-  const [conflict, setConflict] = useState<number>()
   const priority = task.priority ?? 'P2'
 
   const change = async (patch: { status?: TaskStatus; owner?: string; priority?: Priority }) => {
     setSaving(true)
     try {
       await api.updateTask(task, patch)
-      setConflict(undefined)
+      setConflict(task.id, undefined)
     } catch (err) {
       // Another agent changed it first: reload instead of overwriting their revision.
       if (err instanceof ApiError && err.status === 409) {
-        setConflict(task.revision)
+        setConflict(task.id, task.revision)
         await store.refresh()
       } else store.report(err)
     } finally {
@@ -307,45 +417,53 @@ function TaskCard({ task, store, owners }: { task: Task; store: Store; owners: s
   }
 
   return (
-    <article className="card" aria-busy={saving || undefined}>
-      <div className="card-top">
-        <span className={'prio prio-' + priority} title={`${priority} · ${PRIORITY_HELP[priority]} priority`}>
-          {priority}
-        </span>
-        <time className="card-age" dateTime={task.updated_at} title={new Date(task.updated_at).toLocaleString()}>
-          {ago(task.updated_at, store.now)}
-        </time>
-      </div>
-      <p className="card-title">{task.title}</p>
-      <div className="card-meta">
-        {task.owner ? (
-          <span className="owner">
-            <AgentSprite agent={task.owner} scale={2} />
-            {task.owner}
-          </span>
-        ) : (
-          <span className="owner owner-none">Unassigned</span>
-        )}
-        <span className="mono muted" title={task.id}>
-          rev {task.revision}
-        </span>
-      </div>
-      {conflict !== undefined && (
-        <p className="card-conflict" role="alert">
-          Not saved: another agent changed this task while you had revision {conflict}. The card now shows the latest
-          state; choose again if your change still applies.
-        </p>
-      )}
-      {/* Two compact labelled rows keep the controls lighter than the task
-          title; the visible word plus a hidden "of {task.title}" keeps each
-          select's accessible name unique on the board. */}
-      <div className="card-controls">
-        <label className="control control-status">
-          <span className="control-label" aria-hidden="true">
-            Status
-          </span>
-          <span className="sr-only">Status of {task.title}</span>
+    <>
+      <tr className={saving ? 'is-saving' : undefined} aria-busy={saving || undefined}>
+        <td>
+          <label className="sr-only" htmlFor={'prio-' + task.id}>
+            Priority of {task.title}
+          </label>
           <select
+            id={'prio-' + task.id}
+            className={'prio prio-' + priority}
+            value={priority}
+            disabled={saving}
+            title={`${priority} · ${PRIORITY_HELP[priority]} priority`}
+            onChange={(e) => void change({ priority: e.target.value as Priority })}
+          >
+            {PRIORITIES.map((p) => (
+              <option key={p}>{p}</option>
+            ))}
+          </select>
+        </td>
+        <th scope="row" className="task-title">
+          {task.title}
+        </th>
+        <td>
+          <label className="sr-only" htmlFor={'owner-' + task.id}>
+            Owner of {task.title}
+          </label>
+          <span className="owner">
+            {task.owner && <AgentMark agent={task.owner} size={16} />}
+            <select
+              id={'owner-' + task.id}
+              value={task.owner ?? ''}
+              disabled={saving}
+              onChange={(e) => e.target.value && void change({ owner: e.target.value })}
+            >
+              <option value="">Unassigned</option>
+              {owners.map((o) => (
+                <option key={o}>{o}</option>
+              ))}
+            </select>
+          </span>
+        </td>
+        <td>
+          <label className="sr-only" htmlFor={'status-' + task.id}>
+            Status of {task.title}
+          </label>
+          <select
+            id={'status-' + task.id}
             value={task.status}
             disabled={saving}
             onChange={(e) => void change({ status: e.target.value as TaskStatus })}
@@ -354,44 +472,33 @@ function TaskCard({ task, store, owners }: { task: Task; store: Store; owners: s
               <option key={s}>{s}</option>
             ))}
           </select>
-        </label>
-        <label className="control control-priority">
-          <span className="control-label" aria-hidden="true">
-            Priority
-          </span>
-          <span className="sr-only">Priority of {task.title}</span>
-          <select
-            value={priority}
-            disabled={saving}
-            onChange={(e) => void change({ priority: e.target.value as Priority })}
-          >
-            {PRIORITIES.map((p) => (
-              <option key={p}>{p}</option>
-            ))}
-          </select>
-        </label>
-        <label className="control control-owner">
-          <span className="control-label" aria-hidden="true">
-            Owner
-          </span>
-          <span className="sr-only">Owner of {task.title}</span>
-          <select
-            value={task.owner ?? ''}
-            disabled={saving}
-            onChange={(e) => e.target.value && void change({ owner: e.target.value })}
-          >
-            <option value="">Assign an agent…</option>
-            {owners.map((o) => (
-              <option key={o}>{o}</option>
-            ))}
-          </select>
-        </label>
-      </div>
-    </article>
+        </td>
+        <td className="num">
+          <time dateTime={task.updated_at} title={new Date(task.updated_at).toLocaleString()}>
+            {ago(task.updated_at, store.now)}
+          </time>
+        </td>
+        <td className="num mono muted" title={task.id}>
+          {task.revision}
+        </td>
+      </tr>
+      {conflict !== undefined && (
+        <tr className="conflict-row">
+          <td colSpan={6} role="alert">
+            Not saved: another agent changed this task while you had revision {conflict}. The row now shows the latest
+            state; choose again if your change still applies.
+          </td>
+        </tr>
+      )}
+    </>
   )
 }
 
 export function TasksView({ store }: { store: Store }) {
+  // Kept here, keyed by task, so a warning survives the refresh moving its row to another status group.
+  const [conflicts, setConflicts] = useState<Record<string, number>>({})
+  const setConflict = (id: string, revision?: number) =>
+    setConflicts(({ [id]: _, ...rest }) => (revision === undefined ? rest : { ...rest, [id]: revision }))
   const [title, setTitle] = useState('')
   const [priority, setPriority] = useState<Priority>('P2')
   const [busy, setBusy] = useState(false)
@@ -438,32 +545,71 @@ export function TasksView({ store }: { store: Store }) {
           {busy ? 'Adding…' : 'Add task'}
         </button>
       </form>
-      <div className="board">
-        {TASK_STATUSES.map((status) => {
-          const column = store.tasks
-            .filter((t) => t.status === status)
-            .sort(
-              (a, b) =>
-                (a.priority ?? 'P2').localeCompare(b.priority ?? 'P2') || b.updated_at.localeCompare(a.updated_at),
-            )
-          return (
-            <section className={'column column-' + status} key={status} aria-labelledby={'col-' + status}>
-              <h2 id={'col-' + status}>
-                {status} <span className="column-count">{store.loaded ? column.length : '…'}</span>
-              </h2>
-              {!store.loaded ? (
-                <span className="skeleton-bar tall" aria-hidden="true" />
-              ) : column.length === 0 ? (
-                <p className="column-empty">{COLUMN_EMPTY[status]}</p>
-              ) : (
-                column.map((task) => <TaskCard key={task.id} task={task} store={store} owners={owners} />)
-              )}
-            </section>
-          )
-        })}
-      </div>
+      {!store.loaded ? (
+        <Loading label="Loading tasks" rows={4} />
+      ) : (
+        <div className="table-wrap">
+          <table className="table tasks">
+            <colgroup>
+              <col className="col-prio" />
+              <col />
+              <col className="col-owner" />
+              <col className="col-status" />
+              <col className="col-age" />
+              <col className="col-rev" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th scope="col">Priority</th>
+                <th scope="col">Task</th>
+                <th scope="col">Owner</th>
+                <th scope="col">Status</th>
+                <th scope="col" className="num">
+                  Updated
+                </th>
+                <th scope="col" className="num">
+                  Rev
+                </th>
+              </tr>
+            </thead>
+            {TASK_STATUSES.map((status) => {
+              const group = store.tasks
+                .filter((t) => t.status === status)
+                .sort(
+                  (a, b) =>
+                    (a.priority ?? 'P2').localeCompare(b.priority ?? 'P2') || b.updated_at.localeCompare(a.updated_at),
+                )
+              return (
+                <tbody key={status} className={'group group-' + status} aria-labelledby={'group-' + status}>
+                  <tr className="group-head">
+                    <th scope="colgroup" colSpan={6} id={'group-' + status}>
+                      {status} <span className="count">{group.length}</span>
+                    </th>
+                  </tr>
+                  {group.length === 0 ? (
+                    <tr className="group-empty">
+                      <td colSpan={6}>{COLUMN_EMPTY[status]}</td>
+                    </tr>
+                  ) : (
+                    group.map((task) => (
+                      <TaskRow
+                        key={task.id}
+                        task={task}
+                        store={store}
+                        owners={owners}
+                        conflict={conflicts[task.id]}
+                        setConflict={setConflict}
+                      />
+                    ))
+                  )}
+                </tbody>
+              )
+            })}
+          </table>
+        </div>
+      )}
       <p className="muted small lede">
-        Every change is revision-checked. If an agent moved a task first, your change is refused and the board reloads
+        Every change is revision-checked. If an agent moved a task first, your change is refused and the list reloads
         instead of overwriting theirs.
       </p>
     </div>
@@ -494,7 +640,7 @@ export function AgentsView({ store, office }: { store: Store; office: Office }) 
               <th scope="col">Agent</th>
               <th scope="col">Status</th>
               <th scope="col">Context</th>
-              <th scope="col">Room</th>
+              <th scope="col">Room · plan state</th>
               <th scope="col">Signal</th>
               <th scope="col">Last seen</th>
               <th scope="col">First seen</th>
@@ -508,7 +654,7 @@ export function AgentsView({ store, office }: { store: Store; office: Office }) 
                 <tr key={a.agent + a.session_id} className={'row-' + a.status}>
                   <th scope="row">
                     <span className="cell-agent">
-                      <AgentSprite agent={a.agent} scale={2} />
+                      <AgentMark agent={a.agent} size={20} unknown={a.status === 'stale'} />
                       {a.agent}
                     </span>
                   </th>
@@ -520,7 +666,9 @@ export function AgentsView({ store, office }: { store: Store; office: Office }) 
                   <td><ContextIndicator agent={a} now={store.now} /></td>
                   <td>
                     {p ? (
-                      roomLabel(p.room)
+                      <>
+                        {roomLabel(p.room)} <span className="muted">· {p.state}</span>
+                      </>
                     ) : (
                       <span className="muted">{a.status === 'offline' ? 'Left the office' : 'Room full'}</span>
                     )}
@@ -545,18 +693,22 @@ export function AgentsView({ store, office }: { store: Store; office: Office }) 
       </div>
       <div className="legend-grid">
         <section className="panel">
-          <h2>What each status means</h2>
+          <h2>What each state means</h2>
           <dl className="legend">
-            {order.map((s) => (
-              <div key={s}>
+            {PLAN_STATES.map(([state, tone, help]) => (
+              <div key={state}>
                 <dt>
-                  <span className={'pill pill-' + s}>{s}</span>
-                  <span className="legend-count">{store.agents.filter((a) => a.status === s).length}</span>
+                  <span className={'pill pill-tone-' + tone}>{state[0].toUpperCase() + state.slice(1)}</span>
+                  <span className="legend-count">{office.placed.filter((p) => p.state === state).length}</span>
                 </dt>
-                <dd>{STATUS_HELP[s]}</dd>
+                <dd>{help}</dd>
               </div>
             ))}
           </dl>
+          <p className="panel-foot muted small">
+            The Status column and Events show the host status as reported (working, waiting, blocked, stale,
+            offline); the plan state comes from it plus the agent's tasks and approvals.
+          </p>
         </section>
         <section className="panel">
           <h2>Where these signals come from</h2>
@@ -613,7 +765,7 @@ export function ApprovalsView({ store }: { store: Store }) {
           {pending.map((a) => (
             <li className="approval" key={a.id}>
               <span className="approval-who">
-                <AgentSprite agent={a.requested_by} scale={3} />
+                <AgentMark agent={a.requested_by} size={36} />
                 <span>{a.requested_by}</span>
               </span>
               <div className="approval-body">
@@ -721,7 +873,11 @@ function MemoryItem({ m }: { m: Memory }) {
       ) : (
         <p>{m.summary}</p>
       )}
-      {m.source_refs && m.source_refs.length > 0 && <p className="mono muted small">{m.source_refs.join(' · ')}</p>}
+      {m.source_refs && m.source_refs.length > 0 && (
+        <p className="muted small">
+          Source evidence: <span className="mono">{m.source_refs.join(' · ')}</span>
+        </p>
+      )}
     </li>
   )
 }

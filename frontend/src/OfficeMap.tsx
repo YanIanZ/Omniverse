@@ -1,252 +1,81 @@
-import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react'
+import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Health } from './api'
-import { MAP, type Placement, ROOMS, type Room, type RoomId } from './office'
+import { FigureGlyph } from './Figure'
+import { BUILDING, CORRIDOR, HALL_X, minutesAgo, PLAN, type Placement, ROOMS, type RoomId, route } from './office'
 import './office.css'
-import { AgentSprite, Sprite } from './Sprite'
-import { FURNITURE, type FurnitureId, LED } from './sprites'
 
-type Block = { cls: string; x: number; y: number; w: number; h: number }
-
-const BLOCKS: Block[] = [
-  { cls: 'rug', x: 52, y: 92, w: 176, h: 104 },
-  { cls: 'meeting-table', x: 316, y: 132, w: 228, h: 64 },
-  { cls: 'meeting-table', x: 700, y: 108, w: 236, h: 72 },
-  { cls: 'desk', x: 64, y: 330, w: 212, h: 30 },
-  { cls: 'desk', x: 304, y: 330, w: 212, h: 30 },
-  { cls: 'desk', x: 64, y: 450, w: 212, h: 30 },
-  { cls: 'desk', x: 304, y: 450, w: 212, h: 30 },
-  { cls: 'desk', x: 604, y: 398, w: 330, h: 30 },
-  { cls: 'counter', x: 456, y: 584, w: 92, h: 36 },
-  { cls: 'rug lounge-rug', x: 112, y: 600, w: 76, h: 26 },
+// Furniture in plan symbols, drawn in construction lines under the agents. Decor only:
+// nothing here reflects or implies agent activity.
+type Shape = { x: number; y: number; w: number; h: number; round?: boolean }
+const FURNITURE: Shape[] = [
+  // Briefing: screen wall and a long table
+  { x: 60, y: 22, w: 156, h: 4 },
+  { x: 58, y: 70, w: 160, h: 14 },
+  // Handoffs: pin board and a round table
+  { x: 300, y: 22, w: 160, h: 4 },
+  { x: 350, y: 64, w: 60, h: 24, round: true },
+  // Approvals: the counter
+  { x: 540, y: 72, w: 244, h: 12 },
+  // Workspace: two desk rows behind the agents
+  { x: 92, y: 274, w: 304, h: 10 },
+  { x: 92, y: 382, w: 304, h: 10 },
+  // Review: diff wall and review bench
+  { x: 470, y: 228, w: 320, h: 4 },
+  { x: 476, y: 274, w: 308, h: 10 },
+  { x: 476, y: 382, w: 308, h: 10 },
+  // Lounge: two sofas
+  { x: 40, y: 562, w: 150, h: 10 },
+  { x: 260, y: 562, w: 150, h: 10 },
+  // Pantry: counter
+  { x: 530, y: 630, w: 90, h: 14 },
 ]
 
-// Scenery motion hooks: pixels of these map characters get a class; CSS animates them
-// only without prefers-reduced-motion. None of this reflects or implies agent activity.
-const SCREEN_CLASSES = { b: 'px-screen' }
-const WINDOW_CLASSES = { s: 'px-star', y: 'px-lit' }
-const CARET_CLASSES = { C: 'px-caret' }
-const RACK_CLASSES = { A: 'px-led' }
+const BAND = 7
+const ROOM_GAP = 30
 
-type Item = { item: FurnitureId; x: number; y: number; classes?: Record<string, string> }
+type Route = { id: number; key: string; points: [number, number][]; label: string; short: string }
 
-const DESKS = [
-  [64, 300],
-  [304, 300],
-  [64, 420],
-  [304, 420],
-]
+const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-// Standalone furniture and wall decor, drawn under agents so it never hides a sprite,
-// bubble or name tag.
-const DECOR: Item[] = [
-  // Briefing
-  { item: 'projector', x: 96, y: 37 },
-  { item: 'bookshelf', x: 24, y: 40 },
-  { item: 'lamp', x: 238, y: 140 },
-  // Handoffs
-  { item: 'corkboard', x: 292, y: 37 },
-  { item: 'cubbies', x: 464, y: 37 },
-  // Approvals
-  { item: 'window', x: 612, y: 37, classes: WINDOW_CLASSES },
-  { item: 'window', x: 980, y: 37, classes: WINDOW_CLASSES },
-  { item: 'cabinet', x: 616, y: 100 },
-  { item: 'cabinet', x: 644, y: 100 },
-  { item: 'bookshelf', x: 1000, y: 64 },
-  // Workspace
-  { item: 'kanban', x: 220, y: 274 },
-  { item: 'bookshelf', x: 24, y: 372 },
-  { item: 'cooler', x: 524, y: 278 },
-  // Review
-  { item: 'wallscreen', x: 600, y: 290, classes: CARET_CLASSES },
-  { item: 'window', x: 958, y: 273, classes: WINDOW_CLASSES },
-  { item: 'bookshelf', x: 952, y: 300 },
-  { item: 'bookshelf', x: 986, y: 300 },
-  { item: 'lamp', x: 952, y: 418 },
-  // Lounge
-  { item: 'window', x: 84, y: 553, classes: WINDOW_CLASSES },
-  { item: 'window', x: 210, y: 553, classes: WINDOW_CLASSES },
-  { item: 'vending', x: 344, y: 558 },
-  // Pantry
-  { item: 'fridge', x: 400, y: 558 },
-  { item: 'cooler', x: 432, y: 572 },
-  // Server room (neutral equipment only; health lives on the racks)
-  { item: 'ups', x: 724, y: 566 },
-  { item: 'extinguisher', x: 1014, y: 596 },
-]
+/** Length of the signal-age dimension line on a log scale, so 1m, 10m and 1h read apart. */
+const dimension = (minutes: number) => Math.min(88, 22 + 11 * Math.log2(1 + minutes))
 
-// Things that sit on tables and desks, drawn above the furniture.
-const PROPS: Item[] = [
-  ...DESKS.flatMap(([x, y], i): Item[] => [
-    { item: 'monitor', x: x + 8, y: y + 2, classes: SCREEN_CLASSES },
-    { item: 'monitor', x: x + 170, y: y + 2, classes: SCREEN_CLASSES },
-    { item: 'keyboard', x: x + 11, y: y + 34 },
-    { item: 'keyboard', x: x + 173, y: y + 34 },
-    // Each desk keeps its own small clutter so the rows do not read as copies.
-    ...([
-      [
-        { item: 'mug', x: x + 82, y: y + 34 },
-        { item: 'folder', x: x + 106, y: y + 34 },
-      ],
-      [{ item: 'paper', x: x + 92, y: y + 31 }],
-      [
-        { item: 'folder', x: x + 84, y: y + 34 },
-        { item: 'mug', x: x + 112, y: y + 35 },
-      ],
-      [{ item: 'mug', x: x + 104, y: y + 35 }],
-    ] as Item[][])[i],
-    { item: 'chair', x: x + 40, y: y + 70 },
-    { item: 'chair', x: x + 134, y: y + 70 },
-  ]),
-  ...[612, 676, 740, 804, 868].map((x): Item => ({ item: 'monitor', x, y: 402, classes: SCREEN_CLASSES })),
-  ...[646, 706, 766, 826, 886].map((x): Item => ({ item: 'chair', x, y: 440 })),
-  // Handoffs table
-  { item: 'laptop', x: 330, y: 150, classes: SCREEN_CLASSES },
-  { item: 'mug', x: 388, y: 170 },
-  { item: 'paper', x: 430, y: 150 },
-  { item: 'folder', x: 470, y: 158 },
-  { item: 'mug', x: 512, y: 150 },
-  ...[350, 430, 500].map((x): Item => ({ item: 'chair', x, y: 200 })),
-  // Approvals table: inbox, stamp, outbox
-  { item: 'tray', x: 716, y: 128 },
-  { item: 'stamp', x: 764, y: 126 },
-  { item: 'paper', x: 800, y: 130 },
-  { item: 'mug', x: 846, y: 150 },
-  { item: 'tray', x: 880, y: 128 },
-  ...[740, 820, 890].map((x): Item => ({ item: 'chair', x, y: 186 })),
-  // Lounge and pantry
-  { item: 'sofa', x: 48, y: 596 },
-  { item: 'sofa', x: 196, y: 596 },
-  { item: 'coffee', x: 470, y: 558 },
-  { item: 'coffee', x: 506, y: 558 },
-  { item: 'mug', x: 474, y: 592 },
-  { item: 'mug', x: 510, y: 592 },
-]
-
-const PLANTS = [
-  [30, 190],
-  [536, 190],
-  [30, 464],
-  [1000, 190],
-  [1000, 464],
-]
-
-type Glow = { x: number; y: number; w: number; h: number; tone: 'warm' | 'cool' }
-
-const GLOWS: Glow[] = [
-  { x: 40, y: 70, w: 210, h: 150, tone: 'warm' },
-  { x: 196, y: 130, w: 100, h: 90, tone: 'warm' },
-  { x: 312, y: 96, w: 240, h: 130, tone: 'warm' },
-  { x: 680, y: 70, w: 280, h: 150, tone: 'warm' },
-  ...DESKS.map(([x, y]): Glow => ({ x: x - 10, y: y - 10, w: 232, h: 120, tone: 'warm' })),
-  ...DESKS.flatMap(([x, y]): Glow[] => [
-    { x: x - 6, y: y + 24, w: 68, h: 40, tone: 'cool' },
-    { x: x + 156, y: y + 24, w: 68, h: 40, tone: 'cool' },
-  ]),
-  { x: 590, y: 336, w: 320, h: 80, tone: 'cool' },
-  { x: 912, y: 440, w: 100, h: 76, tone: 'warm' },
-  { x: 30, y: 560, w: 330, h: 70, tone: 'warm' },
-  { x: 400, y: 556, w: 150, h: 72, tone: 'warm' },
-]
-
-// Doorways cut into room walls: [x, y] of a 32px opening on a top or bottom wall.
-const DOORS = [
-  [200, 228],
-  [420, 228],
-  [960, 228],
-  [440, 268],
-  [480, 516],
-  [980, 268],
-  [980, 516],
-  [300, 548],
-  [480, 548],
-  [980, 548],
-]
-
-type LedState = 'on' | 'off' | 'fault'
-
-function rackPalette(state: LedState) {
-  return { ...FURNITURE.rack.palette, L: LED[state], A: LED[state] }
+const SIGNAL_CHAR = 5.6
+const cut = (text: string, width: number) => {
+  const n = Math.max(8, Math.floor(width / SIGNAL_CHAR))
+  return text.length > n ? text.slice(0, n - 1) + '…' : text
 }
 
-function Clock() {
-  const [now, setNow] = useState(() => new Date())
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(new Date()), 30_000)
-    return () => window.clearInterval(id)
-  }, [])
-  const minutes = now.getMinutes()
-  const hours = (now.getHours() % 12) + minutes / 60
-  return (
-    <svg className="clock" width={27} height={27} viewBox="0 0 9 9" shapeRendering="crispEdges" aria-hidden="true">
-      <Sprite map={FACE} palette={FACE_PALETTE} scale={1} className="clock-face" />
-      <rect x={4} y={1.6} width={1} height={3.4} fill="#1a1423" transform={`rotate(${minutes * 6} 4.5 4.5)`} />
-      <rect x={4} y={2.4} width={1} height={2.6} fill="#c4473c" transform={`rotate(${hours * 30} 4.5 4.5)`} />
-      <rect x={4} y={4} width={1} height={1} fill="#1a1423" />
-    </svg>
-  )
-}
-const FACE = ['..OOOOO..', '.OFFtFFO.', 'OFFFFFFFO', 'OFFFFFFFO', 'OtFFFFFtO', 'OFFFFFFFO', 'OFFFFFFFO', '.OFFtFFO.', '..OOOOO..']
-const FACE_PALETTE = { O: '#6a7388', F: '#e9e2d6', t: '#7c8494' }
-
-function Plant({ x, y, i }: { x: number; y: number; i: number }) {
-  return (
-    <div className="decor plant" style={{ left: x, top: y, '--d': `${-i * 1.3}s` } as CSSProperties}>
-      <Sprite map={FURNITURE.plantTop.map} palette={FURNITURE.plantTop.palette} className="plant-top" />
-      <Sprite map={FURNITURE.plantPot.map} palette={FURNITURE.plantPot.palette} />
-    </div>
-  )
-}
-
-/**
- * Bubbles sit on two levels so neighbouring seats never collide: alternate agents in a
- * row lift theirs above the others. Widths are capped by the nearest bubble on the same
- * level (and, for the lower level, by the neighbouring lift stems), by the containing
- * room walls, and by a maximum on-screen width. Agents near a wall or the map edge
- * anchor their bubble toward the interior so the text never spills out. The hovered or
- * selected agent always shows its full text on top. Full text also stays in aria-label.
- */
-const BUBBLE_SCREEN_MAX_PX = 220
-const BUBBLE_PAD = 8
-const WALL_ANCHOR = 60
-
-type Anchor = 'left' | 'center' | 'right'
-
-function bubbleLayout(placed: Placement[], scale: number) {
-  const rows = new Map<string, Placement[]>()
+/** Free width for the signal under each figure: centred when both sides are tight, otherwise
+ * starting at the name plate and running toward the open side, up to a neighbour or the wall. */
+function signalLayout(placed: Placement[]) {
+  const out = new Map<string, { width: number; start: boolean }>()
   for (const p of placed) {
-    const key = p.room + ':' + p.y
-    rows.set(key, [...(rows.get(key) ?? []), p])
-  }
-  const out = new Map<string, { lift: boolean; max: number; anchor: Anchor }>()
-  for (const row of rows.values()) {
-    row.sort((a, b) => a.x - b.x)
-    row.forEach((p, i) => {
-      const lift = row.length > 1 && i % 2 === 1
-      const gap = (j: number) => (row[j] ? Math.abs(row[j].x - p.x) : Infinity)
-      let max = Math.min(gap(i - 2), gap(i + 2)) - 10
-      if (!lift) max = Math.min(max, 2 * Math.min(gap(i - 1), gap(i + 1)) - 16)
-
-      const room = ROOMS.find((r) => r.id === p.room)!
-      const left = p.x - room.x
-      const right = room.x + room.w - (p.x + 36)
-      let anchor: Anchor = 'center'
-      if (left < WALL_ANCHOR) anchor = 'left'
-      else if (right < WALL_ANCHOR) anchor = 'right'
-
-      if (anchor === 'left') {
-        max = Math.min(max, right - BUBBLE_PAD)
-      } else if (anchor === 'right') {
-        max = Math.min(max, left - BUBBLE_PAD)
-      } else {
-        max = Math.min(max, 2 * Math.min(left, right) - BUBBLE_PAD * 2)
-      }
-
-      const screenMax = BUBBLE_SCREEN_MAX_PX / scale
-      max = Math.max(72, Math.min(max, screenMax))
-      out.set(p.key, { lift, max, anchor })
-    })
+    const room = ROOMS.find((r) => r.id === p.room)!
+    const row = placed.filter((o) => o !== p && o.room === p.room && o.y === p.y)
+    const left = Math.min(p.x - room.x - 12, ...row.filter((o) => o.x < p.x).map((o) => (p.x - o.x) / 2))
+    const right = Math.min(room.x + room.w - p.x - 12, ...row.filter((o) => o.x > p.x).map((o) => o.x - p.x - 46))
+    const centred = 2 * Math.min(left, right)
+    if (right + 38 > centred + 24) out.set(p.key, { width: Math.min(right + 38, 300), start: true })
+    else out.set(p.key, { width: centred, start: false })
   }
   return out
+}
+
+const CALLOUT_CHAR = 6.9
+
+/** Callout for a walked route: set on the longest corridor run, cut to fit it. */
+function callout(r: Route) {
+  let best = { x: r.points[0][0], y: r.points[0][1], len: 0 }
+  r.points.slice(1).forEach((pt, i) => {
+    const prev = r.points[i]
+    if (pt[1] !== prev[1]) return
+    const len = Math.abs(pt[0] - prev[0])
+    if (len > best.len) best = { x: (pt[0] + prev[0]) / 2, y: pt[1], len }
+  })
+  const fit = Math.floor((best.len - 12) / CALLOUT_CHAR)
+  const text = r.label.length > fit ? (fit > r.short.length ? r.label.slice(0, fit - 1) + '…' : r.short) : r.label
+  return { x: best.x, y: best.y + 4, text }
 }
 
 type Props = {
@@ -254,257 +83,309 @@ type Props = {
   overflow: Partial<Record<RoomId, number>>
   health?: Health
   selected?: string
+  now: number
+  live: boolean
   onSelect: (key: string) => void
 }
 
-export function OfficeMap({ placed, overflow, health, selected, onSelect }: Props) {
-  const frame = useRef<HTMLDivElement>(null)
-  const [scale, setScale] = useState(1)
-  const [hot, setHot] = useState<string>()
-  const [hint, setHint] = useState({ left: false, right: false })
+export function OfficeMap({ placed, overflow, health, selected, now, live, onSelect }: Props) {
+  const nodes = useRef(new Map<string, SVGGElement>())
+  const previous = useRef(new Map<string, { room: RoomId; x: number; y: number }>())
+  const [routes, setRoutes] = useState<Route[]>([])
 
-  useEffect(() => {
-    const el = frame.current
-    if (!el) return
-    const fit = () => setScale(Math.min(1.5, Math.max(0.6, el.clientWidth / MAP.w)))
-    fit()
-    const observer = new ResizeObserver(fit)
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [])
-
-  // Keep the important room in view when it (or the scale) changes.
-  const importantRoom = useMemo<RoomId | undefined>(() => {
-    const approval = placed.find((p) => p.approval)?.room
-    if (approval) return approval
-    return placed.find((p) => p.key === selected)?.room
-  }, [placed, selected])
-
-  useEffect(() => {
-    const el = frame.current
-    const roomId = importantRoom
-    if (!el || !roomId) return
-    const room = ROOMS.find((r) => r.id === roomId)
-    if (!room) return
-    const target = room.x * scale + (room.w * scale) / 2 - el.clientWidth / 2
-    const max = el.scrollWidth - el.clientWidth
-    el.scrollLeft = Math.max(0, Math.min(max, target))
-  }, [importantRoom, scale])
-
-  // Show edge fades and a scroll affordance whenever the map overflows the frame.
-  useEffect(() => {
-    const el = frame.current
-    if (!el) return
-    const update = () => {
-      const left = el.scrollLeft > 1
-      const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 1
-      setHint((h) => (h.left === left && h.right === right ? h : { left, right }))
+  // Signature move: when a committed event moves an agent to another room, it walks
+  // there through the doors and corridors, leaving its route drawn for a moment.
+  useLayoutEffect(() => {
+    const fresh: Route[] = []
+    for (const p of placed) {
+      const before = previous.current.get(p.key)
+      previous.current.set(p.key, { room: p.room, x: p.x, y: p.y })
+      if (!before || before.room === p.room) continue
+      const from = ROOMS.find((r) => r.id === before.room)!
+      const to = ROOMS.find((r) => r.id === p.room)!
+      const points = route(from, to, [before.x, before.y], [p.x, p.y])
+      const short = `${p.agent.agent} → ${to.label}`
+      fresh.push({ id: Date.now() + Math.random(), key: p.key, points, short, label: p.task ? `${short} · ${p.task.title}` : short })
+      const node = nodes.current.get(p.key)
+      if (!node || reducedMotion()) continue
+      const lengths = points.slice(1).map((pt, i) => Math.hypot(pt[0] - points[i][0], pt[1] - points[i][1]))
+      const total = lengths.reduce((a, b) => a + b, 0) || 1
+      let run = 0
+      const frames = points.map((pt, i) => {
+        if (i > 0) run += lengths[i - 1]
+        return { transform: `translate(${pt[0]}px, ${pt[1]}px)`, offset: run / total }
+      })
+      node.animate(frames, { duration: Math.min(2400, 600 + total * 2.2), easing: 'cubic-bezier(0.22, 1, 0.36, 1)' })
     }
-    update()
-    el.addEventListener('scroll', update, { passive: true })
-    const observer = new ResizeObserver(update)
-    observer.observe(el)
-    return () => {
-      el.removeEventListener('scroll', update)
-      observer.disconnect()
-    }
-  }, [scale])
+    if (fresh.length) setRoutes((list) => [...list.filter((r) => !fresh.some((f) => f.key === r.key)), ...fresh])
+  }, [placed])
 
-  const layout = useMemo(() => bubbleLayout(placed, scale), [placed, scale])
+  useEffect(() => {
+    if (!routes.length) return
+    const id = window.setTimeout(() => setRoutes([]), 6000)
+    return () => window.clearTimeout(id)
+  }, [routes])
+
   const count = useMemo(
     () => (room: RoomId) => placed.filter((p) => p.room === room).length + (overflow[room] ?? 0),
     [placed, overflow],
   )
-  const occupiedRooms = useMemo(() => ROOMS.filter((r) => count(r.id) > 0), [count])
-  const plates = useMemo(() => {
-    const seen = new Set<RoomId>()
-    const out: { room: RoomId; text: string }[] = []
-    for (const p of placed) {
-      if (p.plate && !seen.has(p.room)) {
-        seen.add(p.room)
-        out.push({ room: p.room, text: p.plate.text })
-      }
+
+  const occupancy = (id: RoomId) => {
+    const n = count(id)
+    if (id === 'pantry') return 'Break room'
+    if (id === 'server') return 'Storage'
+    if (n === 0) return 'Empty'
+    const stale = placed.filter((p) => p.room === id && p.tone === 'unknown').length + (id === 'lounge' ? overflow.lounge ?? 0 : 0)
+    if (id === 'approvals') {
+      const asking = placed.filter((p) => p.room === id && p.approval).length
+      return `${n} ${n === 1 ? 'agent' : 'agents'}${asking ? ` · ${asking} asking you` : ''}`
     }
-    return out
-  }, [placed])
+    return `${n} ${n === 1 ? 'agent' : 'agents'}${stale && stale === n ? ' · no recent signal' : ''}`
+  }
 
-  const redis: LedState = health?.redis === 'connected' ? 'on' : health?.redis === 'unavailable' ? 'fault' : 'off'
-  const mongo: LedState = health ? 'on' : 'off'
-  const racks = [
-    { x: 770, state: mongo },
-    { x: 810, state: mongo },
-    { x: 900, state: redis },
-  ]
-
-  const scrollToRoom = (room: Room) => {
-    const el = frame.current
-    if (!el) return
-    const target = room.x * scale + (room.w * scale) / 2 - el.clientWidth / 2
-    const max = el.scrollWidth - el.clientWidth
-    el.scrollLeft = Math.max(0, Math.min(max, target))
+  const signals = useMemo(() => signalLayout(placed), [placed])
+  const redis = health?.redis ?? 'unknown'
+  const select = (key: string) => (e: KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      onSelect(key)
+    }
   }
 
   return (
-    <div className="map-wrap">
-      <div
-        className={`map-frame${hint.left ? ' is-scroll-left' : ''}${hint.right ? ' is-scroll-right' : ''}`}
-        ref={frame}
-      >
-        {/* Below the legible minimum scale the map scrolls sideways instead of being clipped. */}
-        <div
-          className="map-size"
-          style={{ width: MAP.w * scale, height: MAP.h * scale, '--map-scale': scale } as CSSProperties}
-        >
-          <div className="map" style={{ width: MAP.w, height: MAP.h, transform: `scale(${scale})` }}>
-            <div className="hall" />
-            {ROOMS.map((room) => (
-              <div
-                key={room.id}
-                className={`room floor-${room.floor}${room.h < 120 ? ' room-short' : ''}`}
-                style={{ left: room.x, top: room.y, width: room.w, height: room.h }}
-              >
-                <span className="wall" />
-                <span className="room-label">
-                  {room.label}
-                  {count(room.id) > 0 && room.id !== 'server' && room.id !== 'pantry' ? ` · ${count(room.id)}` : ''}
-                  {room.id === 'server' && health ? ` · MongoDB ok · Redis ${health.redis}` : ''}
-                </span>
-                {overflow[room.id] ? <span className="room-more">+{overflow[room.id]} more</span> : null}
-              </div>
-            ))}
-            {DOORS.map(([x, y]) => (
-              <div key={`door${x}-${y}`} className="door" style={{ left: x - 4, top: y }} />
-            ))}
-            {BLOCKS.map((b, i) => (
-              <div key={i} className={`block ${b.cls}`} style={{ left: b.x, top: b.y, width: b.w, height: b.h }} />
-            ))}
-            {GLOWS.map((g, i) => (
-              <div key={'glow' + i} className={`glow glow-${g.tone}`} style={{ left: g.x, top: g.y, width: g.w, height: g.h }} />
-            ))}
-            {racks.map((r) => (
-              <div key={'ledglow' + r.x} className={`glow glow-led-${r.state}`} style={{ left: r.x - 25, top: 572, width: 80, height: 52 }} />
-            ))}
-            <div className="cable-tray" />
-            {racks.map((r) => (
-              <div key={'drop' + r.x} className="cable-drop" style={{ left: r.x + 14 }} />
-            ))}
-            {DECOR.map((p, i) => (
-              <div key={'decor' + i} className={`decor decor-${p.item}`} style={{ left: p.x, top: p.y, '--d': `${-(i % 7) * 0.9}s` } as CSSProperties}>
-                <Sprite map={FURNITURE[p.item].map} palette={FURNITURE[p.item].palette} classes={p.classes} />
-              </div>
-            ))}
-            {PLANTS.map(([x, y], i) => (
-              <Plant key={'plant' + i} x={x} y={y} i={i} />
-            ))}
-            <div className="decor clock-wrap" style={{ left: 230, top: 38 }}>
-              <Clock />
-            </div>
-            <div className="decor fan" style={{ left: 596, top: 562 }}>
-              <Sprite map={FURNITURE.fanA.map} palette={FURNITURE.fanA.palette} className="fan-a" />
-              <Sprite map={FURNITURE.fanB.map} palette={FURNITURE.fanB.palette} className="fan-b" />
-            </div>
-            {racks.map((r, i) => (
-              <div key={'rack' + i} className={`decor rack rack-${r.state}`} style={{ left: r.x, top: 556, '--d': `${-i * 0.45}s` } as CSSProperties}>
-                <Sprite map={FURNITURE.rack.map} palette={rackPalette(r.state)} classes={RACK_CLASSES} />
-              </div>
-            ))}
-            <span className="rack-tag" style={{ left: 770, width: 70 }}>
-              MongoDB
-            </span>
-            <span className="rack-tag" style={{ left: 885, width: 60 }}>
-              Redis
-            </span>
-            {PROPS.map((p, i) => (
-              <div key={'prop' + i} className="prop" style={{ left: p.x, top: p.y, '--d': `${-((i * 0.53) % 4)}s` } as CSSProperties}>
-                <Sprite map={FURNITURE[p.item].map} palette={FURNITURE[p.item].palette} classes={p.classes} />
-              </div>
-            ))}
-            {placed.map((p) => (
-              <button
-                key={p.key}
-                type="button"
-                className={`agent tone-${p.tone}${p.agent.status === 'stale' ? ' is-stale' : ''}${selected === p.key ? ' is-selected' : ''}`}
-                style={{ transform: `translate(${p.x}px, ${p.y}px)` }}
-                onClick={() => onSelect(p.key)}
-                onMouseEnter={() => setHot(p.key)}
-                onMouseLeave={() => setHot(undefined)}
-                onFocus={() => setHot(p.key)}
-                onBlur={() => setHot(undefined)}
-                aria-pressed={selected === p.key}
-                aria-label={`${p.agent.agent}, ${p.state}${p.task ? ': ' + p.task.title : ''}, in ${p.room}`}
-              >
-                <AgentSprite agent={p.agent.agent} animate={p.fresh} />
-              </button>
-            ))}
-            {/* One summary plate per room for crowds of stale agents. */}
-            <div className="room-plates" aria-hidden="true">
-              {plates.map(({ room, text }) => {
-                const r = ROOMS.find((x) => x.id === room)!
-                return (
-                  <div
-                    key={room}
-                    className="room-plate tone-gray"
-                    style={{ left: r.x, top: r.y, width: r.w, height: r.h }}
-                  >
-                    <span className="room-plate-text">{text}</span>
-                  </div>
-                )
-              })}
-            </div>
-            {/* Bubbles and name tags float above all furniture; the button above carries the accessible name. */}
-            <div className="agent-tags" aria-hidden="true">
-              {placed.map((p) => {
-                const l = layout.get(p.key)
-                const open = hot === p.key || selected === p.key
-                return (
-                  <div
-                    key={p.key}
-                    className={`agent-tag tone-${p.tone}${l?.lift ? ' lift' : ''}${open ? ' is-open' : ''}${p.plate ? ' is-plated' : ''} anchor-${l?.anchor ?? 'center'}`}
-                    style={{ transform: `translate(${p.x}px, ${p.y}px)`, '--bw': `${l?.max ?? 260}px` } as CSSProperties}
-                  >
-                    <span
-                      className="bubble"
-                      onClick={() => onSelect(p.key)}
-                      onMouseEnter={() => setHot(p.key)}
-                      onMouseLeave={() => setHot(undefined)}
-                    >
-                      <span className="bubble-text">{p.bubble}</span>
-                    </span>
-                    <span className="nametag" onClick={() => onSelect(p.key)}>
-                      {p.agent.agent}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
-      {(hint.left || hint.right) && (
-        <div className="map-hint" aria-hidden="true">
-          <span>scroll for more rooms</span>
-        </div>
-      )}
-      {occupiedRooms.length > 0 && (
-        <div className="map-rooms" role="group" aria-label="Occupied rooms">
-          {occupiedRooms.map((room) => (
-            <button
-              key={room.id}
-              type="button"
-              className="map-room"
-              onClick={() => scrollToRoom(room)}
-              title={`Scroll to ${room.label}`}
-            >
-              {room.label}
-              <span className="map-room-count">{count(room.id)}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
+    <svg
+      className="plan"
+      viewBox={`0 0 ${PLAN.w} ${PLAN.h}`}
+      role="group"
+      aria-label="Floor plan: each agent stands in the room of its verified state"
+    >
+      <defs>
+        <pattern id="plan-hatch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <rect width="4" height="4" className="hatch-ground" />
+          <line x1="0" y1="0" x2="0" y2="4" className="hatch-line" />
+        </pattern>
+        <marker id="plan-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+          <path d="M0 1L9 5L0 9z" className="route-head" />
+        </marker>
+      </defs>
 
-export function Logo() {
-  return <Sprite map={FURNITURE.logo.map} palette={FURNITURE.logo.palette} scale={3} />
+      {/* Building shell, corridors and the west hall */}
+      <rect className="wall-outer" x={BUILDING.x} y={BUILDING.y} width={BUILDING.w} height={BUILDING.h} />
+      <rect className="wall-inner" x={BUILDING.x} y={BUILDING.y} width={BUILDING.w} height={BUILDING.h} />
+      {ROOMS.map((room) => (
+        <g key={room.id} className={'room room-' + room.id}>
+          <rect className="room-floor" x={room.x} y={room.y} width={room.w} height={room.h} />
+          <rect className="wall-outer" x={room.x} y={room.y} width={room.w} height={room.h} />
+          <rect className="wall-inner" x={room.x} y={room.y} width={room.w} height={room.h} />
+          {room.doors.map((d) => {
+            // The door sits in the wall that faces its corridor and swings into the room.
+            const bottom = CORRIDOR[d.corridor] > room.y + room.h / 2
+            const wallY = bottom ? room.y + room.h : room.y
+            const dir = bottom ? -1 : 1
+            const x0 = d.x - ROOM_GAP / 2
+            return (
+              <g key={d.corridor} className="door">
+                <rect className="door-gap" x={x0} y={wallY - BAND / 2 - 1} width={ROOM_GAP} height={BAND + 2} />
+                <path
+                  className="door-swing"
+                  d={`M${x0} ${wallY}v${dir * ROOM_GAP}M${x0} ${wallY + dir * ROOM_GAP}A${ROOM_GAP} ${ROOM_GAP} 0 0 ${dir > 0 ? 0 : 1} ${x0 + ROOM_GAP} ${wallY}`}
+                />
+              </g>
+            )
+          })}
+          <text className={'room-name' + (room.id === 'approvals' && placed.some((p) => p.approval) ? ' is-asking' : '')} x={room.x + 16} y={room.y + 26}>
+            {room.label.toUpperCase()}
+          </text>
+          <text className="room-occupancy" x={room.x + 16} y={room.y + 42}>
+            {occupancy(room.id)}
+          </text>
+          {overflow[room.id] ? (
+            <text className="room-more" x={room.x + room.w - 14} y={room.y + 26} textAnchor="end">
+              +{overflow[room.id]} more · see Agents
+            </text>
+          ) : null}
+        </g>
+      ))}
+
+      {FURNITURE.map((f, i) => (
+        <rect key={i} className="furniture" x={f.x} y={f.y} width={f.w} height={f.h} rx={f.round ? f.h / 2 : 1} />
+      ))}
+
+      {/* Server room: storage health from the server's own report */}
+      <g className="racks" transform="translate(652 566)">
+        <rect className="furniture" width={150} height={66} />
+        <path className="furniture" d="M0 33h150" />
+        <circle cx={14} cy={17} r={4} className={health ? 'led led-ok' : 'led led-unknown'} />
+        <text className="rack-text" x={26} y={21}>
+          MongoDB {health ? 'ok' : 'unknown'}
+        </text>
+        <circle
+          cx={14}
+          cy={50}
+          r={4}
+          className={'led ' + (redis === 'connected' ? 'led-ok' : redis === 'unavailable' ? 'led-fault' : 'led-unknown')}
+        />
+        <text className={'rack-text' + (redis === 'connected' ? '' : ' is-quiet')} x={26} y={54}>
+          Redis {redis}
+        </text>
+      </g>
+
+      {routes.map((r) => {
+        const c = callout(r)
+        return (
+          <g key={r.id} className="route-group">
+            <polyline className="route" points={r.points.map((p) => p.join(',')).join(' ')} markerEnd="url(#plan-arrow)" />
+            <rect
+              className="route-callout-back"
+              x={c.x - (c.text.length * CALLOUT_CHAR) / 2 - 6}
+              y={c.y - 12}
+              width={c.text.length * CALLOUT_CHAR + 12}
+              height={17}
+            />
+            <text className="route-callout" x={c.x} y={c.y} textAnchor="middle">
+              {c.text}
+            </text>
+          </g>
+        )
+      })}
+      {/* Corridor labels are knocked out of the linework so a route never hides them. */}
+      <text className="corridor-label" x={62} y={CORRIDOR.north + 3}>
+        NORTH CORRIDOR
+      </text>
+      <text className="corridor-label" x={62} y={CORRIDOR.south + 3}>
+        SOUTH CORRIDOR
+      </text>
+      <text className="corridor-label" transform={`translate(${HALL_X + 3} 350) rotate(-90)`}>
+        WEST HALL
+      </text>
+
+
+      {placed.map((p) => {
+        const minutes = minutesAgo(p.agent.last_seen, now)
+        const length = dimension(minutes)
+        const isSelected = selected === p.key
+        return (
+          <g
+            key={p.key}
+            ref={(node) => {
+              if (node) nodes.current.set(p.key, node)
+              else nodes.current.delete(p.key)
+            }}
+            className={`agent tone-${p.tone}${isSelected ? ' is-selected' : ''}${p.fresh && live ? ' is-fresh' : ''}`}
+            style={{ transform: `translate(${p.x}px, ${p.y}px)` }}
+            role="button"
+            tabIndex={0}
+            aria-pressed={isSelected}
+            aria-label={`${p.agent.agent}, ${p.state}${p.task ? ': ' + p.task.title : ''}, in ${ROOMS.find((r) => r.id === p.room)?.label}, last signal ${minutes} minutes ago`}
+            onClick={() => onSelect(p.key)}
+            onKeyDown={select(p.key)}
+          >
+            <rect className="hit" x={-46} y={-32} width={92} height={92} />
+            <circle className="focus-ring" cy={-12} r={22} />
+            <circle className="select-ring" cy={-12} r={20} />
+            <FigureGlyph agent={p.agent.agent} unknown={p.tone === 'unknown'} />
+            <circle className="pip" cx={11} cy={-24} r={3.6} />
+            <rect className="plate" x={-38} y={5} width={76} height={18} />
+            <text className="plate-name" y={18}>
+              {p.agent.agent.length > 11 ? p.agent.agent.slice(0, 10) + '…' : p.agent.agent}
+            </text>
+            {/* Stale figures carry no per-agent line: the room tag already says there is no recent signal. */}
+            {p.tone !== 'unknown' && (
+              <text
+                className="signal"
+                x={signals.get(p.key)?.start ? -38 : 0}
+                y={37}
+                textAnchor={signals.get(p.key)?.start ? 'start' : 'middle'}
+              >
+                {cut(p.signal, signals.get(p.key)?.width ?? 100)}
+              </text>
+            )}
+            <g className="dimension" transform="translate(0 47)">
+              <path d={`M${-length / 2} -3v6M${length / 2} -3v6M${-length / 2} 0H-13M13 0H${length / 2}`} />
+              <text y={3.5}>{minutes > 99 ? '99m+' : `${minutes}m`}</text>
+            </g>
+          </g>
+        )
+      })}
+
+      {/* Legend and title block */}
+      <g className="legend" transform="translate(16 698)">
+        <text className="sheet-head" y={10}>
+          LEGEND
+        </text>
+        <circle className="key-working" cx={5} cy={30} r={4.5} />
+        <text x={16} y={34}>
+          working
+        </text>
+        <circle className="key-attention" cx={92} cy={30} r={4.5} />
+        <text x={103} y={34}>
+          asks you
+        </text>
+        <circle className="key-flight" cx={176} cy={30} r={3.6} />
+        <text x={187} y={34}>
+          reviewing, handing off
+        </text>
+        <circle className="key-fault" cx={340} cy={30} r={4.5} />
+        <text x={351} y={34}>
+          fault
+        </text>
+        <rect className="key-unknown" x={400} y={25} width={10} height={10} />
+        <text x={416} y={34}>
+          stale, unknown
+        </text>
+        {[
+          [1, '1m'],
+          [10, '10m'],
+          [60, '1h'],
+        ].map(([m, label], i) => {
+          const w = dimension(m as number)
+          const x = [0, 52, 132][i]
+          return (
+            <g key={label} className="dimension" transform={`translate(${x + w / 2} 60)`}>
+              <path d={`M${-w / 2} -3v6M${w / 2} -3v6M${-w / 2} 0H-12M12 0H${w / 2}`} />
+              <text y={3.5}>{label}</text>
+            </g>
+          )
+        })}
+        <text x={238} y={64}>
+          minutes since the last verified signal
+        </text>
+      </g>
+      <g className="title-block" transform="translate(520 682)">
+        <rect width={304} height={92} />
+        <path d="M0 46h304M150 0v92M234 46v46" />
+        <text className="tb-key" x={10} y={16}>
+          PROJECT
+        </text>
+        <text className="tb-mono" x={10} y={35}>
+          {health ? health.project_id.slice(0, 12) : 'unknown'}
+        </text>
+        <text className="tb-key" x={160} y={16}>
+          DRAWING
+        </text>
+        <text className="tb-value" x={160} y={36}>
+          OFFICE · LEVEL 1
+        </text>
+        <text className="tb-key" x={10} y={62}>
+          SHEET
+        </text>
+        <text className="tb-value" x={10} y={82}>
+          MISSION CONTROL
+        </text>
+        <text className="tb-key" x={160} y={62}>
+          STATUS
+        </text>
+        <text className={'tb-mono ' + (live ? 'is-live' : 'is-off')} x={160} y={81}>
+          {live ? 'live' : 'not live'}
+        </text>
+        <text className="tb-key" x={244} y={62}>
+          REV
+        </text>
+        <text className="tb-rev" x={244} y={84}>
+          {health?.revision ?? '…'}
+        </text>
+      </g>
+    </svg>
+  )
 }

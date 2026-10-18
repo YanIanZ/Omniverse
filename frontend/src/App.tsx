@@ -9,7 +9,7 @@ import {
   api,
 } from './api'
 import { place } from './office'
-import { Logo } from './OfficeMap'
+import { Logo } from './Figure'
 import { useLive } from './useLive'
 import { AgentsView, ApprovalsView, EventsView, MemoryView, OfficeView, TasksView } from './views'
 
@@ -30,6 +30,8 @@ export type Store = {
   now: number
   /** False until the first snapshot arrives, so views never present "nothing" before they know. */
   loaded: boolean
+  /** True while the live event stream is connected. */
+  live: boolean
   report: (e: unknown) => void
   refresh: () => Promise<void>
 }
@@ -99,8 +101,8 @@ export function App() {
     [report],
   )
   const connection = useLive(health?.project_id, onEvent, refresh)
+  const store: Store = { health, agents, tasks, approvals, events, now, loaded, live: connection === 'live', report, refresh }
 
-  const store: Store = { health, agents, tasks, approvals, events, now, loaded, report, refresh }
   const office = useMemo(() => place(agents, tasks, approvals, events, now), [agents, tasks, approvals, events, now])
   const pending = approvals.filter((a) => a.status === 'pending').length
   const present = agents.filter((a) => a.status !== 'offline')
@@ -109,7 +111,7 @@ export function App() {
   if (unauthorized) {
     return (
       <main className="signin">
-        <Logo />
+        <Logo size={48} />
         <h1>OmniMemo is locked</h1>
         <p>
           This browser has no session. Run <kbd>om office</kbd> in your project; it opens Mission Control already
@@ -136,7 +138,7 @@ export function App() {
       </a>
       <nav className="rail" aria-label="Mission Control">
         <div className="brand">
-          <Logo />
+          <Logo size={30} />
           <div>
             <div className="brand-name">OmniMemo</div>
             <div className="brand-sub">Mission Control</div>
