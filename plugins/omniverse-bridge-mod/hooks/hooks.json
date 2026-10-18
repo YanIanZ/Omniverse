@@ -1,0 +1,6 @@
+{
+  "description": "Omniverse agent cards module",
+  "modules": [
+    "./register.js"
+  ]
+}

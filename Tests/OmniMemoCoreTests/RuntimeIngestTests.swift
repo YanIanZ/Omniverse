@@ -1,0 +1,211 @@
+import XCTest
+
+@testable import OmniMemoCore
+
+final class RuntimeIngestTests: XCTestCase {
+  private func fixture(mongo: Bool) async throws -> MemoryStore {
+    let root: URL
+    let store: MemoryStore
+    if mongo {
+      (root, store) = try await MongoTests().fixture()
+    } else {
+      let (data, _, sqlite) = try await SQLiteTests().fixture()
+      root = data.deletingLastPathComponent()
+      store = sqlite
+    }
+    addTeardownBlock {
+      await store.close()
+      try? FileManager.default.removeItem(at: root)
+    }
+    try await store.ensureRuntimeIndexes()
+    return store
+  }
+
+  private func event(_ type: String = "prompt.received") -> RuntimeEventInput {
+    RuntimeEventInput(source: "test_adapter", provider: "codex", externalSessionID: "session1", eventType: type)
+  }
+
+  func testSQLiteAcceptAndDeduplicate() async throws { try await acceptAndDeduplicate(mongo: false) }
+  func testMongoAcceptAndDeduplicate() async throws { try await acceptAndDeduplicate(mongo: true) }
+
+  private func acceptAndDeduplicate(mongo: Bool) async throws {
+    let store = try await fixture(mongo: mongo)
+    var input = event("tool.started")
+    input.modelID = "test-model"
+    input.metadata = ["tool_category": .string("file_read")]
+    let result = try await store.ingest(input)
+    XCTAssertTrue(result.accepted)
+    XCTAssertFalse(result.duplicate)
+    XCTAssertEqual(result.status, "working")
+    XCTAssertNotNil(result.cursor)
+    let before = try await store.runtimeAgents()
+    let revision = try await store.latestRevision()
+    input.eventID = input.eventID.uppercased()
+    let duplicate = try await store.ingest(input)
+    XCTAssertFalse(duplicate.accepted)
+    XCTAssertTrue(duplicate.duplicate)
+    XCTAssertNil(duplicate.cursor)
+    let after = try await store.runtimeAgents()
+    let afterRevision = try await store.latestRevision()
+    XCTAssertEqual(afterRevision, revision)
+    XCTAssertEqual(after.first?.runtimeID, before.first?.runtimeID)
+    XCTAssertEqual(after.first?.lastSeen, before.first?.lastSeen)
+    XCTAssertEqual(after.first?.eventCount, 1)
+    XCTAssertEqual(after.first?.toolCategory, "file_read")
+    XCTAssertEqual(after.first?.model, "test-model")
+    // Dedup scope includes both provider and external session, not just event UUID.
+    input.externalSessionID = "session2"
+    let otherSession = try await store.ingest(input)
+    XCTAssertTrue(otherSession.accepted)
+    input.provider = "claude"
+    let otherProvider = try await store.ingest(input)
+    XCTAssertTrue(otherProvider.accepted)
+    let cards = try await store.runtimeAgents()
+    XCTAssertEqual(cards.count, 3)
+    XCTAssertEqual(Set(cards.compactMap(\.runtimeID)).count, 3)
+  }
+
+  func testSQLiteOlderEventsPreserveState() async throws { try await olderEvents(mongo: false) }
+  func testMongoOlderEventsPreserveState() async throws { try await olderEvents(mongo: true) }
+
+  private func olderEvents(mongo: Bool) async throws {
+    let store = try await fixture(mongo: mongo)
+    let format = ISO8601DateFormatter()
+    let timestamp = Date().addingTimeInterval(-30)
+    var latest = event("turn.completed")
+    latest.sequence = 10
+    latest.occurredAt = format.string(from: timestamp)
+    latest.modelID = "current-model"
+    _ = try await store.ingest(latest)
+    var reordered = event("tool.started")
+    reordered.sequence = 9
+    reordered.occurredAt = format.string(from: timestamp.addingTimeInterval(10))
+    reordered.modelID = "old-model"
+    reordered.metadata = ["tool_category": .string("shell")]
+    _ = try await store.ingest(reordered)
+    var older = reordered
+    older.eventID = UUID().uuidString
+    older.sequence = 11
+    older.occurredAt = format.string(from: timestamp.addingTimeInterval(-10))
+    _ = try await store.ingest(older)
+    let sessions = try await store.agents()
+    let session = try XCTUnwrap(sessions.first)
+    XCTAssertEqual(session.status, "waiting")
+    XCTAssertEqual(session.lastEvent, "turn.completed")
+    XCTAssertEqual(session.lastSequence, 10)
+    XCTAssertEqual(session.model, "current-model")
+    XCTAssertNil(session.toolCategory)
+    XCTAssertEqual(session.eventCount, 3, "older events are still recorded")
+    let events = try await store.events(after: 0)
+    XCTAssertEqual(events.count, 3)
+    var next = event("approval.requested")
+    next.sequence = 12
+    _ = try await store.ingest(next)
+    let cards = try await store.runtimeAgents()
+    XCTAssertEqual(cards.first?.status, "blocked")
+  }
+
+  func testSQLiteStaleIsDerivedByObservability() async throws { try await stale(mongo: false) }
+  func testMongoStaleIsDerivedByObservability() async throws { try await stale(mongo: true) }
+
+  private func stale(mongo: Bool) async throws {
+    let store = try await fixture(mongo: mongo)
+    let format = ISO8601DateFormatter()
+    for (id, mode, age, status) in [
+      ("managed-old", "managed", 60.0, "working"),
+      ("managed-fresh", "managed", 10.0, "working"),
+      ("passive-fresh", "passive", 60.0, "waiting"),
+      ("passive-old", "passive", 660.0, "blocked"),
+      ("ended", "managed", 660.0, "offline"),
+    ] {
+      var session = AgentSession(
+        agent: "codex", sessionID: id, status: status, source: "test_adapter",
+        firstSeen: format.string(from: Date().addingTimeInterval(-1000)),
+        lastSeen: format.string(from: Date().addingTimeInterval(-age)))
+      session.observability = mode
+      try await store.backend.save(session: session, project: store.binding.id)
+    }
+    let cards = try await store.runtimeAgents()
+    let states = Dictionary(uniqueKeysWithValues: cards.map { ($0.sessionID, $0.status) })
+    XCTAssertEqual(states, ["managed-old": "stale", "managed-fresh": "working",
+      "passive-fresh": "waiting", "passive-old": "stale", "ended": "offline"])
+    let durable = try await store.backend.session(project: store.binding.id, agent: "codex", session: "managed-old")
+    XCTAssertEqual(durable?.status, "working", "stale is derived without rewriting durable status")
+  }
+
+  func testSQLiteMilestoneProgress() async throws { try await milestones(mongo: false) }
+  func testMongoMilestoneProgress() async throws { try await milestones(mongo: true) }
+
+  private func milestones(mongo: Bool) async throws {
+    let store = try await fixture(mongo: mongo)
+    let task = try await store.createTask(title: "Verify runtime contract")
+    XCTAssertEqual(OmniMemoCore.Progress.of(task.milestones).kind, "indeterminate")
+    XCTAssertNil(OmniMemoCore.Progress.of(task.milestones).percent)
+    _ = try await store.addMilestone(taskID: task.id, title: "Build", weight: 1, agent: "codex")
+    let planned = try await store.addMilestone(taskID: task.id, title: "Test", weight: 2, agent: "codex")
+    let plan = try XCTUnwrap(planned.milestones)
+    XCTAssertEqual(OmniMemoCore.Progress.of(plan).percent, 0)
+    let verified = try await store.setMilestone(taskID: task.id, milestoneID: plan[0].id,
+      verified: true, evidence: "Observed build exit 0", agent: "codex")
+    XCTAssertEqual(OmniMemoCore.Progress.of(verified.milestones).percent, 33)
+    XCTAssertNotNil(verified.milestones?.first?.verifiedAt)
+    var assigned = event("task.assigned")
+    assigned.taskID = task.id
+    _ = try await store.ingest(assigned)
+    var proof = event("milestone.verified")
+    proof.taskID = task.id
+    proof.milestoneID = plan[1].id
+    _ = try await store.ingest(proof)
+    let cards = try await store.runtimeAgents()
+    let progress = try XCTUnwrap(cards.first?.progress)
+    XCTAssertEqual(progress.kind, "determinate")
+    XCTAssertEqual(progress.percent, 100)
+    XCTAssertEqual(progress.completed, 2)
+    XCTAssertEqual(progress.total, 2)
+    XCTAssertEqual(cards.first?.task?.id, task.id)
+    let reverted = try await store.setMilestone(taskID: task.id, milestoneID: plan[0].id,
+      verified: false, evidence: "Build evidence invalidated", agent: "codex")
+    XCTAssertEqual(OmniMemoCore.Progress.of(reverted.milestones).percent, 66)
+    XCTAssertNil(reverted.milestones?.first?.verifiedAt)
+  }
+
+  func testSQLiteRejectedMetadataAndSecrets() async throws { try await rejected(mongo: false) }
+  func testMongoRejectedMetadataAndSecrets() async throws { try await rejected(mongo: true) }
+
+  private func rejected(mongo: Bool) async throws {
+    let store = try await fixture(mongo: mongo)
+    var input = event()
+    input.metadata = ["tool_arguments": .string("must never be stored")]
+    do {
+      _ = try await store.ingest(input)
+      XCTFail("unapproved metadata key accepted")
+    } catch MemoError.invalid(let reason) {
+      XCTAssertTrue(reason.contains("metadata key"))
+    }
+    input.metadata = ["reason": .string("password=synthetic-do-not-store")]
+    do {
+      _ = try await store.ingest(input)
+      XCTFail("secret accepted")
+    } catch {
+      XCTAssertTrue(error.localizedDescription.contains("secret_detected"))
+    }
+    input.metadata = nil
+    input.modelID = "password=synthetic-do-not-store"
+    do {
+      _ = try await store.ingest(input)
+      XCTFail("secret in model label accepted")
+    } catch {
+      XCTAssertTrue(error.localizedDescription.contains("secret_detected"))
+    }
+    let sessions = try await store.runtimeAgents()
+    let events = try await store.events(after: 0)
+    XCTAssertTrue(sessions.isEmpty)
+    XCTAssertTrue(events.isEmpty)
+    // Validation rejection must not consume the dedup key.
+    input.modelID = nil
+    input.metadata = ["tool_category": .string("file_read")]
+    let valid = try await store.ingest(input)
+    XCTAssertTrue(valid.accepted)
+    XCTAssertFalse(valid.duplicate)
+  }
+}

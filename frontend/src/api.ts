@@ -10,13 +10,35 @@ export type Health = {
   revision: string
 }
 
+export type AgentStatus = 'waiting' | 'working' | 'blocked' | 'offline' | 'stale'
+
 export type Agent = {
   agent: string
   session_id: string
-  status: 'ready' | 'active' | 'disconnected' | 'unknown'
+  status: AgentStatus
   source: string
   first_seen: string
   last_seen: string
+  /** Reported by the host adapter; absent means the model is unknown. */
+  model?: string
+  tool_category?: string
+  /** Active context occupancy reported by the host; absence means unknown. */
+  context_used_percent?: number
+  context_window_tokens?: number
+  context_observed_at?: string
+}
+
+// Records written before the runtime bridge still carry the old status names.
+const LEGACY: Record<string, AgentStatus> = {
+  ready: 'waiting',
+  active: 'working',
+  disconnected: 'offline',
+  unknown: 'stale',
+}
+const STATUSES: readonly string[] = ['waiting', 'working', 'blocked', 'offline', 'stale']
+
+export function normalizeStatus(status: string): AgentStatus {
+  return LEGACY[status] ?? (STATUSES.includes(status) ? (status as AgentStatus) : 'stale')
 }
 
 export const PRIORITIES = ['P0', 'P1', 'P2', 'P3'] as const
@@ -90,7 +112,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   health: () => request<Health>('/health'),
-  agents: () => request<Agent[]>('/agents'),
+  agents: () =>
+    request<Agent[]>('/agents').then((list) => list.map((a) => ({ ...a, status: normalizeStatus(a.status) }))),
   tasks: () => request<Task[]>('/tasks'),
   createTask: (title: string, priority: Priority) =>
     request<Task>('/tasks', {

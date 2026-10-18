@@ -113,7 +113,7 @@ final class SQLiteTests: XCTestCase {
     XCTAssertNil(value6)
     _ = try await store.wake(agent: "claude", session: "s1", status: "disconnected", source: "cli")
     let value7 = try await store.agents()
-    XCTAssertEqual(value7.first?.status, "disconnected")
+    XCTAssertEqual(value7.first?.status, "offline")
   }
 
   func testAutoSaveIsOptInAndNeverStoresSecretsOrInflatesCapsules() async throws {

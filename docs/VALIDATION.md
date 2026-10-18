@@ -168,3 +168,36 @@ guide, skills, example configs and tests; features are named instead and OmniMem
 its releases. `omnimem --version`, the MCP server version, the default package path
 (`dist/0.3.0`) and the frontend package are 0.3.0. Re-run after the change: 44 XCTest passed and
 all nine smoke tests passed against `dist/0.3.0/omnimem`.
+
+## Runtime bridge, context rollover and managed Codex (2026-10-19)
+
+Scope: runtime events (v2.3), context rollover P0/P1 (v2.4) and the managed Codex adapter.
+
+- XCTest: 63 passed, 0 failed, 0 skipped (real MongoDB on 27019, REA manifest set). New: `RuntimeIngestTests` (Codex worker) and `ContextRolloverTests`, each on MongoDB and SQLite where it applies.
+- Smoke: all nine passed against a fresh package in `dist/next`. `office_smoke` and `agents_smoke` now assert the new status names; `global_install_smoke` covers `--with-statusline`.
+- HTTP, curl on SQLite:
+  - `POST /api/runtime/events`: 202, then 200 for a duplicate; a disallowed metadata key returns 400.
+  - No token 401; foreign `workspace_id` 403; cookie write without Origin 403.
+  - `/ws/office`: 101 with Origin, 403 without.
+- UI: Playwright at 1440 and 390 (agents, office, memory): no horizontal scroll, no clipped memory cards, zero console errors.
+- Live Codex (codex-cli 0.163.0, `om codex run`):
+  - One-turn run in 8 s: session, task, prompt, shell tool, context 4.8 %, turn completed and session ended.
+  - Timeout interrupt: `turn/interrupt` with `turnId`, then `turn.failed` and exit 1.
+  - Managed rollover forced with `--rollover-at 1`, on SQLite and on MongoDB: an empty child thread acknowledged the digest and finished the task from the capsule alone. The task moved to the child and the parent was retired (`rollover.prepared`, `created`, `completed`).
+
+Bugs found and fixed:
+- MongoDB session saves could never clear a field. The encoder omits nil, so `$set` kept stale `tool_category` and `task_id`. Fields are now `$unset`.
+- `om checkpoint` failed when more than 8 changed files were given, or when one was missing. Evidence is now capped at 8 existing files, and the full list stays in the checkpoint content.
+- Checkpoints in the Memory view showed as raw JSON because the API cut them at 240 characters.
+- Long unbroken paths widened memory cards past the column.
+
+Not verified or not implemented:
+- The OpenCode 2.x plugin wiring for `tool.execute.before/after`. The OpenCode Go quota was exhausted during this run, and the local plugin types are 1.x.
+- Fresh-session launch for Claude Code, OpenCode or Gemini.
+- Compaction guards.
+- Claude status-line capture in a live Claude session: tested with recorded status-line JSON only.
+
+Multi-agent run: tasks and capsules went through the OmniMemo store.
+- Codex (`codex exec`, about 94k and 96k tokens) wrote the runtime tests and docs, and the context UI with the installer opt-in.
+- OpenCode Go `glm-5.3` stopped on its usage limit before editing anything; Claude did that task.
+- Each result was reviewed and re-verified before its task was marked done.

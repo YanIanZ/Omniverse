@@ -73,7 +73,7 @@ with tempfile.TemporaryDirectory(prefix='office space ', dir=workspace) as folde
     assert first.startswith('OmniMemo project context') and 'Stack decision' in first, first
     assert hook('UserPromptSubmit', prompt='again') == '', 'unchanged capsule repeated'
     agents = json.loads(run('agents').stdout)
-    assert [(a['agent'], a['status'], a['source']) for a in agents] == [('claude', 'active', 'claude_hook')]
+    assert [(a['agent'], a['status'], a['source']) for a in agents] == [('claude', 'working', 'claude_hook')]
 
     # Real Redis (temporary, isolated port) to prove the optional live signal works.
     redis = subprocess.Popen(['redis-server', '--port', str(REDIS_PORT), '--bind', '127.0.0.1', '--save', '',
@@ -118,7 +118,7 @@ with tempfile.TemporaryDirectory(prefix='office space ', dir=workspace) as folde
         assert ws_recv(s)['data']['status'] == 'doing'
         run('tasks', 'move', task['id'], 'done', '--revision', '1', ok=False)  # stale revision
         hook('SessionEnd')
-        assert ws_recv(s)['data']['status'] == 'disconnected'
+        assert ws_recv(s)['data']['status'] == 'offline'
         s.close()
     finally:
         redis.terminate(); redis.wait(timeout=10)

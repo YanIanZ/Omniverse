@@ -218,6 +218,21 @@ The installer writes `.codex/config.toml`, `.mcp.json`, two canonical skills in 
 
 Uninstall removes only entries that still match its manifest. Edited managed entries cause a refusal requiring manual review. Backups remain in the Git-ignored `.omnimemo-installer/` directory, with private directories and mode-600 files. Review backups before deleting them if they contain older sensitive settings. Uninstall before reinstalling with a different host/path.
 
+## Runtime events, managed Codex and context rollover
+
+Host hooks report session, prompt, tool and turn activity as normalized runtime events (tool calls by category only, never arguments). Mission Control and `om runtime sessions` show each agent as `client-model` with status (working, waiting, blocked, offline, stale), current task, verified-milestone progress and, separately, reported context usage.
+
+```sh
+om runtime sessions                      # agent cards
+om runtime doctor                        # store, server and route check
+om tasks milestones add <task> "write tests"
+om tasks milestones verify <task> <milestone> --evidence "swift test: 63 passed"
+om codex run --task <task> --prompt "…"  # OmniMemo-managed Codex thread via codex app-server
+om rollover preview                      # bounded handoff capsule for a fresh session
+```
+
+Claude Code context usage comes from the opt-in status line (`install-global.py --with-statusline`, added only when no status line exists). `om codex run --rollover` is the only automatic fresh-session rollover; everything else is manual handoff. Contract and limits: [docs/RUNTIME_EVENTS.md](docs/RUNTIME_EVENTS.md).
+
 ## Context limits
 
 `--max-tokens` accepts 256–16384; a budget too small for metadata is rejected. `estimated_tokens` is a **UTF-8 byte-based upper bound**, rather than a model tokenizer result. It includes text escaping and the MCP envelope, reserving 64 bytes for the request ID; fixture IDs are shorter. Responses may be substantially smaller than a model's capacity. Host tool/skill declarations are outside this per-response budget and must be measured separately when benchmarking total cost.
@@ -240,7 +255,7 @@ python3 Tests/office_smoke.py /Volumes/Ext/DevCache/OmniMemo/dist/0.3.0/omnimem 
 ./scripts/test-mongo.sh stop
 ```
 
-Version 0.3.0 validation: **44 XCTest cases passed, zero failures, zero skips**, plus nine independent smoke tests (including `Tests/office_smoke.py` and `Tests/agents_smoke.py`) against the packaged release. See [validation scope and results](docs/VALIDATION.md). Python 3.11+ is required for the CLI smoke test's TOML parser; the memory core does not require Python. Individual REA tools retain their upstream dependencies.
+Current validation: **63 XCTest cases passed, zero failures, zero skips**, plus nine independent smoke tests (including `Tests/office_smoke.py` and `Tests/agents_smoke.py`) against the packaged release. See [validation scope and results](docs/VALIDATION.md). Python 3.11+ is required for the CLI smoke test's TOML parser; the memory core does not require Python. Individual REA tools retain their upstream dependencies.
 
 Real MongoDB tests cover multiple writer connections, persistence, isolation, deduplication, secret rejection, evidence staleness, cache invalidation, and missing metadata. An independent Python client tests MCP wire behavior and handoff between two subprocesses labeled as Codex/Claude fixtures. These are not live paid conversations with either product. Without `OMNIMEM_TEST_MONGO_URI`, database tests are reported as skipped.
 

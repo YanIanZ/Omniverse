@@ -1,0 +1,8 @@
+{
+  "name": "omniverse-bridge",
+  "version": "0.1.0",
+  "description": "Read-only live agent cards through local OmniMemo bridge. Experimental example.",
+  "author": {
+    "name": "YanIanZ"
+  }
+}

@@ -70,9 +70,9 @@ def servers(host, binary, data, launcher, rea):
 
 # Each host's own documented lifecycle events; every command fails open and never blocks a prompt.
 HOOK_EVENTS={
-    'claude':('SessionStart','UserPromptSubmit','Stop','SessionEnd'),
-    'codex':('SessionStart','UserPromptSubmit','Stop'),
-    'gemini':('SessionStart','BeforeAgent','AfterAgent','SessionEnd'),
+    'claude':('SessionStart','UserPromptSubmit','PreToolUse','PostToolUse','PostToolUseFailure','Stop','SessionEnd'),
+    'codex':('SessionStart','UserPromptSubmit','PreToolUse','PostToolUse','Stop'),
+    'gemini':('SessionStart','BeforeAgent','BeforeTool','AfterTool','AfterAgent','SessionEnd'),
 }
 
 def host_hooks(host, binary, data):
@@ -134,6 +134,23 @@ def plan_file(path, original, expected, uninstall):
     if original is not None and original!=body:raise ValueError('Existing file needs review: '+str(path))
     return path, original, body
 
+def statusline_instruction(path, expected):
+    print('Existing Claude statusLine left untouched in '+str(path)+'. To add OmniMemo manually, compose your status-line command with: '+json.dumps(expected))
+
+def plan_statusline(path, original, expected, uninstall):
+    obj=json.loads((original or b'{}').decode() or '{}')
+    if not isinstance(obj,dict):raise ValueError('Unexpected Claude settings schema: '+str(path))
+    if uninstall:
+        # A user replacement (or deletion) is no longer ours to remove.
+        if obj.get('statusLine')!=expected:return path, original, original
+        del obj['statusLine']
+    else:
+        if 'statusLine' in obj:
+            if obj['statusLine']!=expected:statusline_instruction(path,expected)
+            return path, original, original
+        obj['statusLine']=expected
+    return path, original, encoded(obj)
+
 def plan_hooks(path, original, expected, uninstall):
     obj=json.loads((original or b'{}').decode() or '{}')
     if not isinstance(obj,dict) or not isinstance(obj.setdefault('hooks',{}),dict):
@@ -157,6 +174,7 @@ def plan_entry(path, kind, keys, expected, uninstall, original=...):
     # Intentional host-directory symlinks (e.g. ~/.claude -> Ext) are preserved.
     path = path.resolve()
     if original is ...: original = read(path)
+    if kind=='statusline':return plan_statusline(path, original, expected, uninstall)
     if kind=='hooks':return plan_hooks(path, original, expected, uninstall)
     if kind=='file':return plan_file(path, original, expected, uninstall)
     text = (original or b'').decode()
@@ -212,6 +230,7 @@ def main():
     p.add_argument('--with-rea',action='store_true')
     p.add_argument('--install-skills',action='store_true')
     p.add_argument('--with-hooks',action='store_true',help='Also add Claude Code session/prompt hooks (opt-in).')
+    p.add_argument('--with-statusline',action='store_true',help='Add Claude Code context status line only when none exists (opt-in).')
     p.add_argument('--uninstall',action='store_true')
     p.add_argument('--apply',action='store_true',help='Apply; otherwise preview without writes.')
     args=p.parse_args()
@@ -256,6 +275,16 @@ def main():
             # so presence comes from the MCP connection only; the event plugin ships for 1.x.
             if 'opencode' in selected and layout=='v1':
                 entries.append({'host':'opencode-plugin','path':str((config_dir/'opencode/plugins/omnimemo.js').resolve()),'kind':'file','keys':[],'servers':opencode_plugin(binary,data,layout)})
+        if args.with_statusline:
+            claude_dir=home/'.claude' if args.home else pathlib.Path(os.environ.get('CLAUDE_CONFIG_DIR',str(home/'.claude')))
+            path=(claude_dir/'settings.json').resolve()
+            expected={'type':'command','command':shlex.quote(str(binary))+' --data-dir '+shlex.quote(str(data))+' statusline claude'}
+            entry={'host':'claude-statusline','path':str(path),'kind':'statusline','keys':['statusLine'],'servers':expected}
+            settings=json.loads(read(path) or b'{}')
+            if not isinstance(settings,dict):raise ValueError('Unexpected Claude settings schema: '+str(path))
+            if 'statusLine' not in settings or (manifest and entry in manifest['entries']):
+                entries.append(entry)
+            else:statusline_instruction(path,expected)
         if manifest and any(previous not in json.loads(json.dumps(entries)) for previous in manifest['entries']):
             raise ValueError('Global installation profile changed; uninstall the previous profile first.')
     # Entries sharing one file (e.g. Gemini MCP + hooks) are planned as a chain on that file.

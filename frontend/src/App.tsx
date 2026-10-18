@@ -92,7 +92,8 @@ export function App() {
       setEvents((list) => (list.some((e) => e.event_id === event.event_id) ? list : [event, ...list].slice(0, 200)))
       setHealth((h) => (h ? { ...h, revision: String(event.revision) } : h))
       if (event.type === 'task.updated') void api.tasks().then(setTasks, report)
-      if (event.type === 'agent.status.changed') void api.agents().then(setAgents, report)
+      if (event.type === 'agent.status.changed' || event.type === 'runtime.activity' || event.type === 'context.usage.updated')
+        void api.agents().then(setAgents, report)
       if (event.type.startsWith('approval.')) void api.approvals().then(setApprovals, report)
     },
     [report],
@@ -102,8 +103,8 @@ export function App() {
   const store: Store = { health, agents, tasks, approvals, events, now, loaded, report, refresh }
   const office = useMemo(() => place(agents, tasks, approvals, events, now), [agents, tasks, approvals, events, now])
   const pending = approvals.filter((a) => a.status === 'pending').length
-  const present = agents.filter((a) => a.status !== 'disconnected')
-  const unknown = present.filter((a) => a.status === 'unknown').length
+  const present = agents.filter((a) => a.status !== 'offline')
+  const stale = present.filter((a) => a.status === 'stale').length
 
   if (unauthorized) {
     return (
@@ -177,7 +178,7 @@ export function App() {
             {loaded ? (
               <>
                 {present.length} {present.length === 1 ? 'session' : 'sessions'} present
-                {unknown ? ` · ${unknown} with no recent signal` : ''}
+                {stale ? ` · ${stale} with no recent signal` : ''}
               </>
             ) : (
               'Reading the project…'

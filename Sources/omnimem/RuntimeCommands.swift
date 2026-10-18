@@ -1,4 +1,5 @@
 import ArgumentParser
+import CryptoKit
 import Darwin
 import Foundation
 import OmniMemoCore
@@ -79,7 +80,7 @@ extension OmniMemo {
     @OptionGroup var options: Options
     @Option(help: "Host session identifier; --agent names the provider (e.g. claude).")
     var session: String
-    @Option(help: "ready, active or disconnected.") var status = "ready"
+    @Option(help: "waiting, working, blocked or offline (ready/active/disconnected accepted).") var status = "waiting"
     func run() async throws {
       try await withStore(options) { store in
         try output(
@@ -110,7 +111,7 @@ extension OmniMemo {
   struct Tasks: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
       abstract: "Project tasks with revision-checked updates.",
-      subcommands: [List.self, Add.self, Move.self], defaultSubcommand: List.self)
+      subcommands: [List.self, Add.self, Move.self, Milestones.self], defaultSubcommand: List.self)
     struct List: AsyncParsableCommand {
       @OptionGroup var options: Options
       func run() async throws {
@@ -143,6 +144,117 @@ extension OmniMemo {
             await $0.updateTask(
               id: id, expectedRevision: revision, status: status, owner: owner,
               agent: options.agent))
+        }
+      }
+    }
+    /// Verified-progress plan: progress is the verified share of milestone weight.
+    struct Milestones: AsyncParsableCommand {
+      static let configuration = CommandConfiguration(
+        abstract: "Task milestones; progress counts only verified ones.", subcommands: [Add.self, Verify.self])
+      struct Add: AsyncParsableCommand {
+        @OptionGroup var options: Options
+        @Argument var task: String
+        @Argument var title: String
+        @Option var weight = 1
+        func run() async throws {
+          try await withStore(options) {
+            try output(await $0.addMilestone(taskID: task, title: title, weight: weight, agent: options.agent))
+          }
+        }
+      }
+      struct Verify: AsyncParsableCommand {
+        @OptionGroup var options: Options
+        @Argument var task: String
+        @Argument var milestone: String
+        @Option(help: "What proves it, e.g. a test command and result.") var evidence: String
+        @Flag(help: "Mark it unverified again.") var revert = false
+        func run() async throws {
+          try await withStore(options) {
+            try output(
+              await $0.setMilestone(
+                taskID: task, milestoneID: milestone, verified: !revert, evidence: evidence,
+                agent: options.agent))
+          }
+        }
+      }
+    }
+  }
+
+  /// Runtime bridge: adapter events in, agent cards out (docs/RUNTIME_EVENTS.md).
+  struct Runtime: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+      abstract: "Runtime events from host adapters and the agent cards they produce.",
+      subcommands: [Ingest.self, Sessions.self, Doctor.self])
+    struct Ingest: AsyncParsableCommand {
+      static let configuration = CommandConfiguration(
+        abstract: "Ingest one JSON event or JSONL events from stdin; prints one result per event.")
+      @OptionGroup var options: Options
+      func run() async throws {
+        let input = FileHandle.standardInput.readData(ofLength: 1 << 20 + 1)
+        guard input.count <= 1 << 20 else { throw MemoError.invalid("input over 1 MiB") }
+        let text = String(decoding: input, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        // One (possibly pretty-printed) JSON object is one event; otherwise each line is one event.
+        let single = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) is [String: Any]
+        let lines = single ? [text] : text.split(whereSeparator: \.isNewline).map(String.init)
+        struct Rejected: Encodable {
+          var accepted = false
+          var error: String
+        }
+        var failed = false
+        try await withStore(options) { store in
+          for line in lines where !line.trimmingCharacters(in: .whitespaces).isEmpty {
+            do {
+              let event = try JSONDecoder().decode(RuntimeEventInput.self, from: Data(line.utf8))
+              try output(try await store.ingest(event))
+            } catch is DecodingError {
+              failed = true
+              try output(Rejected(error: "malformed runtime event"))
+            } catch {
+              failed = true
+              try output(Rejected(error: MemoryStore.safeError(error).localizedDescription))
+            }
+          }
+        }
+        if failed { throw ExitCode(1) }
+      }
+    }
+    struct Sessions: AsyncParsableCommand {
+      static let configuration = CommandConfiguration(abstract: "Agent cards with derived stale status.")
+      @OptionGroup var options: Options
+      func run() async throws {
+        try await withStore(options) { try output(await $0.runtimeAgents()) }
+      }
+    }
+    struct Doctor: AsyncParsableCommand {
+      static let configuration = CommandConfiguration(
+        abstract: "Runtime bridge diagnostics without credentials or private paths.")
+      @OptionGroup var options: Options
+      func run() async throws {
+        try await withStore(options) { store in
+          let status = try await store.status()
+          let agents = try await store.runtimeAgents()
+          var report = [
+            "storage": status.backend.lowercased(), "workspace_id": status.projectID,
+            "sessions": String(agents.count),
+            "server": "not running", "server_route": "unknown",
+          ]
+          for state in ["waiting", "working", "blocked", "offline", "stale"] {
+            report["status_" + state] = String(agents.filter { $0.status == state }.count)
+          }
+          if let server = ServerState.read(dataDir: options.dataDir) {
+            report["server"] = "running on 127.0.0.1:\(server.port)"
+            if let token = try? ServerState.token(dataDir: options.dataDir),
+              let url = URL(string: "http://127.0.0.1:\(server.port)/api/runtime/health")
+            {
+              var request = URLRequest(url: url, timeoutInterval: 2)
+              request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+              let code = (try? await URLSession.shared.data(for: request)).flatMap {
+                ($0.1 as? HTTPURLResponse)?.statusCode
+              }
+              report["server_route"] = code == 200 ? "ok" : code.map { "HTTP \($0)" } ?? "unreachable"
+            }
+          }
+          try output(report)
         }
       }
     }
@@ -396,6 +508,131 @@ extension OmniMemo {
     }
   }
 
+  /// Claude Code `statusLine` command: prints one line and records the reported context usage.
+  struct Statusline: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+      abstract: "Status line adapter (stdin JSON). Records reported context usage; never blocks the host.")
+    @OptionGroup var options: Options
+    @Argument(help: "Only claude reports context usage through a status line.") var host: String
+
+    func run() async {
+      let input = FileHandle.standardInput.readData(ofLength: 65537)
+      guard host == "claude", input.count <= 65536,
+        let object = try? JSONSerialization.jsonObject(with: input) as? [String: Any]
+      else { return print("OmniMemo") }
+      let window = object["context_window"] as? [String: Any]
+      let percent = (window?["used_percentage"] as? NSNumber)?.doubleValue
+      let model = object["model"] as? [String: Any]
+      guard let percent else { return print("OmniMemo · ctx unknown") }
+      let level = ContextUsage.level(percent)
+      var line = "OmniMemo · ctx \(Int(percent))%"
+      if level == "handoff" || level == "critical" { line += " · fresh session advised: om rollover prepare" }
+      print(line)
+      guard let session = object["session_id"] as? String,
+        let cwd = ((object["workspace"] as? [String: Any])?["project_dir"] as? String) ?? object["cwd"] as? String,
+        Self.due(dataDir: options.dataDir, session: session, percent: percent),
+        let project = Hook.gitRoot(cwd),
+        let store = try? await MemoryStore.open(dataDir: options.dataDir, project: project)
+      else { return }
+      if (try? await store.recordContext(
+        agent: "claude", session: session, model: model?["id"] as? String, usedPercent: percent,
+        windowTokens: (window?["context_window_size"] as? NSNumber)?.intValue)) != nil
+      {
+        Self.stamp(dataDir: options.dataDir, session: session, percent: percent)
+      }
+      await store.close()
+    }
+
+    /// Local stamp so most refreshes skip opening the store; the store applies the same rule.
+    static func due(dataDir: String, session: String, percent: Double) -> Bool {
+      // The id names a file here, so it must be a plain label.
+      guard (1...128).contains(session.utf8.count),
+        session.range(of: "^[A-Za-z0-9._:-]+$", options: .regularExpression) != nil, !session.hasPrefix(".")
+      else { return false }
+      let folder = canonical(dataDir).appendingPathComponent("statusline")
+      let file = folder.appendingPathComponent(session)
+      let now = Date().timeIntervalSince1970
+      if let text = try? String(contentsOf: file, encoding: .utf8) {
+        let parts = text.split(separator: " ").compactMap { Double($0) }
+        if parts.count == 2, ContextUsage.level(parts[1]) == ContextUsage.level(percent),
+          now - parts[0] < MemoryStore.contextSampleInterval || abs(parts[1] - percent) < 1
+        {
+          return false
+        }
+      }
+      return true
+    }
+
+    static func stamp(dataDir: String, session: String, percent: Double) {
+      let folder = canonical(dataDir).appendingPathComponent("statusline")
+      try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+      try? "\(Date().timeIntervalSince1970) \(percent)".write(
+        to: folder.appendingPathComponent(session), atomically: true, encoding: .utf8)
+    }
+  }
+
+  /// Manual fresh-session handoff near context capacity. Nothing is launched (suggest mode).
+  struct Rollover: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+      abstract: "Prepare a bounded handoff for a fresh session; never launches or controls one.",
+      subcommands: [Preview.self, Prepare.self])
+    struct Target: ParsableArguments {
+      @Option(help: "Host session id whose reported context usage to include.") var session: String?
+      @Option(help: "Provider whose tasks lead the capsule (default: all open tasks).") var provider: String?
+    }
+    struct Preview: AsyncParsableCommand {
+      static let configuration = CommandConfiguration(abstract: "Print the capsule; writes nothing.")
+      @OptionGroup var options: Options
+      @OptionGroup var target: Target
+      func run() async throws {
+        try await withStore(options) { print(try await Rollover.capsule($0, options, target).text, terminator: "") }
+      }
+    }
+    struct Prepare: AsyncParsableCommand {
+      static let configuration = CommandConfiguration(
+        abstract: "Save the capsule as a checkpoint first, then print it with its handoff id.")
+      @OptionGroup var options: Options
+      @OptionGroup var target: Target
+      func run() async throws {
+        try await withStore(options) { store in
+          let capsule = try await Rollover.capsule(store, options, target)
+          let digest = SHA256.hash(data: Data(capsule.text.utf8)).map { String(format: "%02x", $0) }.joined()
+          let saved = try await store.prepareRollover(capsule, agent: options.agent, digest: digest)
+          print(capsule.text + "Handoff: \(saved.id) · digest \(digest.prefix(16)) (\(saved.disposition))")
+        }
+      }
+    }
+
+    static func capsule(_ store: MemoryStore, _ options: Options, _ target: Target) async throws -> ContextCapsule {
+      let root = store.binding.root.path
+      let status = git(root, ["status", "--porcelain"]) ?? ""
+      // Paths only; renames keep the new name, deleted files are not evidence.
+      let files = status.split(separator: "\n").compactMap { line -> String? in
+        guard line.count > 3 else { return nil }
+        let path = String(line.dropFirst(3)).components(separatedBy: " -> ").last!
+        return FileManager.default.fileExists(atPath: root + "/" + path) ? path : nil
+      }
+      return try await store.rolloverCapsule(
+        agent: target.provider ?? (target.session == nil ? nil : "claude"), session: target.session,
+        gitBranch: git(root, ["rev-parse", "--abbrev-ref", "HEAD"]),
+        gitCommit: git(root, ["rev-parse", "--short", "HEAD"]), changedFiles: files)
+    }
+
+    static func git(_ root: String, _ args: [String]) -> String? {
+      let p = Process()
+      p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+      p.arguments = ["-C", root] + args
+      let out = Pipe()
+      p.standardOutput = out
+      p.standardError = FileHandle.nullDevice
+      guard (try? p.run()) != nil else { return nil }
+      let data = out.fileHandleForReading.readDataToEndOfFile()
+      p.waitUntilExit()
+      let text = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+      return p.terminationStatus == 0 && !text.isEmpty ? text : nil
+    }
+  }
+
   struct Hook: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
       abstract: "Host hook entrypoint (stdin JSON). Fail open: never blocks the host.")
@@ -403,13 +640,17 @@ extension OmniMemo {
     @Argument(help: "claude, codex, gemini or opencode.") var host: String
     @Option var maxTokens = 600
 
-    enum Phase { case start, prompt, stop, end }
-    static func phase(_ event: String) -> Phase? {
+    enum Phase { case start, prompt, stop, end, tool }
+    /// Host hook event -> lifecycle phase and the runtime event it proves.
+    static func phase(_ event: String) -> (Phase, String)? {
       switch event {
-      case "SessionStart", "session.created": return .start
-      case "UserPromptSubmit", "BeforeAgent", "chat.message": return .prompt
-      case "Stop", "AfterAgent", "session.idle": return .stop
-      case "SessionEnd", "session.deleted": return .end
+      case "SessionStart", "session.created": return (.start, "session.started")
+      case "UserPromptSubmit", "BeforeAgent", "chat.message": return (.prompt, "prompt.received")
+      case "Stop", "AfterAgent", "session.idle": return (.stop, "turn.completed")
+      case "SessionEnd", "session.deleted": return (.end, "session.ended")
+      case "PreToolUse", "BeforeTool", "tool.execute.before": return (.tool, "tool.started")
+      case "PostToolUse", "AfterTool", "tool.execute.after": return (.tool, "tool.succeeded")
+      case "PostToolUseFailure": return (.tool, "tool.failed")
       default: return nil
       }
     }
@@ -419,24 +660,36 @@ extension OmniMemo {
       let input = FileHandle.standardInput.readData(ofLength: 65537)
       guard input.count <= 65536,
         let object = try? JSONSerialization.jsonObject(with: input) as? [String: Any],
-        let event = object["hook_event_name"] as? String, let phase = Self.phase(event),
+        let event = object["hook_event_name"] as? String, let (phase, eventType) = Self.phase(event),
         let session = object["session_id"] as? String, let cwd = object["cwd"] as? String,
         let project = Self.gitRoot(cwd),
         let store = try? await MemoryStore.open(dataDir: options.dataDir, project: project)
       else { return }
       let source = host + "_hook"
+      // Categories only: the tool name is reduced here and its arguments are never read.
+      var metadata: [String: MetaValue] = ["observability": .string("passive")]
+      if phase == .tool { metadata["tool_category"] = .string(RuntimeMapping.toolCategory(object["tool_name"] as? String)) }
+      if let mode = object["permission_mode"] as? String { metadata["permission_mode"] = .string(mode) }
+      let model = (object["model"] as? String) ?? ((object["model"] as? [String: Any])?["id"] as? String)
+      let runtimeEvent = RuntimeEventInput(
+        source: source, provider: host, externalSessionID: session, eventType: eventType,
+        modelID: model.map { String($0.prefix(80)) }, metadata: metadata)
+      if phase == .tool {
+        _ = try? await store.ingest(runtimeEvent)
+        await store.close()
+        return
+      }
       // Codex has no session-end hook; its per-turn Stop checkpoints are deduplicated by content.
       let ends = phase == .end || (host == "codex" && phase == .stop)
       if phase == .prompt, let prompt = object["prompt"] as? String {
         await store.autoPromptSummary(agent: host, session: session, prompt: prompt)
       }
       if ends { await store.autoCheckpoint(agent: host, session: session, reason: event) }
+      _ = try? await store.ingest(runtimeEvent)
       switch phase {
-      case .start:
-        _ = try? await store.wake(agent: host, session: session, status: "ready", source: source)
       case .prompt where host == "opencode":
-        // The OpenCode plugin cannot inject text; record presence without marking a capsule delivered.
-        _ = try? await store.wake(agent: host, session: session, status: "active", source: source)
+        // The OpenCode plugin cannot inject text; presence is recorded without marking a capsule delivered.
+        break
       case .prompt:
         if let capsule = try? await store.promptContext(
           agent: host, session: session, maxTokens: maxTokens, source: source)
@@ -456,11 +709,7 @@ extension OmniMemo {
             FileHandle.standardOutput.write(Data((text + "\n").utf8))
           }
         }
-      case .stop:
-        _ = try? await store.wake(agent: host, session: session, status: "ready", source: source)
-      case .end:
-        _ = try? await store.wake(
-          agent: host, session: session, status: "disconnected", source: source)
+      case .start, .stop, .end, .tool: break
       }
       await store.close()
     }

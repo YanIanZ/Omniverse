@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Global config fixtures: preserve unrelated settings, repeat safely, refuse edited entries."""
-import json, os, pathlib, subprocess, sys, tempfile, tomllib
+import json, os, pathlib, shlex, subprocess, sys, tempfile, tomllib
 repo = pathlib.Path(__file__).resolve().parents[1]
 script = repo/'scripts/install-global.py'
 assert script.is_file(), 'global installer is missing'
 workspace = pathlib.Path(os.environ.get('OMNIMEM_TEST_ROOT','/Volumes/Ext/DevCache/OmniMemo/test-workspaces'))
 with tempfile.TemporaryDirectory(prefix='global fixture ',dir=workspace) as folder:
     root=pathlib.Path(folder);home=root/'home';home.mkdir();state=root/'state'
+    os.environ.update(HOME=str(home), CLAUDE_CONFIG_DIR=str(home/'.claude'), CODEX_HOME=str(home/'.codex'), XDG_CONFIG_HOME=str(home/'.config'))
+    binary=root/"om binary's fixture";binary.write_text('fixture only; never executed\n')
     paths={
       'claude':home/'.claude.json', 'gemini':home/'.gemini/settings.json',
       'opencode':home/'.config/opencode/opencode.json',
@@ -21,7 +23,7 @@ with tempfile.TemporaryDirectory(prefix='global fixture ',dir=workspace) as fold
     codex=home/'.codex/config.toml';codex.parent.mkdir();codex.write_text('model = "keep-me"\n[mcp_servers.other]\ncommand = "unchanged"\n')
     original={p:p.read_bytes() for p in [codex,*paths.values()]}
     args=[sys.executable,str(script),'--home',str(home),'--hosts','codex,'+','.join(paths),
-          '--binary','/Volumes/Ext/DevCache/OmniMemo/dist/0.3.0/omnimem','--data-dir',str(root/'data'),
+          '--binary',str(binary),'--data-dir',str(root/'data'),
           '--state-dir',str(state),'--opencode-layout','v2']
     def run(*extra,ok=True):
         p=subprocess.run(args+list(extra),text=True,capture_output=True,timeout=30)
@@ -66,20 +68,20 @@ with tempfile.TemporaryDirectory(prefix='global fixture ',dir=workspace) as fold
     before=json.loads(settings.read_text())
     gemini_before=json.loads(paths['gemini'].read_text())
     hargs=[sys.executable,str(script),'--home',str(home),'--hosts','codex,gemini,opencode','--opencode-layout','v2','--with-hooks',
-           '--binary','/Volumes/Ext/DevCache/OmniMemo/dist/0.3.0/omnimem','--data-dir',str(root/'data space'),
+           '--binary',str(binary),'--data-dir',str(root/'data space'),
            '--state-dir',str(hstate)]
     p=subprocess.run(hargs,text=True,capture_output=True,timeout=30);assert p.returncode==0,p.stderr
     assert json.loads(settings.read_text())==before, 'preview must not write'
     p=subprocess.run(hargs+['--apply'],text=True,capture_output=True,timeout=30);assert p.returncode==0,p.stderr
     hooks=json.loads(settings.read_text())['hooks']
-    assert sorted(hooks)==['SessionEnd','SessionStart','Stop','UserPromptSubmit'] and hooks['UserPromptSubmit'][0]==mine
+    assert sorted(hooks)==['PostToolUse','PostToolUseFailure','PreToolUse','SessionEnd','SessionStart','Stop','UserPromptSubmit'] and hooks['UserPromptSubmit'][0]==mine
     codex_hooks=json.loads((home/'.codex/hooks.json').read_text())['hooks']
-    assert sorted(codex_hooks)==['SessionStart','Stop','UserPromptSubmit']
+    assert sorted(codex_hooks)==['PostToolUse','PreToolUse','SessionStart','Stop','UserPromptSubmit']
     assert codex_hooks['Stop'][0]['hooks'][0]['command'].endswith(' hook codex')
     # Gemini MCP entry and hooks share settings.json; both must land and unrelated keys survive.
     gem=json.loads(paths['gemini'].read_text())
     assert 'omnimemo' in gem['mcpServers'] and gem['keep']=={'value':42}
-    assert sorted(gem['hooks'])==['AfterAgent','BeforeAgent','SessionEnd','SessionStart']
+    assert sorted(gem['hooks'])==['AfterAgent','AfterTool','BeforeAgent','BeforeTool','SessionEnd','SessionStart']
     # OpenCode 2.x gets no event plugin (its subscribe API stalls sessions); MCP gives presence.
     assert not (home/'.config/opencode/plugins/omnimemo.js').exists()
     command=hooks['SessionStart'][0]['hooks'][0]['command']
@@ -92,4 +94,51 @@ with tempfile.TemporaryDirectory(prefix='global fixture ',dir=workspace) as fold
     assert json.loads(settings.read_text())==before
     assert json.loads(paths['gemini'].read_text())==gemini_before
     assert not (home/'.config/opencode/plugins/omnimemo.js').exists()
-print('PASS: global preview; Claude hooks opt-in merge/uninstall; all config schemas; unrelated settings; no fixed project; repeat apply; private backups; edited-entry refusal; preserving uninstall')
+    # Status-line opt-in shares the hook settings file and uses shell-safe paths.
+    sstate=root/'statusline-state'
+    sargs=[sys.executable,str(script),'--home',str(home),'--hosts','claude','--with-hooks','--with-statusline',
+           '--binary',str(binary),'--data-dir',str(root/"data's space"),'--state-dir',str(sstate)]
+    def statusline_run(*extra):
+        result=subprocess.run(sargs+list(extra),text=True,capture_output=True,timeout=30)
+        assert result.returncode==0,result.stdout+result.stderr
+        return result
+    expected={'type':'command','command':shlex.quote(str(binary))+' --data-dir '+shlex.quote(str(root/"data's space"))+' statusline claude'}
+    settings_before=settings.read_bytes()
+    statusline_run()
+    assert settings.read_bytes()==settings_before and not sstate.exists()
+    statusline_run('--apply')
+    installed=settings.read_bytes()
+    assert json.loads(installed)['statusLine']==expected
+    assert any(p.read_bytes()==settings_before for p in (sstate/'backups').iterdir())
+    statusline_run('--apply')
+    assert settings.read_bytes()==installed
+    statusline_run('--uninstall','--apply')
+    assert json.loads(settings.read_text())==before
+    # A pre-existing user status line is neither replaced nor claimed, even if identical.
+    for existing in [{'type':'command','command':'echo user-status'}, expected, None]:
+        settings.write_text(json.dumps({**before,'statusLine':existing}))
+        original_statusline=settings.read_bytes()
+        result=statusline_run('--apply')
+        assert 'manually' in result.stdout and 'statusline claude' in result.stdout
+        assert json.loads(settings.read_text())['statusLine']==existing
+        assert not any(e['kind']=='statusline' for e in json.loads((sstate/'manifest.json').read_text())['entries'])
+        statusline_run('--uninstall','--apply')
+        assert json.loads(settings.read_text())==json.loads(original_statusline)
+    # Standalone opt-in leaves an edited or removed statusLine untouched on uninstall.
+    for replacement in [{'type':'command','command':'echo replacement'}, None]:
+        settings.write_text(json.dumps(before))
+        statusline_run('--apply')
+        obj=json.loads(settings.read_text())
+        if replacement is None:del obj['statusLine']
+        else:obj['statusLine']=replacement
+        obj['unrelated']='preserved'
+        settings.write_text(json.dumps(obj))
+        statusline_run('--uninstall','--apply')
+        assert json.loads(settings.read_text())=={**before,**({'statusLine':replacement} if replacement else {}),'unrelated':'preserved'}
+    # Status-line-only installation also works without hooks or a settings file.
+    settings.unlink()
+    sargs.remove('--with-hooks')
+    statusline_run('--apply')
+    statusline_run('--uninstall','--apply')
+    assert 'statusLine' not in json.loads(settings.read_text())
+print('PASS: global config schemas, hooks and status-line opt-in; preview; quoting; backups; repeat apply; preserve existing/edited status lines; owned uninstall')

@@ -116,7 +116,9 @@ public enum OmniServer {
       let limit = min(max(req.query[Int.self, at: "limit"] ?? 20, 1), 50)
       let found = try await store.search(query, limit: limit).map {
         MemoryBrief(
-          id: $0.id, title: String($0.title.prefix(120)), summary: String($0.content.prefix(240)),
+          // Checkpoints are JSON the UI renders as fields; a cut-off prefix would not parse.
+          id: $0.id, title: String($0.title.prefix(120)),
+          summary: $0.kind == "checkpoint" ? $0.content : String($0.content.prefix(240)),
           state: $0.state, sourceRefs: $0.sources.isEmpty ? nil : $0.sources.map(\.path))
       }
       return try json(found)
@@ -125,15 +127,62 @@ public enum OmniServer {
       try json(try await store.events(after: max(req.query[Int.self, at: "after"] ?? 0, 0)))
     }
 
-    app.grouped(AuthMiddleware(config: config, requireOrigin: true))
-      .webSocket("ws", "v1", "live", maxFrameSize: .init(integerLiteral: 1 << 14)) {
-        req, ws async in
-        if let scope = req.query[String.self, at: "project_id"], scope != store.binding.id {
-          try? await ws.close(code: .policyViolation)
-          return
-        }
-        await hub.add(ws)
+    // Runtime bridge (docs/RUNTIME_EVENTS.md). Adapters post with a bearer token; a browser
+    // session must also send an allowed Origin (AuthMiddleware enforces both).
+    let runtime = app.grouped("api", "runtime").grouped(AuthMiddleware(config: config))
+    let workspace: @Sendable (Request) throws -> Void = { req in
+      if let scope = req.query[String.self, at: "workspace_id"], scope != store.binding.id, scope != "local" {
+        throw Abort(.forbidden)
       }
+    }
+    runtime.post("events") { req async throws -> Response in
+      guard let body = req.body.data else { throw Abort(.badRequest, reason: "event body required") }
+      let event: RuntimeEventInput
+      do {
+        event = try JSONDecoder().decode(RuntimeEventInput.self, from: body)
+      } catch { throw Abort(.badRequest, reason: "malformed runtime event") }
+      let result = try await store.ingest(event)
+      if result.accepted { await hub.poll() }
+      return try json(result, status: result.duplicate ? .ok : .accepted)
+    }
+    runtime.get("sessions") { req async throws -> Response in
+      try workspace(req)
+      struct Body: Encodable {
+        var workspace_id: String
+        var agents: [RuntimeAgentView]
+      }
+      return try json(Body(workspace_id: store.binding.id, agents: try await store.runtimeAgents()))
+    }
+    runtime.get("tasks") { req async throws -> Response in
+      try workspace(req)
+      struct Item: Encodable {
+        var task: TaskRecord
+        var progress: OmniMemoCore.Progress
+      }
+      let tasks = try await store.listTasks().map { Item(task: $0, progress: .of($0.milestones)) }
+      return try json(["tasks": tasks])
+    }
+    runtime.get("health") { _ async throws -> Response in
+      let status = try await store.status()
+      return try json([
+        "status": "ok", "storage": status.backend.lowercased(), "workspace_id": status.projectID,
+        "revision": String(await hub.revision), "redis": await hub.redisState,
+      ])
+    }
+
+    // `/ws/office` is the v2.3 name for the same committed-event stream.
+    for path in [["ws", "v1", "live"], ["ws", "office"]] {
+      app.grouped(AuthMiddleware(config: config, requireOrigin: true))
+        .webSocket(path.map { PathComponent(stringLiteral: $0) }, maxFrameSize: .init(integerLiteral: 1 << 14)) {
+          req, ws async in
+          let scope = req.query[String.self, at: "project_id"] ?? req.query[String.self, at: "workspace_id"]
+          if let scope, scope != store.binding.id {
+            try? await ws.close(code: .policyViolation)
+            return
+          }
+          await hub.add(ws)
+        }
+    }
 
     // SPA fallback for client routes only; API and WebSocket paths never resolve to HTML.
     app.get(.catchall) { req async throws -> Response in

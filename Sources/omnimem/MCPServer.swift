@@ -21,16 +21,16 @@ actor MCPPresence {
   init(store: MemoryStore) { self.store = store }
   func connected(_ clientName: String) async {
     agent = MemoryStore.provider(clientName)
-    _ = try? await store.wake(agent: agent!, session: session, status: "ready", source: "mcp")
+    _ = try? await store.wake(agent: agent!, session: session, status: "waiting", source: "mcp")
   }
   func used() async {
     guard let agent else { return }
-    _ = try? await store.wake(agent: agent, session: session, status: "active", source: "mcp")
+    _ = try? await store.wake(agent: agent, session: session, status: "working", source: "mcp")
   }
   func closed() async {
     guard let agent else { return }
     await store.autoCheckpoint(agent: agent, session: session, reason: "mcp disconnect")
-    _ = try? await store.wake(agent: agent, session: session, status: "disconnected", source: "mcp")
+    _ = try? await store.wake(agent: agent, session: session, status: "offline", source: "mcp")
   }
 }
 

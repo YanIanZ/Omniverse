@@ -20,20 +20,20 @@ final class RuntimeTests: XCTestCase {
       agent: "claude", session: "s1", status: "disconnected", source: "claude_hook")
     events = try await store.events(after: 0)
     XCTAssertEqual(events.map(\.revision), [1, 2])
-    XCTAssertEqual(events.last?.data["status"], "disconnected")
+    XCTAssertEqual(events.last?.data["status"], "offline")
     let agents = try await store.agents()
     XCTAssertEqual(agents.count, 1)
-    XCTAssertEqual(agents.first?.status, "disconnected")
+    XCTAssertEqual(agents.first?.status, "offline")
     XCTAssertThrowsError(try MemoryStore.label("bad id; rm", "session"))
   }
 
-  func testStalePresenceIsUnknown() async throws {
+  func testStalePresenceIsDerived() async throws {
     let store = try await store()
     _ = try await store.wake(agent: "codex", session: "s2", source: "cli")
     _ = try await store.mongoDatabase!["omnimem_sessions"].updateMany(
       where: ["project_id": store.binding.id], to: ["$set": ["last_seen": "2020-01-01T00:00:00Z"]])
     let agents = try await store.agents()
-    XCTAssertEqual(agents.first?.status, "unknown")
+    XCTAssertEqual(agents.first?.status, "stale")
   }
 
   func testPromptContextOnlyWhenChanged() async throws {

@@ -55,7 +55,7 @@ export type Placement = {
   fresh: boolean
   task?: Task
   approval?: Approval
-  /** When a room has two or more unknown agents, each of those placements carries
+  /** When a room has two or more stale agents, each of those placements carries
    * the shared room plate so the map can show one summary instead of stacked bubbles. */
   plate?: Plate
 }
@@ -76,7 +76,7 @@ export function ago(iso: string, now = Date.now()) {
 /**
  * Every placement is derived from a verified record: a session signal, a task the
  * agent owns, an approval it requested, or a checkpoint event it committed.
- * Disconnected sessions leave the map; nothing is inferred beyond these rules.
+ * Offline sessions leave the map; nothing is inferred beyond these rules.
  */
 export function place(
   agents: Agent[],
@@ -85,7 +85,7 @@ export function place(
   events: LiveEvent[],
   now = Date.now(),
 ): { placed: Placement[]; overflow: Partial<Record<RoomId, number>> } {
-  const present = agents.filter((a) => a.status !== 'disconnected')
+  const present = agents.filter((a) => a.status !== 'offline')
   // A task or approval belongs to the most recently seen session of that provider.
   const latest = new Map<string, Agent>()
   for (const a of present) {
@@ -137,27 +137,32 @@ export function place(
       tone = 'green'
       state = 'working'
       task = doing
-    } else if (agent.status === 'unknown') {
+    } else if (agent.status === 'stale') {
       room = 'lounge'
       // Short so crowded lounges stay legible; the panel and aria-label carry the full state.
       bubble = `? ${minutesAgo(agent.last_seen, now)}m`
       tone = 'gray'
-      state = 'unknown'
+      state = 'stale'
+    } else if (agent.status === 'blocked') {
+      room = 'approvals'
+      bubble = 'Blocked'
+      tone = 'amber'
+      state = 'blocked'
     } else if (handoff) {
       room = 'handoffs'
       bubble = 'Handoff saved'
       tone = 'blue'
       state = 'handing off'
-    } else if (agent.status === 'active') {
+    } else if (agent.status === 'working') {
       room = 'workspace'
-      bubble = 'Prompt received'
+      bubble = agent.tool_category ? 'Tool: ' + agent.tool_category.replace('_', ' ') : 'Prompt received'
       tone = 'green'
-      state = 'active, no task claimed'
+      state = 'working, no task claimed'
     } else {
       room = 'briefing'
-      bubble = 'Ready'
+      bubble = 'Waiting'
       tone = 'gray'
-      state = 'ready'
+      state = 'waiting'
     }
 
     const slots = SLOTS[room] ?? []
@@ -183,14 +188,14 @@ export function place(
     })
   }
 
-  // Unknown agents get a shared room plate instead of per-agent bubbles so the
+  // Stale agents get a shared room plate instead of per-agent bubbles so the
   // label is never covered, even when there is only one of them.
-  const unknownByRoom = new Map<RoomId, Placement[]>()
+  const staleByRoom = new Map<RoomId, Placement[]>()
   for (const p of placed) {
-    if (p.agent.status !== 'unknown') continue
-    unknownByRoom.set(p.room, [...(unknownByRoom.get(p.room) ?? []), p])
+    if (p.agent.status !== 'stale') continue
+    staleByRoom.set(p.room, [...(staleByRoom.get(p.room) ?? []), p])
   }
-  for (const [, list] of unknownByRoom) {
+  for (const [, list] of staleByRoom) {
     if (list.length === 0) continue
     const oldest = list.reduce((a, b) => (a.agent.last_seen < b.agent.last_seen ? a : b))
     const text =

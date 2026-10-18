@@ -29,16 +29,16 @@ with tempfile.TemporaryDirectory(prefix='agents space ', dir=workspace) as folde
 
     # MCP first use: the client names itself in initialize; tool use marks it active.
     codex = Session(binary, data, project, 'codex-mcp-client')
-    assert sessions()[('codex', 'mcp')] == 'ready'
+    assert sessions()[('codex', 'mcp')] == 'waiting'
     codex.tool('memory_checkpoint', {'done': ['Read the build notes'], 'next': ['Package']})
-    assert sessions()[('codex', 'mcp')] == 'active'
+    assert sessions()[('codex', 'mcp')] == 'working'
     events = om('tasks') is not None and om('agents')  # keep the CLI warm
     codex.close()
-    assert sessions()[('codex', 'mcp')] == 'disconnected', 'stdin EOF must record disconnect'
+    assert sessions()[('codex', 'mcp')] == 'offline', 'stdin EOF must record disconnect'
     # A host stopping the server with SIGTERM still records the disconnect.
     gem = Session(binary, data, project, 'gemini-cli-mcp-client')
     gem.proc.send_signal(signal.SIGTERM); gem.proc.wait(timeout=10)
-    assert sessions()[('gemini', 'mcp')] == 'disconnected', 'SIGTERM must record disconnect'
+    assert sessions()[('gemini', 'mcp')] == 'offline', 'SIGTERM must record disconnect'
 
     # Codex hooks.json events (Claude-compatible stdin): plain-text context once per change.
     assert hook('codex', 'SessionStart', 'cx-1') == ''
@@ -46,7 +46,7 @@ with tempfile.TemporaryDirectory(prefix='agents space ', dir=workspace) as folde
     assert first.startswith('OmniMemo project context') and 'Build command' in first
     assert hook('codex', 'UserPromptSubmit', 'cx-1', prompt='again') == ''
     hook('codex', 'Stop', 'cx-1')
-    assert sessions()[('codex', 'codex_hook')] == 'ready'
+    assert sessions()[('codex', 'codex_hook')] == 'waiting'
 
     # Gemini CLI reads JSON hookSpecificOutput.additionalContext.
     hook('gemini', 'SessionStart', 'gm-1')
@@ -54,14 +54,14 @@ with tempfile.TemporaryDirectory(prefix='agents space ', dir=workspace) as folde
     assert 'Build command' in reply['hookSpecificOutput']['additionalContext']
     assert reply['hookSpecificOutput']['hookEventName'] == 'BeforeAgent'
     hook('gemini', 'SessionEnd', 'gm-1')
-    assert sessions()[('gemini', 'gemini_hook')] == 'disconnected'
+    assert sessions()[('gemini', 'gemini_hook')] == 'offline'
 
     # OpenCode plugin events: presence only, never stdout (the plugin cannot inject text).
     assert hook('opencode', 'session.created', 'ses_1') == ''
     assert hook('opencode', 'chat.message', 'ses_1') == ''
-    assert sessions()[('opencode', 'opencode_hook')] == 'active'
+    assert sessions()[('opencode', 'opencode_hook')] == 'working'
     hook('opencode', 'session.deleted', 'ses_1')
-    assert sessions()[('opencode', 'opencode_hook')] == 'disconnected'
+    assert sessions()[('opencode', 'opencode_hook')] == 'offline'
     assert hook('cursor', 'SessionStart', 'x') == '' and ('cursor', 'cursor_hook') not in sessions()
 
     # Agents may request approvals; the CLI offers no way to decide them.

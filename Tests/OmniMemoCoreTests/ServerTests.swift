@@ -57,6 +57,58 @@ final class ServerTests: XCTestCase {
     }
   }
 
+  func testRuntimeRoutesDedupAndWorkspaceAuth() async throws {
+    let (app, store) = try await app()
+    let event = RuntimeEventInput(
+      source: "test_adapter", provider: "codex", externalSessionID: "runtime1",
+      eventType: "prompt.received")
+    let body = ByteBuffer(data: try JSONEncoder().encode(event))
+    let jsonHeaders = headers([("Content-Type", "application/json")])
+    try await app.test(.POST, "api/runtime/events", headers: headers(auth: false), body: body) {
+      XCTAssertEqual($0.status, .unauthorized)
+    }
+    try await app.test(.POST, "api/runtime/events", headers: jsonHeaders, body: body) {
+      XCTAssertEqual($0.status, .accepted)
+      let result = try $0.content.decode(IngestResult.self)
+      XCTAssertTrue(result.accepted)
+      XCTAssertFalse(result.duplicate)
+      XCTAssertEqual(result.status, "working")
+    }
+    try await app.test(.POST, "api/runtime/events", headers: jsonHeaders, body: body) {
+      XCTAssertEqual($0.status, .ok)
+      XCTAssertTrue(try $0.content.decode(IngestResult.self).duplicate)
+    }
+    for route in ["sessions", "tasks", "health"] {
+      try await app.test(.GET, "api/runtime/\(route)", headers: headers(auth: false)) {
+        XCTAssertEqual($0.status, .unauthorized)
+      }
+      try await app.test(.GET, "api/runtime/\(route)", headers: headers()) {
+        XCTAssertEqual($0.status, .ok)
+      }
+    }
+    try await app.test(.GET, "api/runtime/sessions", headers: headers()) {
+      XCTAssertTrue($0.body.string.contains(store.binding.id))
+      XCTAssertTrue($0.body.string.contains("working"))
+    }
+    for route in ["sessions", "tasks"] {
+      try await app.test(.GET, "api/runtime/\(route)?workspace_id=foreign", headers: headers()) {
+        XCTAssertEqual($0.status, .forbidden)
+      }
+    }
+    var foreign = event
+    foreign.eventID = UUID().uuidString
+    foreign.workspaceID = "foreign"
+    try await app.test(.POST, "api/runtime/events", headers: jsonHeaders,
+      body: ByteBuffer(data: try JSONEncoder().encode(foreign))) {
+      XCTAssertEqual($0.status, .forbidden)
+    }
+    try await app.test(.POST, "api/runtime/events",
+      headers: headers([("Cookie", "omnimemo_session=\(token)"), ("Content-Type", "application/json")], auth: false),
+      body: body) {
+      XCTAssertEqual($0.status, .forbidden, "cookie writes require an Origin")
+    }
+  }
+
   func testTaskLifecycleRequiresRevision() async throws {
     let (app, _) = try await app()
     var id = ""

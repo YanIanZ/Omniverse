@@ -24,7 +24,7 @@ struct OmniMemo: AsyncParsableCommand {
     subcommands: [
       Init.self, Status.self, Doctor.self, Project.self, Memory.self, Context.self, Checkpoint.self,
       Cache.self, MCP.self, Rea.self, Install.self, Uninstall.self, Wake.self, Recall.self,
-      Agents.self, Tasks.self, Approvals.self, Redis.self, Autosave.self, Serve.self, Office.self, Stop.self, Hook.self,
+      Agents.self, Tasks.self, Runtime.self, Statusline.self, Rollover.self, Codex.self, Approvals.self, Redis.self, Autosave.self, Serve.self, Office.self, Stop.self, Hook.self,
     ])
   @OptionGroup var options: Options
   /// Bare `om`: status plus the next useful command; never starts a server.

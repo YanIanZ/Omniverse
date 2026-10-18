@@ -20,9 +20,10 @@ type Office = { placed: Placement[]; overflow: Partial<Record<RoomId, number>> }
 type Event = Store['events'][number]
 
 const SOURCE: Record<string, { label: string; how: string }> = {
-  claude_hook: { label: 'Claude Code hook', how: 'SessionStart, UserPromptSubmit and SessionEnd hooks.' },
-  codex_hook: { label: 'Codex hook', how: 'Codex hooks.json session events.' },
-  gemini_hook: { label: 'Gemini CLI hook', how: 'Gemini CLI session hooks.' },
+  claude_hook: { label: 'Claude Code hook', how: 'Session, prompt and tool hooks; tools are reported by category only.' },
+  codex_hook: { label: 'Codex hook', how: 'Codex hooks.json session and tool events.' },
+  codex_app_server: { label: 'Managed Codex', how: 'om codex run: OmniMemo owns the app-server process and its heartbeat.' },
+  gemini_hook: { label: 'Gemini CLI hook', how: 'Gemini CLI session and tool hooks.' },
   opencode_hook: { label: 'OpenCode plugin', how: 'The OmniMemo OpenCode plugin.' },
   mcp: { label: 'MCP connection', how: 'The first tool call from an MCP client.' },
   cli: { label: 'om CLI', how: 'An explicit om wake command; not a host hook.' },
@@ -31,10 +32,11 @@ const sourceLabel = (s: string) => SOURCE[s]?.label ?? s
 const roomLabel = (id: RoomId) => ROOMS.find((r) => r.id === id)?.label ?? id
 
 const STATUS_HELP: Record<Agent['status'], string> = {
-  active: 'The host reported a prompt or tool call in this session.',
-  ready: 'The session reported in and is waiting for work.',
-  unknown: 'No signal for 10 minutes. It may still be running; OmniMemo cannot tell.',
-  disconnected: 'The host reported that the session ended.',
+  working: 'The host reported a prompt or tool call in this session.',
+  waiting: 'The session reported in and is waiting for work.',
+  blocked: 'The host reported the session is waiting on an approval or a blocker.',
+  stale: 'No recent signal. It may still be running; OmniMemo cannot tell.',
+  offline: 'The host reported that the session ended.',
 }
 const MEMORY_HELP: Record<string, string> = {
   active: 'saved with source evidence',
@@ -44,6 +46,35 @@ const MEMORY_HELP: Record<string, string> = {
 const PRIORITY_HELP: Record<Priority, string> = { P0: 'urgent', P1: 'high', P2: 'normal', P3: 'low' }
 
 /* Shared states */
+
+function ContextIndicator({ agent, now }: { agent: Agent; now: number }) {
+  const percent = agent.context_used_percent
+  if (typeof percent !== 'number' || !Number.isFinite(percent) || percent < 0 || percent > 100 ||
+      agent.status === 'stale' || agent.status === 'offline') {
+    return <span className="muted" title="Context unknown: no current reported sample">unknown</span>
+  }
+  const level = percent >= 90 ? 'critical' : percent >= 80 ? 'handoff' : percent >= 70 ? 'prepare' : 'normal'
+  const tokens = agent.context_window_tokens
+  const capacity = typeof tokens === 'number' && Number.isInteger(tokens) && tokens > 0
+    ? ` of ${tokens >= 1000 && tokens % 1000 === 0 ? `${tokens / 1000}k` : tokens.toLocaleString()} tokens`
+    : ''
+  const observed = agent.context_observed_at
+  const reported = observed && Number.isFinite(Date.parse(observed))
+    ? `reported ${ago(observed, now)}` : 'report time unknown'
+  const advice = level === 'critical' ? '; critical: fresh-session handoff advised (om rollover prepare)'
+    : level === 'handoff' ? '; fresh-session handoff advised (om rollover prepare)'
+    : level === 'prepare' ? '; prepare a checkpoint (om rollover prepare)' : ''
+  const description = `Context ${percent}%${capacity}, ${reported}${advice}`
+  return (
+    <span className={'context-usage context-' + level} title={description} role="meter"
+      aria-label={description} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
+      <span className="context-track" aria-hidden="true">
+        <span className="context-fill" style={{ width: `${percent}%` }} />
+      </span>
+      <span className="mono" aria-hidden="true">{percent}%</span>
+    </span>
+  )
+}
 
 function Loading({ label, rows = 3 }: { label: string; rows?: number }) {
   return (
@@ -73,6 +104,9 @@ const EVENT_LABEL: Record<string, string> = {
   'approval.requested': 'Approval requested',
   'approval.decided': 'Approval decided',
   'memory.checkpoint.created': 'Handoff saved',
+  'runtime.activity': 'Agent activity',
+  'context.usage.updated': 'Context usage',
+  'rollover.prepared': 'Rollover prepared',
   'session.created': 'Session started',
   'session.idle': 'Session idle',
   'session.deleted': 'Session ended',
@@ -96,7 +130,8 @@ const kindOf = (type: string): EventKind => {
 function subjectOf(e: Event, store: Store) {
   if (e.type === 'task.updated') return store.tasks.find((t) => t.id === e.entity_id)?.title
   if (e.type.startsWith('approval.')) return store.approvals.find((a) => a.id === e.entity_id)?.action
-  if (e.type === 'agent.status.changed') return e.entity_id.split(':').slice(1).join(':') || undefined
+  if (e.type === 'agent.status.changed' || e.type === 'runtime.activity' || e.type === 'context.usage.updated')
+    return e.entity_id.split(':').slice(1).join(':') || undefined
   return undefined
 }
 
@@ -150,7 +185,7 @@ export function OfficeView({ store, office }: { store: Store; office: Office }) 
             <p>
               {store.agents.length === 0
                 ? 'No agent has reported in yet.'
-                : 'Nobody is in the office: every observed session has disconnected.'}
+                : 'Nobody is in the office: every observed session has gone offline.'}
             </p>
             <p className="muted">
               Agents appear when a supported hook fires, an MCP client connects, or you run{' '}
@@ -178,6 +213,8 @@ export function OfficeView({ store, office }: { store: Store; office: Office }) 
                 <dd>{sourceLabel(current.agent.source)}</dd>
                 <dt>Last seen</dt>
                 <dd>{ago(current.agent.last_seen, store.now)}</dd>
+                <dt>Context</dt>
+                <dd><ContextIndicator agent={current.agent} now={store.now} /></dd>
                 <dt>Room</dt>
                 <dd>{roomLabel(current.room)}</dd>
                 <dt>Task</dt>
@@ -445,7 +482,7 @@ export function AgentsView({ store, office }: { store: Store; office: Office }) 
       </Empty>
     )
   }
-  const order: Agent['status'][] = ['active', 'ready', 'unknown', 'disconnected']
+  const order: Agent['status'][] = ['working', 'blocked', 'waiting', 'stale', 'offline']
   const agents = [...store.agents].sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status))
   const sources = [...new Set(store.agents.map((a) => a.source))]
   return (
@@ -456,6 +493,7 @@ export function AgentsView({ store, office }: { store: Store; office: Office }) 
             <tr>
               <th scope="col">Agent</th>
               <th scope="col">Status</th>
+              <th scope="col">Context</th>
               <th scope="col">Room</th>
               <th scope="col">Signal</th>
               <th scope="col">Last seen</th>
@@ -479,11 +517,12 @@ export function AgentsView({ store, office }: { store: Store; office: Office }) 
                       {a.status}
                     </span>
                   </td>
+                  <td><ContextIndicator agent={a} now={store.now} /></td>
                   <td>
                     {p ? (
                       roomLabel(p.room)
                     ) : (
-                      <span className="muted">{a.status === 'disconnected' ? 'Left the office' : 'Room full'}</span>
+                      <span className="muted">{a.status === 'offline' ? 'Left the office' : 'Room full'}</span>
                     )}
                   </td>
                   <td>{sourceLabel(a.source)}</td>

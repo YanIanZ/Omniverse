@@ -27,6 +27,7 @@ actor SQLiteBackend: StoreBackend {
     CREATE TABLE IF NOT EXISTS tasks(
       project_id TEXT NOT NULL, id TEXT NOT NULL, created_at TEXT NOT NULL, body TEXT NOT NULL,
       PRIMARY KEY(project_id, id));
+    CREATE TABLE IF NOT EXISTS runtime_seen(key TEXT PRIMARY KEY, at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS approvals(
       project_id TEXT NOT NULL, id TEXT NOT NULL, created_at TEXT NOT NULL, body TEXT NOT NULL,
       PRIMARY KEY(project_id, id));
@@ -62,6 +63,7 @@ actor SQLiteBackend: StoreBackend {
     do {
       try backend.execSync("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;")
       try backend.execSync(schema)
+      try backend.migrateSync()
       try backend.runSync(
         "INSERT OR IGNORE INTO meta(key, value) VALUES ('store_id', ?), ('schema_version', '1')",
         [.text(UUID().uuidString.lowercased())])
@@ -85,6 +87,7 @@ actor SQLiteBackend: StoreBackend {
     let backend = SQLiteBackend(handle: handle)
     do {
       try backend.execSync(schema)  // additive migrations only
+      try backend.migrateSync()
       guard try backend.scalarSync("SELECT value FROM meta WHERE key = 'store_id'") == storeID
       else { throw MemoError.storageUnavailable }
       return backend
@@ -97,6 +100,12 @@ actor SQLiteBackend: StoreBackend {
   func close() async { sqlite3_close(handle) }
 
   // MARK: Statement helpers (actor-isolated; the *Sync forms are used before publication)
+
+  /// Additive column migrations for tables created by earlier releases.
+  private nonisolated func migrateSync() throws {
+    let columns = try rowsSync("PRAGMA table_info(sessions)").compactMap { $0.count > 1 ? $0[1] : nil }
+    if !columns.contains("runtime") { try execSync("ALTER TABLE sessions ADD COLUMN runtime TEXT") }
+  }
 
   private nonisolated func failure() -> MemoError {
     let code = sqlite3_extended_errcode(handle)
@@ -328,14 +337,58 @@ actor SQLiteBackend: StoreBackend {
     }
   }
 
+  private static let sessionColumns = "agent, session_id, status, source, first_seen, last_seen, runtime"
+
+  private func sessionRow(_ row: [String?]) -> AgentSession {
+    // Runtime fields live in a JSON column; the base columns stay authoritative.
+    var session =
+      (row[6]).flatMap { try? JSONDecoder().decode(AgentSession.self, from: Data($0.utf8)) }
+      ?? AgentSession(agent: "", sessionID: "", status: "", source: "", firstSeen: "", lastSeen: "")
+    session.agent = row[0] ?? ""
+    session.sessionID = row[1] ?? ""
+    session.status = row[2] ?? "unknown"
+    session.source = row[3] ?? ""
+    session.firstSeen = row[4] ?? ""
+    session.lastSeen = row[5] ?? ""
+    return session
+  }
+
   func sessions(project: String, limit: Int) async throws -> [AgentSession] {
     try rowsSync(
-      "SELECT agent, session_id, status, source, first_seen, last_seen FROM sessions WHERE project_id = ? ORDER BY last_seen DESC LIMIT ?",
+      "SELECT \(Self.sessionColumns) FROM sessions WHERE project_id = ? ORDER BY last_seen DESC LIMIT ?",
       [.text(project), .int(limit)]
-    ).map {
-      AgentSession(
-        agent: $0[0] ?? "", sessionID: $0[1] ?? "", status: $0[2] ?? "unknown",
-        source: $0[3] ?? "", firstSeen: $0[4] ?? "", lastSeen: $0[5] ?? "")
+    ).map(sessionRow)
+  }
+
+  func session(project: String, agent: String, session: String) async throws -> AgentSession? {
+    try rowsSync(
+      "SELECT \(Self.sessionColumns) FROM sessions WHERE project_id = ? AND agent = ? AND session_id = ?",
+      [.text(project), .text(agent), .text(session)]
+    ).first.map(sessionRow)
+  }
+
+  func save(session: AgentSession, project: String) async throws {
+    let runtime = try json(session)
+    try write {
+      _ = try runSync(
+        """
+        INSERT INTO sessions(project_id, agent, session_id, status, source, first_seen, last_seen, runtime)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(project_id, agent, session_id) DO UPDATE SET
+          status = excluded.status, source = excluded.source, last_seen = excluded.last_seen,
+          runtime = excluded.runtime
+        """,
+        [.text(project), .text(session.agent), .text(session.sessionID), .text(session.status),
+         .text(session.source), .text(session.firstSeen), .text(session.lastSeen), .text(runtime)])
+    }
+  }
+
+  func claimRuntimeEvent(project: String, key: String, at: String) async throws -> Bool {
+    let cutoff = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-7 * 86400))
+    return try write {
+      try runSync("DELETE FROM runtime_seen WHERE at < ?", [.text(cutoff)])
+      return try runSync(
+        "INSERT OR IGNORE INTO runtime_seen(key, at) VALUES (?, ?)", [.text(project + "|" + key), .text(at)]) == 1
     }
   }
 
@@ -376,6 +429,7 @@ actor SQLiteBackend: StoreBackend {
       if let status = change.status { task.status = status }
       if let owner = change.owner { task.owner = owner }
       if let priority = change.priority { task.priority = priority }
+      if let milestones = change.milestones { task.milestones = milestones }
       task.updatedAt = change.updatedAt
       task.revision += 1
       try runSync(

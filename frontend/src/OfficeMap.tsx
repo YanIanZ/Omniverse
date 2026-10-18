@@ -423,7 +423,7 @@ export function OfficeMap({ placed, overflow, health, selected, onSelect }: Prop
               <button
                 key={p.key}
                 type="button"
-                className={`agent tone-${p.tone}${p.agent.status === 'unknown' ? ' is-unknown' : ''}${selected === p.key ? ' is-selected' : ''}`}
+                className={`agent tone-${p.tone}${p.agent.status === 'stale' ? ' is-stale' : ''}${selected === p.key ? ' is-selected' : ''}`}
                 style={{ transform: `translate(${p.x}px, ${p.y}px)` }}
                 onClick={() => onSelect(p.key)}
                 onMouseEnter={() => setHot(p.key)}
@@ -436,7 +436,7 @@ export function OfficeMap({ placed, overflow, health, selected, onSelect }: Prop
                 <AgentSprite agent={p.agent.agent} animate={p.fresh} />
               </button>
             ))}
-            {/* One summary plate per room for crowds of unknown agents. */}
+            {/* One summary plate per room for crowds of stale agents. */}
             <div className="room-plates" aria-hidden="true">
               {plates.map(({ room, text }) => {
                 const r = ROOMS.find((x) => x.id === room)!

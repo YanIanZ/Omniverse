@@ -1,13 +1,27 @@
 import Foundation
 import MongoKitten
 
-/// One observed agent session. Status comes only from real hook/CLI signals.
+/// One observed agent session. Status comes only from real hook, plugin, MCP or managed
+/// app-server signals: waiting, working, blocked, offline; `stale` is derived from silence.
 public struct AgentSession: Codable, Sendable {
-  enum CodingKeys: String, CodingKey {
-    case agent, status, source
+  enum CodingKeys: String, CodingKey, CaseIterable {
+    case agent, status, source, model, observability, title
     case sessionID = "session_id"
     case firstSeen = "first_seen"
     case lastSeen = "last_seen"
+    case runtimeID = "runtime_id"
+    case lastEvent = "last_event"
+    case lastEventAt = "last_event_at"
+    case toolCategory = "tool_category"
+    case eventCount = "event_count"
+    case lastSequence = "last_sequence"
+    case taskID = "task_id"
+    case contextUsedPercent = "context_used_percent"
+    case contextWindowTokens = "context_window_tokens"
+    case contextObservedAt = "context_observed_at"
+    case parentSessionID = "parent_session_id"
+    case childSessionID = "child_session_id"
+    case rolloverState = "rollover_state"
   }
   public var agent: String
   public var sessionID: String
@@ -15,11 +29,33 @@ public struct AgentSession: Codable, Sendable {
   public var source: String
   public var firstSeen: String
   public var lastSeen: String
+  /// Internal identity; the client or model name is never the identity.
+  public var runtimeID: String? = nil
+  /// Only as reported by adapter metadata.
+  public var model: String? = nil
+  /// `managed` (OmniMemo owns the process) or `passive` (hooks/plugins only).
+  public var observability: String? = nil
+  public var lastEvent: String? = nil
+  public var lastEventAt: String? = nil
+  public var toolCategory: String? = nil
+  /// Short task title, stored only with user consent.
+  public var title: String? = nil
+  public var eventCount: Int? = nil
+  public var lastSequence: Int? = nil
+  public var taskID: String? = nil
+  /// Active context-window occupancy as the host reported it (never lifetime tokens).
+  public var contextUsedPercent: Double? = nil
+  public var contextWindowTokens: Int? = nil
+  public var contextObservedAt: String? = nil
+  /// Fresh-session lineage; `rolloverState` follows the v2.4 state machine on the parent.
+  public var parentSessionID: String? = nil
+  public var childSessionID: String? = nil
+  public var rolloverState: String? = nil
 }
 
 public struct TaskRecord: Codable, Sendable, Equatable {
   enum CodingKeys: String, CodingKey {
-    case id, title, status, revision, owner, priority
+    case id, title, status, revision, owner, priority, milestones
     case createdAt = "created_at"
     case updatedAt = "updated_at"
   }
@@ -32,6 +68,8 @@ public struct TaskRecord: Codable, Sendable, Equatable {
   public var priority: String?
   public var createdAt: String
   public var updatedAt: String
+  /// Verified-progress plan; empty or absent means progress is indeterminate.
+  public var milestones: [Milestone]? = nil
   public static let statuses = ["todo", "doing", "review", "done", "blocked"]
   public static let priorities = ["P0", "P1", "P2", "P3"]
 }
@@ -137,7 +175,8 @@ extension MemoryStore {
     try validate()
     let agent = try Self.label(agent, "agent")
     let session = try Self.label(session, "session")
-    guard ["ready", "active", "disconnected"].contains(status) else {
+    let status = RuntimeMapping.legacy(status)
+    guard ["waiting", "working", "blocked", "offline"].contains(status) else {
       throw MemoError.invalid("invalid status")
     }
     let source = try Self.label(source, "source")
@@ -161,7 +200,7 @@ extension MemoryStore {
   public func promptContext(
     agent: String, session: String, maxTokens: Int = 600, source: String = "cli"
   ) async throws -> Data? {
-    _ = try await wake(agent: agent, session: session, status: "active", source: source)
+    _ = try await wake(agent: agent, session: session, status: "working", source: source)
     let capsule = try await context(task: "", maxTokens: maxTokens)
     // An empty project adds no prompt tokens.
     guard let envelope = try? JSONDecoder().decode(ContextEnvelope.self, from: capsule),
@@ -175,11 +214,16 @@ extension MemoryStore {
 
   public func agents(limit: Int = 50) async throws -> [AgentSession] {
     try validate()
-    let cutoff = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-Self.presenceTimeout))
+    let format = ISO8601DateFormatter()
+    let passive = format.string(from: Date().addingTimeInterval(-Self.presenceTimeout))
+    let managed = format.string(from: Date().addingTimeInterval(-Self.managedStaleAfter))
     do {
       return try await backend.sessions(project: binding.id, limit: limit).map {
         var s = $0
-        if s.status != "disconnected" && s.lastSeen < cutoff { s.status = "unknown" }
+        s.status = RuntimeMapping.legacy(s.status)
+        // Silence never becomes offline or done: it is stale, shown with its last-seen time.
+        let cutoff = s.observability == "managed" ? managed : passive
+        if s.status != "offline" && s.lastSeen < cutoff { s.status = "stale" }
         return s
       }
     } catch { throw Self.safeError(error) }

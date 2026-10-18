@@ -146,6 +146,10 @@ final class MongoBackend: StoreBackend, @unchecked Sendable {
     try await sessions.createIndexes([
       CreateIndexes.Index(named: "project_seen", keys: ["project_id": 1, "last_seen": -1])
     ])
+    // Runtime event dedup keys expire after a week; MongoDB removes them itself.
+    var expiry = CreateIndexes.Index(named: "seen_expiry", keys: ["at": 1])
+    expiry.expireAfterSeconds = 7 * 86400
+    try await db["omnimem_runtime_seen"].createIndexes([expiry])
   }
 
   /// A task id is its identity. Copies written concurrently before the unique index existed
@@ -233,6 +237,35 @@ final class MongoBackend: StoreBackend, @unchecked Sendable {
       .decode(AgentSession.self).drain()
   }
 
+  func session(project: String, agent: String, session: String) async throws -> AgentSession? {
+    try await sessions.findOne(["_id": project + ":" + agent + ":" + session], as: AgentSession.self)
+  }
+
+  func save(session: AgentSession, project: String) async throws {
+    var doc = try BSONEncoder().encode(session)
+    doc["project_id"] = project
+    let firstSeen = doc["first_seen"]
+    doc.removeValue(forKey: "first_seen")
+    // $set keeps fields owned by other writers (context_digest); first_seen is set once.
+    // The encoder omits nil optionals, so a field cleared on the struct is unset explicitly.
+    var update: Document = [
+      "$set": doc, "$setOnInsert": ["first_seen": firstSeen ?? session.firstSeen] as Document,
+    ]
+    var cleared = Document()
+    for key in AgentSession.CodingKeys.allCases.map(\.rawValue) where key != "first_seen" && doc[key] == nil {
+      cleared[key] = ""
+    }
+    if !cleared.isEmpty { update["$unset"] = cleared }
+    _ = try await sessions.findOneAndUpsert(
+      where: ["_id": project + ":" + session.agent + ":" + session.sessionID], replacement: update
+    ).execute()
+  }
+
+  func claimRuntimeEvent(project: String, key: String, at: String) async throws -> Bool {
+    let result = try await db["omnimem_runtime_seen"].insert(["_id": project + "|" + key, "at": Date()])
+    return (result.writeErrors ?? []).isEmpty
+  }
+
   func tasks(project: String, limit: Int) async throws -> [TaskRecord] {
     try await tasks.find(["project_id": project]).sort(["created_at": 1]).limit(limit)
       .decode(TaskRecord.self).drain()
@@ -255,6 +288,10 @@ final class MongoBackend: StoreBackend, @unchecked Sendable {
     if let status = change.status { set["status"] = status }
     if let owner = change.owner { set["owner"] = owner }
     if let priority = change.priority { set["priority"] = priority }
+    if let milestones = change.milestones {
+      struct Box: Encodable { var m: [Milestone] }
+      set["milestones"] = try BSONEncoder().encode(Box(m: milestones))["m"]
+    }
     let reply = try await tasks.findOneAndUpdate(
       where: ["project_id": project, "id": id, "revision": expectedRevision],
       to: ["$set": set, "$inc": ["revision": 1]], returnValue: .modified

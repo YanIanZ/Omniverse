@@ -6,10 +6,21 @@ public struct AutoSave: Codable, Sendable, Equatable {
   public var checkpoints = false
   public var transitions = false
   public var prompts = false
-  public init(checkpoints: Bool = false, transitions: Bool = false, prompts: Bool = false) {
+  /// Consent to show a short task title on agent cards (never the full prompt).
+  public var titles = false
+  public init(checkpoints: Bool = false, transitions: Bool = false, prompts: Bool = false, titles: Bool = false) {
     self.checkpoints = checkpoints
     self.transitions = transitions
     self.prompts = prompts
+    self.titles = titles
+  }
+  public init(from decoder: Decoder) throws {
+    // Files written before `titles` existed stay readable.
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    checkpoints = try c.decodeIfPresent(Bool.self, forKey: .checkpoints) ?? false
+    transitions = try c.decodeIfPresent(Bool.self, forKey: .transitions) ?? false
+    prompts = try c.decodeIfPresent(Bool.self, forKey: .prompts) ?? false
+    titles = try c.decodeIfPresent(Bool.self, forKey: .titles) ?? false
   }
   public static func load(_ root: URL) -> AutoSave {
     guard let data = try? Data(contentsOf: root.appendingPathComponent("autosave.json")),
@@ -204,7 +215,9 @@ public actor MemoryStore {
     let result = try await save(
       SaveInput(
         kind: "checkpoint", title: input.title ?? "Session handoff", content: content,
-        sources: input.changedFiles ?? [], idempotencyKey: input.idempotencyKey), agent: agent)
+        // Evidence is capped at 8 existing files; the full list stays in the checkpoint content.
+        sources: Array((input.changedFiles ?? []).filter { (try? binding.evidence($0)) != nil }.prefix(8)),
+        idempotencyKey: input.idempotencyKey), agent: agent)
     if result.disposition == "created" {
       _ = try? await emit(
         "memory.checkpoint.created", entity: result.id,

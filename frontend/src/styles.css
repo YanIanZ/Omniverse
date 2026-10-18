@@ -533,6 +533,8 @@ button.link {
 }
 .pill-active,
 .pill-ready,
+.pill-working,
+.pill-waiting,
 .pill-approved,
 .pill-tone-green,
 .pill-done {
@@ -561,6 +563,7 @@ button.link {
 }
 .pill-denied,
 .pill-disconnected,
+.pill-offline,
 .pill-blocked {
   background: #3a1a18;
   color: #ffb3aa;
@@ -756,7 +759,7 @@ button.link {
   filter: drop-shadow(0 0 0 var(--glow)) drop-shadow(2px 0 0 var(--glow)) drop-shadow(-2px 0 0 var(--glow))
     drop-shadow(0 2px 0 var(--glow)) drop-shadow(0 -2px 0 var(--glow));
 }
-.agent.is-unknown .agent-sprite {
+.agent.is-stale .agent-sprite {
   opacity: 0.5;
   filter: grayscale(1);
 }
@@ -897,6 +900,35 @@ button.link {
 .facts dd {
   margin: 0;
   overflow-wrap: anywhere;
+  min-width: 0;
+}
+.context-usage {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 148px;
+  max-width: 100%;
+  color: var(--muted);
+  vertical-align: middle;
+}
+.context-track {
+  flex: 1;
+  min-width: 24px;
+  height: 8px;
+  background: var(--ground);
+  border: 2px solid var(--rule-strong);
+}
+.context-fill {
+  display: block;
+  height: 100%;
+  background: currentColor;
+}
+.context-prepare,
+.context-handoff {
+  color: var(--attention);
+}
+.context-critical {
+  color: var(--fault);
 }
 
 /* Events */
@@ -1240,10 +1272,10 @@ button.link {
 .table tbody tr:hover {
   background: #151922;
 }
-.row-disconnected > * {
+.row-offline > * {
   color: var(--muted);
 }
-.row-disconnected .agent-sprite {
+.row-offline .agent-sprite {
   opacity: 0.55;
 }
 .legend-grid {
@@ -1351,11 +1383,16 @@ button.link {
   margin: 0;
   padding: 0;
   display: grid;
+  /* minmax(0, …): a long unbroken path must wrap, not widen the track past the column. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 .memory {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .memory-head {
   display: flex;
@@ -1366,9 +1403,16 @@ button.link {
   color: var(--ink);
   margin: 0;
   font-size: 17px;
+  min-width: 0;
 }
 .memory-head .pill {
   margin-left: auto;
+}
+.memory-head .tag,
+.memory-head .pill {
+  flex: none;
+  overflow-wrap: normal;
+  white-space: nowrap;
 }
 .results-head {
   display: grid;
@@ -1387,12 +1431,19 @@ button.link {
   grid-template-columns: 120px minmax(0, 1fr);
   gap: 12px;
 }
+@media (max-width: 520px) {
+  .checkpoint > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+}
 .checkpoint dt {
   font-family: var(--pixel);
   color: var(--muted);
 }
 .checkpoint dd {
   margin: 0;
+  min-width: 0;
 }
 .checkpoint ul {
   margin: 0;

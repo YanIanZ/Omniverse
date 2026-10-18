@@ -32,6 +32,11 @@ protocol StoreBackend: Sendable {
   func replaceContextDigest(project: String, agent: String, session: String, digest: String)
     async throws -> Bool
   func sessions(project: String, limit: Int) async throws -> [AgentSession]
+  func session(project: String, agent: String, session: String) async throws -> AgentSession?
+  /// Upserts the whole session state (runtime fields included).
+  func save(session: AgentSession, project: String) async throws
+  /// Claims a runtime event key once; false for a duplicate within the retention window.
+  func claimRuntimeEvent(project: String, key: String, at: String) async throws -> Bool
   func tasks(project: String, limit: Int) async throws -> [TaskRecord]
   /// Returns false when the task id already exists in the project.
   func insert(task: TaskRecord, project: String) async throws -> Bool
@@ -51,5 +56,6 @@ struct TaskChange: Sendable {
   var status: String?
   var owner: String?
   var priority: String?
+  var milestones: [Milestone]? = nil
   var updatedAt: String
 }
