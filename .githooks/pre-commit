@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+fail() { printf 'OmniMemo identity guard: %s\n' "$*" >&2; exit 1; }
+expected_name='YanIanZ'
+expected_email="$(git config --local --get omnimem.guard.email || true)"
+[[ -n "$expected_email" ]] || fail 'Run git config --local omnimem.guard.email <verified-github-email> first.'
+[[ "$(git config --local --get user.name || true)" == "$expected_name" ]] || fail 'Repo user.name must be YanIanZ.'
+[[ "$(git config --local --get user.email || true)" == "$expected_email" ]] || fail 'Repo user.email differs from approved email.'
+[[ "$(git config --local --get user.useConfigOnly || true)" == 'true' ]] || fail 'Set user.useConfigOnly=true locally.'
+for role in AUTHOR COMMITTER; do
+  ident="$(git var "GIT_${role}_IDENT")" || fail "Cannot read ${role} identity."
+  [[ "$ident" == "$expected_name <$expected_email> "* ]] || fail "${role} identity mismatch (env or config override)."
+done

@@ -1,0 +1,7 @@
+/target/
+/.omnimem/
+*.sqlite*
+.DS_Store
+.build/
+.swiftpm/
+.omnimemo-installer/
