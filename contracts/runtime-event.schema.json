@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OmniMemo Normalized Runtime Event v2.3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_id",
+    "source",
+    "provider",
+    "external_session_id",
+    "workspace_id",
+    "event_type",
+    "occurred_at",
+    "source_confidence"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "2.3"
+    },
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "provider": {
+      "enum": [
+        "claude",
+        "codex",
+        "opencode",
+        "gemini"
+      ]
+    },
+    "external_session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "workspace_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "event_type": {
+      "enum": [
+        "session.started",
+        "session.resumed",
+        "session.ended",
+        "model.changed",
+        "prompt.received",
+        "tool.started",
+        "tool.succeeded",
+        "tool.failed",
+        "turn.completed",
+        "turn.failed",
+        "task.assigned",
+        "task.blocked",
+        "milestone.verified",
+        "approval.requested",
+        "heartbeat"
+      ]
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "received_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "model_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "task_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "milestone_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "source_confidence": {
+      "enum": [
+        "observed",
+        "reported",
+        "inferred"
+      ]
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "string",
+          "number",
+          "boolean",
+          "null"
+        ]
+      },
+      "maxProperties": 12
+    }
+  }
+}

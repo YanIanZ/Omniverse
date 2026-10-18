@@ -1,0 +1,45 @@
+# OmniMemo OMAB v2.0 proposed settings (not operational code).
+[bridge]
+enabled = true
+mode = "on_demand"
+auto_wake_on_supported_hooks = true
+first_prompt_handoff_enabled = true
+allow_unverified_session_control = false
+allow_cross_workspace = false
+preferred_transport = "local_mcp"
+manual_inbox_fallback = true
+
+[bridge.concurrency]
+max_workers = 2
+default_workers = 1
+prevent_same_worktree_parallel_writes = true
+lease_seconds = 120
+
+[bridge.context]
+max_capsule_tokens = 450
+max_result_tokens = 600
+include_full_transcripts = false
+
+[bridge.presence]
+heartbeat_seconds = 20
+stale_after_seconds = 75
+on_unknown_status = "unknown"
+
+[bridge.events]
+server = "vapor"
+websocket_path = "/ws/v1/live"
+replay_from_mongodb = true
+redis_pubsub_optional = true
+
+[bridge.security]
+require_agent_authentication = true
+require_project_scope = true
+require_explicit_launch_approval = true
+require_human_push_approval = true
+allowed_github_owner = "YanIanZ"
+
+[bridge.adapters]
+codex = "probe"
+claude_code = "probe"
+gemini_cli = "probe"
+opencode = "probe"

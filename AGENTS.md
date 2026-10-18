@@ -144,4 +144,46 @@ See `docs/OmniMemo_PRD_v1.8_MongoDB_Redis.md` §§100–111 and `docs/OmniMemo_H
 9. **First delivery** is Swift save/recall -> one provider's automatic first prompt -> one Vapor WebSocket event -> one React live status card. Do not build full 2D office before this test passes.
 10. The current requirements document `docs/OmniMemo_PRD_v1.9_Swift_Vapor_React.md` is the authority; older requirement documents cannot override it. OmniMemo itself is versioned by its releases (currently 0.3.0), not by requirement documents.
 
+## 11. Omni Multi-Agent Bridge (MUST when enabled)
+
+1. Omni Agent **schedules/delegates** tasks; the Multi-Agent Bridge **delivers and tracks** scoped tasks, results and events. Do not create a second scheduler or agent runtime.
+2. Probe each installed host and version. Never claim that arbitrary IDE sessions can receive commands, reveal hidden history or be cancelled without a supported, authorized integration.
+3. Cross-agent messages are minimal Task Capsules plus evidence refs; no full transcripts, cookies, tokens, passwords or raw reverse-engineering dumps.
+4. Default one active worker. Parallel work needs independent tasks and non-conflicting writes; use approved worktree isolation and short context budgets.
+5. MongoDB (or the explicit SQLite profile) is durable truth for tasks and results; Redis is optional presence/cache/fanout. The UI reconciles missed updates after reconnect.
+6. The bridge is part of the existing Swift CLI and Vapor backend. No Node/Socket.IO service, second daemon, broker or new database.
+7. Use verified host hooks where supported and MCP/inbox/manual fallback elsewhere; no duplicate first-prompt injection, no silent host-config edits.
+8. Unverified presence or activity is shown as unknown/stale. Idle or a network disconnect does not prove completion.
+9. Actions need workspace ACL and human approval where required; agents and reviewers cannot grant themselves push permission.
+
+## 12. Omniverse: Claude Code Mod and Live Agent Cards (MUST)
+
+1. Omniverse is a cross-IDE bridge plus an official Claude Code plugin/mod (`plugins/omniverse-bridge-mod/`), not a Claude Code terminal fork. The Claude Code repository is not a general OSS codebase: never copy, fork, bundle or mimic proprietary Anthropic source or assets; use Claude Code only through documented, user-authorized interfaces.
+2. Keep `om` as the OmniMemo CLI. Do not claim terminal or bridge behavior exists until a test passes.
+3. Switching providers never silently shares prompts or workspaces with another provider; show the receiver and request scoped approval when needed.
+4. First-prompt recall is an authorized, fresh, minimal capsule (default <= 600 tokens); never preload all memory or chat history.
+5. Each agent card shows `client-model`, a concise current task, an honest progress indicator and state. Model names are display-only, never authorization.
+6. Never invent an agent, status, model or progress percent. A percentage requires verified milestones; otherwise the bar is indeterminate.
+7. Child processes are permission-gated, cancellable, workspace-scoped and secret-redacted; any browser PTY is off by default.
+
+## 13. Runtime Integration First (MUST)
+
+1. Before new visual work, the office must reflect **real runtime activity** from adapters: Claude hooks, OpenCode plugin, Gemini hooks and OmniMemo-managed Codex app-server sessions. Demo data appears only in an explicit, visible demo mode.
+2. Adapters emit normalized runtime events (`session.*`, `prompt.received`, `tool.*`, `turn.*`, `model.changed`, `task.*`, `milestone.verified`, `approval.requested`, `heartbeat`) with `source_confidence` observed/reported/inferred. Ingest validates, deduplicates, persists to the durable store first, then broadcasts.
+3. Telemetry never stores full prompts, transcripts, source text, tool arguments, secrets or API keys; tool activity is reduced to a category. Short task titles only with user consent.
+4. Status semantics: Working needs a positive in-progress event; Waiting needs an idle/turn-completed event; Blocked needs an approval/denial event; Offline needs an observed end; silence becomes Stale with Last seen, never Offline or Done. Passive hook sessions get no invented heartbeat; managed sessions heartbeat and go stale after a short threshold.
+5. Identity is an internal session id, never the model or client name. Model labels come only from adapter metadata, otherwise `model-unavailable`; a model change updates the label, not the identity.
+6. Progress = verified milestone weight / total weight. Tool counts, tokens, elapsed time or model estimates are never progress.
+7. Do not claim control of Codex sessions opened outside an OmniMemo-managed app-server; mark them limited/manual.
+
+## 14. Omni Context Rollover (MUST when enabled)
+
+See `docs/Omni_Context_Rollover_Technical_Spec_v2.4.md` and `docs/Omni_Context_Rollover_Agent_Rules_v2.4.md`.
+
+1. Context usage means active context-window occupancy reported by the host (e.g. Claude status line `context_window.used_percentage`). Lifetime tokens, costs or rate limits are not occupancy; without a fresh reported sample it is unknown, never 0%.
+2. Near capacity, prepare an evidence-based checkpoint and a bounded Context Capsule (default <= 600 tokens) at a safe turn boundary: no running tool, pending approval or conflicting edit. Never copy chats, private reasoning or secrets.
+3. Persist checkpoint and rollover intent to the durable store before announcing readiness. A child session must be fresh (not resume, compact or history fork); ownership moves only after the child acknowledges the capsule digest. On failure keep the parent and its ownership and offer manual handoff.
+4. Default mode is suggest/manual. Launching or controlling a session needs explicit opt-in and a verified host API; at most one child per parent, with rate caps. Never block compaction globally before recovery is proven.
+5. Mission Control shows Task Progress (verified milestones) and Context Usage (provider reports) as separate fields.
+
 User override (2026-10-18): Swift + MongoDB supersede Rust + SQLite/FTS5 throughout the supplied requirement documents and specs (the current one is Swift-first; remaining Rust wording in older documents is superseded; SQLite is an explicit storage profile). Mission Control, agent hooks and task/approval coordination are implemented in OmniMemo 0.3.0; Omni Agent provider launches, REA Bridge evidence flows, Omni Reach and OmniBias Guard remain proposed, optional features. Global host installation is explicitly authorized; preserve unrelated settings and project isolation.

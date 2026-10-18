@@ -1,0 +1,17 @@
+# PROPOSED configuration only; current OmniMemo binary does not accept these settings yet.
+[context.rollover]
+enabled = true
+mode = "suggest" # off | suggest | auto_managed
+prepare_at_percent = 70
+rollover_at_percent = 80
+critical_at_percent = 90
+max_capsule_tokens = 600
+sample_min_interval_seconds = 10
+max_rollovers_per_session = 1
+max_rollovers_per_hour = 3
+preserve_provider = true
+preserve_model_if_available = true
+require_child_ack = true
+prevent_inflight_interruption = true
+on_unsupported_host = "manual_handoff"
+precompact_policy = "notify" # notify | guard_if_ready

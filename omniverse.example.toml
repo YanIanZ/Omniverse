@@ -1,0 +1,75 @@
+# Proposed Omniverse configuration — not implemented yet.
+# Keep database URLs/agent tokens only in environment variables or OS keychain.
+
+[omniverse]
+command = "omniverse"
+short_alias = "ov" # install only if no command collision
+mode = "interactive"
+startup = "on_demand"
+default_provider = "codex"
+solo_by_default = true
+max_parallel_workers = 2
+
+[memory]
+enabled = true
+auto_recall_on_first_prompt = true
+max_context_tokens = 600
+require_evidence = true
+allow_private_cross_provider_handoff = false
+
+[providers]
+discover_from_path = true
+require_capability_probe = true
+auto_install = false
+allow_unsupported_session_scraping = false
+
+[provider.claude]
+command = "claude"
+mode = "supported_cli_or_handoff"
+
+[provider.codex]
+command = "codex"
+mode = "supported_cli_or_handoff"
+
+[provider.opencode]
+command = "opencode"
+mode = "supported_cli_or_handoff"
+
+[provider.gemini]
+command = "gemini"
+mode = "supported_cli_or_handoff"
+
+[office]
+enabled = true
+http_server = "vapor"
+frontend = "react"
+host = "127.0.0.1"
+port = 8787
+start_on_command = true
+websocket_events = true
+no_fabricated_presence = true
+
+[web_terminal]
+enabled = false
+require_user_approval = true
+require_auth = true
+require_origin_check = true
+
+[storage]
+mode = "hybrid"
+primary = "mongodb"
+cache = "redis"
+local_data_dir = "/Volumes/ExternalSSD/OmniMemo"
+
+[security]
+shell_execution_default = "ask"
+auto_push = false
+allow_anonymous_http = false
+record_raw_transcripts = false
+allow_unprompted_provider_data_sharing = false
+
+[github]
+allowed_owner = "YanIanZ"
+require_verified_author_and_committer = true
+require_authenticated_actor_verification = true
+require_per_push_approval = true

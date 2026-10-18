@@ -33,3 +33,11 @@ Follow `AGENTS.md` section 9. MongoDB (or the explicit SQLite profile) is canoni
 ## Technology (required)
 
 `AGENTS.md` §10 and `docs/OmniMemo_PRD_v1.9_Swift_Vapor_React.md` are canonical: Swift 6 core, Vapor 4 **HTTP server**, React + TS + Vite **frontend**. Use on-demand `om` and only supported host hooks; no fictitious IDE startup hooks, automatic Git push, or extraneous infrastructure.
+
+## Multi-agent bridge, Omniverse and runtime events
+
+Follow `AGENTS.md` §§11–13. Gemini CLI reports real lifecycle and tool activity to OmniMemo through its supported adapter (hooks or plugin); report only categories, never prompts, tool arguments or secrets. Agent cards show `client-model`, current task and honest progress; unknown stays unknown, and silence becomes stale.
+
+## Context rollover
+
+Follow `AGENTS.md` §14. Gemini CLI near its context limit gets a verified checkpoint and a fresh session only through a supported, authorized interface; otherwise offer manual handoff. Report context usage only from host data; unknown stays unknown.

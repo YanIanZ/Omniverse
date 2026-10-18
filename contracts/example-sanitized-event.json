@@ -1,0 +1,15 @@
+{
+  "schema_version": "2.3",
+  "event_id": "9659183e-3314-494c-b917-dd2c0f3af1cd",
+  "source": "opencode.plugin",
+  "provider": "opencode",
+  "external_session_id": "session-example",
+  "workspace_id": "workspace-example",
+  "event_type": "tool.started",
+  "occurred_at": "2026-10-19T01:16:00+07:00",
+  "source_confidence": "observed",
+  "model_id": null,
+  "metadata": {
+    "tool_category": "file_edit"
+  }
+}
