@@ -5,7 +5,7 @@ Applicable to Codex, Claude Code, Gemini CLI, OpenCode, and any future coding ag
 ## 1. Engineering / Anti-Overengineering (MUST)
 
 1. Implement exactly the requested scope; do not add speculative features, dashboards, distributed services, frameworks, or unrelated refactors.
-2. Use the smallest working implementation; prefer Swift + MongoDB and the existing project modules.
+2. Use the smallest working implementation; prefer Swift 6 + Vapor (only for HTTP features) + React (only for UI) + the configured storage profile (MongoDB+Redis hybrid for this user; SQLite remains a minimal standalone option) and the existing project modules.
 3. Propose any new heavyweight dependency, background daemon, remote service, abstraction layer, or database before implementing it. Explain why a simpler option cannot work.
 4. First build/test the save -> recall -> cross-agent handoff vertical slice before optimizations.
 5. Avoid "future-proofing" interfaces/traits without a current second use case. Never add a plugin system only for one plugin.
@@ -37,7 +37,7 @@ Applicable to Codex, Claude Code, Gemini CLI, OpenCode, and any future coding ag
 - Before push: show destination, acting GitHub account, commit range, and request explicit approval.
 - Finish: changed files, tests, limitations, no unrelated work.
 
-See `docs/OmniMemo_PRD_v1.7_OmniBias_Guard.md` sections 24–55 for binding guardrails, multi-agent operations, and acceptance criteria.
+See `docs/OmniMemo_PRD_v1.9_Swift_Vapor_React.md` sections 24–55 for binding guardrails, multi-agent operations, and acceptance criteria.
 
 
 ## 4. Multi-Agent Mission Control (v1.3, MUST if enabled)
@@ -113,6 +113,35 @@ See `docs/OmniMemo_PRD_v1.7_OmniBias_Guard.md` sections 24–55 for binding guar
 11. Before a second reviewer, check task risk, provider capability, budget, permissions and owner approval. Respect explicit token/source caps and give a limited result if exhausted.
 12. All existing GitHub requirements remain: only configured `YanIanZ` Git identity/account, approved repository and **explicit user permission for each push**. Neither a confident evaluation nor another agent's review authorizes a push.
 
-See `docs/OmniMemo_PRD_v1.7_OmniBias_Guard.md` §§83–99. Optional on-demand `skills/omnimem-bias-guard/SKILL.md` describes the evidence workflow without forcing second-model inference.
+See `docs/OmniMemo_PRD_v1.9_Swift_Vapor_React.md` §§83–99. Optional on-demand `skills/omnimem-bias-guard/SKILL.md` describes the evidence workflow without forcing second-model inference.
 
-User override (2026-10-18): Swift + MongoDB supersede Rust + SQLite/FTS5 throughout the supplied v1.4–v1.7 proposals and specs. Mission Control, Omni Agent, REA Bridge, Omni Reach and OmniBias Guard remain proposed, optional features. Global host installation is explicitly authorized; preserve unrelated settings and project isolation.
+## 9. Hybrid MongoDB + Redis Storage (v1.8; MUST IF ENABLED)
+
+1. Explicit storage choice: `hybrid` = MongoDB durable source of truth + Redis cache/events; `mongodb` = MongoDB with local cache; `sqlite` = standalone lightweight. Never write secretly to a fallback store.
+2. MongoDB owns memories, evidence, graph, tasks, leases, checkpoints and approvals. Redis entries are derived/ephemeral; never treat a Redis key as verified task approval or persistent memory.
+3. Enforce workspace/project authorization prior to MongoDB query and Redis key generation. Cached data may not cross scope or erase `stale`, `disputed`, provenance, or OmniBias labels.
+4. Prefer MongoDB atomic conditional single-document writes with `revision`, lease tokens and idempotency keys for cross-agent task coordination. Use transactions/change streams only when deployment supports them and requirement is real.
+5. Redis down: degrade gracefully to MongoDB; MongoDB down: fail closed for persistent writes/task claims, even if Redis is alive. No automatic SQLite fallback, no fake successful writes.
+6. Redis cache TTL, bounded value size and namespace limits are mandatory. Never run `FLUSHALL`, `FLUSHDB`, global `CONFIG SET`, or alter another application's Redis keys.
+7. Secrets via explicit environment/OS secret manager only; do not commit DSNs, cookies or credentials. Use approved TLS/auth and least-privilege DB credentials.
+8. `omnimem relocate` moves only OmniMemo-owned files, not running MongoDB data files or Redis persistence. Never stop/move/migrate user-managed DB services without separate explicit authorization.
+9. Preserve the SQLite-only capability for lightweight use but avoid overengineering a third replicated store, Redis-only task queue, auto-scaling clusters, vector infrastructure or daemon without evidence.
+10. `YanIanZ` Git identity, separately verified authenticated push identity and human approval for **each push** remain non-negotiable; no DB approval record alone authorizes push.
+
+See `docs/OmniMemo_PRD_v1.8_MongoDB_Redis.md` §§100–111 and `docs/OmniMemo_Hybrid_Storage_Technical_Spec_v1.8.md`. No database has been configured by this documentation pack.
+
+
+## 10. Swift + Vapor + React and Auto-Activation (v1.9; CANONICAL)
+
+1. This section takes priority over any earlier Rust language / backend framework suggestions. Backend/core/CLI/MCP MUST be Swift 6; **Vapor 4 stays the HTTP/REST/WebSocket backend**, and **React + TypeScript + Vite is the frontend**. No React-only HTTP server and no separate production Node server.
+2. `om` is the intended native executable; MCP/agent hooks may call `om wake`, `om context --first-prompt`, and `om checkpoint`. Do not run heavy indexing on every prompt.
+3. Auto-wake when a host-supported startup/session/prompt hook or MCP first-use signal occurs. Do not invent an IDE-open trigger: if unavailable, use capability detection, `om run` wrapper or manual `om`.
+4. Distinguish a running agent from a connected client and an open IDE window; stale presence becomes `unknown`. Never fabricate observed telemetry.
+5. Vapor loopback HTTP default, authentication and origin/CSRF/WebSocket protection; React accesses scoped server API only, never databases or private session files.
+6. In development Vite uses a local proxy for `/api`/`/ws`; production Vapor serves Vite's static `dist`. Only one user-approved Vapor server process; avoid duplicate startup and idle background load.
+7. MongoDB remains durable truth; Redis remains cache/signaling; use tested, maintained Swift clients matching actual server version. Driver compatibility is a gate, not an assumption.
+8. Preserve every anti-overengineering rule, explicit startup consent, evidence/bias guard, authorized optional Reach/REA, restricted secrets, and GitHub `YanIanZ` identity with **fresh approval for every push**.
+9. **First delivery** is Swift save/recall -> one provider's automatic first prompt -> one Vapor WebSocket event -> one React live status card. Do not build full 2D office before this test passes.
+10. The v1.9 PRD `docs/OmniMemo_PRD_v1.9_Swift_Vapor_React.md` is the current authority. History cannot override it.
+
+User override (2026-10-18): Swift + MongoDB supersede Rust + SQLite/FTS5 throughout the supplied v1.4–v1.9 proposals and specs (v1.9 itself is Swift-first; any remaining Rust/SQLite wording in older docs is superseded). Mission Control, Omni Agent, REA Bridge, Omni Reach and OmniBias Guard remain proposed, optional features. Global host installation is explicitly authorized; preserve unrelated settings and project isolation.

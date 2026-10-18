@@ -1,12 +1,12 @@
-# Mission Control agent compatibility — validation matrix
+# OmniMemo v1.9 — Agent Integration Compatibility Plan
 
-This matrix is **planned**, not tested, and contains no guarantee of live session control.
+**Never promise identical automatic hooks across providers.** Probe installed versions and supported config APIs on each user's machine.
 
-| Runtime | Shared MCP memory | Skill instructions | Live session events | Session launch |
+| Agent | MCP memory | Session activation | Before first prompt | Cross-agent handoff |
 |---|---|---|---|---|
-| Codex | Planned (verify installed version) | Planned | Probe required | Probe required |
-| Claude Code | Planned (verify installed version) | Planned | Probe required | Probe required |
-| OpenCode | Planned (verify installed version) | Planned | Probe required | Probe required |
-| Gemini CLI | Planned (verify installed version) | Planned | Probe required | Probe required |
+| Claude Code | Adapter planned | Use supported `SessionStart` when available | Use supported `UserPromptSubmit` when available | Via scoped OmniMemo Task Capsule |
+| Gemini CLI | Adapter planned | Probe installed hook support | Probe installed pre-agent hook | Via MCP/CLI |
+| Codex | Adapter planned | Probe installed client version and supported hooks | MCP-first-use or hook if supported | Via MCP/CLI |
+| OpenCode | Adapter planned | Probe event/plugin API | Use official plugin event if supported | Via MCP/CLI |
 
-A runtime's inability to launch from the dashboard does not prevent it from reading/writing OmniMemo memory and tasks through MCP when supported. Never claim “online”, “working”, or cost details without a verifiable signal.
+If a host doesn't expose an IDE-open event, auto-activate on session/MCP first-use or approved `om run` wrapper; do not read private app databases or automate an IDE without supported APIs. Actual status is `unknown` without heartbeat/event; provider name does not imply agent role.

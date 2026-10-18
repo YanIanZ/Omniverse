@@ -1,0 +1,61 @@
+# OmniMemo v1.9 reference configuration; commands/config parser NOT implemented yet.
+# Supply secret values through environment or OS keychain, never commit them.
+
+[runtime]
+language = "swift"
+auto_wake_on_supported_hooks = true
+auto_context_on_first_prompt = true
+always_on_http = false
+max_workers = 2
+
+[cli]
+command = "om"
+
+[http]
+backend = "vapor"
+enabled = true
+start_on_office_command = true
+host = "127.0.0.1"
+port = 8787
+websocket_path = "/ws/v1/live"
+api_prefix = "/api/v1"
+require_auth = true
+require_origin_validation = true
+
+[frontend]
+framework = "react"
+language = "typescript"
+bundler = "vite"
+serve_static_from_vapor = true
+production_dist_path = "frontend/dist"
+
+[storage]
+backend = "hybrid"
+local_data_dir = "/Volumes/ExternalSSD/OmniMemo"
+
+[storage.mongodb]
+enabled = true
+uri_env = "OMNIMEMO_MONGODB_URI"
+database = "omnimemo"
+connect_timeout_ms = 3000
+
+[storage.redis]
+enabled = true
+url_env = "OMNIMEMO_REDIS_URL"
+key_prefix = "omnimemo:v1"
+context_ttl_seconds = 900
+presence_ttl_seconds = 60
+
+[cache]
+local_disk_max_mib = 32
+reach_subquota_mib = 8
+
+[agent_integration]
+startup_policy = "only_supported_hooks"
+first_prompt_max_tokens = 600
+manual_fallback = true
+
+[github]
+allowed_owner = "YanIanZ"
+auto_push = false
+require_per_push_confirmation = true
