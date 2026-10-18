@@ -7,18 +7,19 @@ import Vapor
 /// MongoDB is polled every second; an optional Redis hint triggers an immediate poll.
 public actor LiveHub {
   public static let maxClients = 32
-  let store: MongoStore
+  let store: MemoryStore
   private(set) var revision: Int
-  private(set) var redisState = RedisSignal.url == nil ? "disabled" : "unavailable"
+  private(set) var redisState: String
   private var clients: [ObjectIdentifier: WebSocket] = [:]
   private var task: Task<Void, Never>?
   private var redis: RedisConnection?
   private let wakeups: AsyncStream<Void>
   private let wake: AsyncStream<Void>.Continuation
 
-  init(store: MongoStore, start revision: Int) {
+  init(store: MemoryStore, start revision: Int) {
     self.store = store
     self.revision = revision
+    redisState = store.redisURL == nil ? "disabled" : "unavailable"
     (wakeups, wake) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(1))
   }
 
@@ -29,7 +30,7 @@ public actor LiveHub {
   private func run() async {
     let wake = self.wake
     if let connection = await RedisSignal.subscribe(
-      projectID: store.binding.id, onSignal: { wake.yield() })
+      projectID: store.binding.id, url: store.redisURL, onSignal: { wake.yield() })
     {
       redis = connection
       redisState = "connected"

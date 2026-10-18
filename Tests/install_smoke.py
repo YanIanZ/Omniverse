@@ -58,4 +58,16 @@ with tempfile.TemporaryDirectory(prefix='install space ', dir=workspace) as fold
     env.pop('OMNIMEM_MONGO_URI')
     subprocess.run([str(launcher),'--data-dir',str(env_data),'--project',str(env_project),'status'],check=True,capture_output=True)
 
-print('PASS: dry-run has no writes; invalid flags/conflicts fail; real packaged CLI; setup; repeated install preserves memory/config; paths with spaces')
+    # The sqlite profile needs no database server: setup creates db/memory.sqlite only.
+    lite_project=root/'lite project';lite_project.mkdir();lite_data=root/'lite data'
+    subprocess.run(['git','init','-q',str(lite_project)],check=True)
+    p=subprocess.run(['bash',str(installer),'--prefix',str(prefix),'--data-dir',str(lite_data),'--project',str(lite_project),
+                      '--backend','sqlite','--setup'],env=env,text=True,capture_output=True,timeout=600)
+    assert p.returncode==0,p.stdout[-1500:]+p.stderr[-1500:]
+    assert json.loads((lite_data/'meta.json').read_text())['backend']=='sqlite'
+    assert (lite_data/'db/memory.sqlite').is_file()
+    lite=[str(launcher),'--data-dir',str(lite_data),'--project',str(lite_project)]
+    subprocess.run(lite+['memory','save','--title','Lite','--content','No server needed'],check=True,capture_output=True)
+    assert json.loads(subprocess.check_output(lite+['status'],text=True))['backend']=='SQLite'
+
+print('PASS: sqlite profile setup without a server; dry-run has no writes; invalid flags/conflicts fail; real packaged CLI; setup; repeated install preserves memory/config; paths with spaces')

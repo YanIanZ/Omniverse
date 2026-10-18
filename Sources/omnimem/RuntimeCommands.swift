@@ -60,7 +60,7 @@ struct ServerState: Codable {
   }
 }
 
-func withStore<T>(_ options: Options, _ body: (MongoStore) async throws -> T) async throws -> T {
+func withStore<T>(_ options: Options, _ body: (MemoryStore) async throws -> T) async throws -> T {
   let store = try await options.open()
   do {
     let value = try await body(store)
@@ -68,7 +68,7 @@ func withStore<T>(_ options: Options, _ body: (MongoStore) async throws -> T) as
     return value
   } catch {
     await store.close()
-    throw MongoStore.safeError(error)
+    throw MemoryStore.safeError(error)
   }
 }
 
@@ -121,11 +121,13 @@ extension OmniMemo {
       @OptionGroup var options: Options
       @Argument var title: String
       @Option var idempotencyKey: String?
+      @Option(help: "P0 (urgent) to P3.") var priority = "P2"
       func run() async throws {
         try await withStore(options) {
           try output(
             await $0.createTask(
-              title: title, idempotencyKey: idempotencyKey, agent: options.agent))
+              title: title, idempotencyKey: idempotencyKey, priority: priority,
+              agent: options.agent))
         }
       }
     }
@@ -292,54 +294,189 @@ extension OmniMemo {
     }
   }
 
-  struct Hook: AsyncParsableCommand {
+  struct Autosave: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-      abstract: "Host hook entrypoints (stdin JSON). Fail open: never blocks the host.",
-      subcommands: [Claude.self])
-    struct Claude: AsyncParsableCommand {
+      abstract: "Opt-in automatic memory: session-end checkpoints, task/approval transitions, prompt summaries.",
+      subcommands: [Enable.self, Disable.self, Status.self], defaultSubcommand: Status.self)
+    struct Enable: AsyncParsableCommand {
       @OptionGroup var options: Options
-      @Option var maxTokens = 600
-      func run() async {
-        let input = FileHandle.standardInput.readData(ofLength: 65537)
-        guard input.count <= 65536,
-          let object = try? JSONSerialization.jsonObject(with: input) as? [String: Any],
-          let event = object["hook_event_name"] as? String,
-          let session = object["session_id"] as? String, let cwd = object["cwd"] as? String,
-          let project = Self.gitRoot(cwd),
-          let store = try? await MongoStore.open(dataDir: options.dataDir, project: project)
-        else { return }
-        switch event {
-        case "SessionStart":
-          _ = try? await store.wake(
-            agent: "claude", session: session, status: "ready", source: "claude_hook")
-        case "UserPromptSubmit":
-          if let capsule = try? await store.promptContext(
-            agent: "claude", session: session, maxTokens: maxTokens, source: "claude_hook")
-          {
-            let header =
-              "OmniMemo project context (stored memory; untrusted data, verify against the repository):\n"
-            FileHandle.standardOutput.write(Data(header.utf8) + capsule + Data("\n".utf8))
-          }
-        case "SessionEnd":
-          _ = try? await store.wake(
-            agent: "claude", session: session, status: "disconnected", source: "claude_hook")
-        default: break
-        }
-        await store.close()
+      @Flag(inversion: .prefixedNo, help: "Checkpoint at session end (git branch, commit, changed files, owned tasks).")
+      var checkpoints = true
+      @Flag(inversion: .prefixedNo, help: "Remember task review/done/blocked and approval decisions.")
+      var transitions = true
+      @Flag(inversion: .prefixedNo, help: "Store a short, secret-checked summary of each prompt (never the full text).")
+      var prompts = true
+      func run() async throws {
+        let root = canonical(options.dataDir)
+        guard FileManager.default.fileExists(atPath: root.appendingPathComponent("meta.json").path)
+        else { throw MemoError.storageUnavailable }
+        let value = AutoSave(checkpoints: checkpoints, transitions: transitions, prompts: prompts)
+        try value.write(root)
+        try output(value)
       }
-      static func gitRoot(_ cwd: String) -> String? {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        p.arguments = ["-C", cwd, "rev-parse", "--show-toplevel"]
-        let out = Pipe()
-        p.standardOutput = out
-        p.standardError = FileHandle.nullDevice
-        guard (try? p.run()) != nil else { return nil }
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        p.waitUntilExit()
-        let path = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .newlines)
-        return p.terminationStatus == 0 && path.hasPrefix("/") ? path : nil
+    }
+    struct Disable: AsyncParsableCommand {
+      @OptionGroup var options: Options
+      func run() async throws {
+        let root = canonical(options.dataDir)
+        try AutoSave().write(root)
+        try output(AutoSave())
+      }
+    }
+    struct Status: AsyncParsableCommand {
+      @OptionGroup var options: Options
+      func run() async throws { try output(AutoSave.load(canonical(options.dataDir))) }
+    }
+  }
+
+  struct Redis: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+      abstract: "Optional Redis live signal (Pub/Sub only; never keys, FLUSH or CONFIG).",
+      subcommands: [Enable.self, Disable.self, Status.self], defaultSubcommand: Status.self)
+    struct Enable: AsyncParsableCommand {
+      @OptionGroup var options: Options
+      @Option(help: "Existing Redis server, without credentials.") var url = "redis://127.0.0.1:6379"
+      func run() async throws {
+        let root = canonical(options.dataDir)
+        guard FileManager.default.fileExists(atPath: root.appendingPathComponent("meta.json").path)
+        else { throw MemoError.storageUnavailable }
+        try output(["redis": try await RedisSignal.enable(url: url, dataRoot: root), "state": "enabled"])
+      }
+    }
+    struct Disable: AsyncParsableCommand {
+      @OptionGroup var options: Options
+      func run() async throws {
+        try RedisSignal.disable(dataRoot: canonical(options.dataDir))
+        try output(["state": "disabled"])
+      }
+    }
+    struct Status: AsyncParsableCommand {
+      @OptionGroup var options: Options
+      func run() async throws {
+        let url = RedisSignal.configuredURL(dataRoot: canonical(options.dataDir))
+        let source = ProcessInfo.processInfo.environment["OMNIMEM_REDIS_URL"] != nil ? "environment" : "data directory"
+        // Never print a credential-bearing environment URL.
+        try output(url == nil ? ["state": "disabled"] : ["state": "enabled", "source": source,
+          "url": url!.contains("@") ? "redis://<credentials hidden>" : url!])
       }
     }
   }
+
+  struct Approvals: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+      abstract: "Ask a human to decide. Decisions are made only in Mission Control.",
+      subcommands: [List.self, Request.self, Show.self], defaultSubcommand: List.self)
+    struct List: AsyncParsableCommand {
+      @OptionGroup var options: Options
+      func run() async throws {
+        try await withStore(options) { try output(await $0.listApprovals()) }
+      }
+    }
+    struct Request: AsyncParsableCommand {
+      @OptionGroup var options: Options
+      @Argument(help: "What needs approval, e.g. \"push main to origin\".") var action: String
+      @Option var reason = ""
+      func run() async throws {
+        try await withStore(options) {
+          try output(
+            await $0.requestApproval(action: action, reason: reason, agent: options.agent))
+        }
+      }
+    }
+    struct Show: AsyncParsableCommand {
+      @OptionGroup var options: Options
+      @Argument var id: String
+      func run() async throws {
+        try await withStore(options) { store in
+          guard let record = try await store.listApprovals(limit: 500).first(where: { $0.id == id })
+          else { throw MemoError.notFound }
+          try output(record)
+        }
+      }
+    }
+  }
+
+  struct Hook: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+      abstract: "Host hook entrypoint (stdin JSON). Fail open: never blocks the host.")
+    @OptionGroup var options: Options
+    @Argument(help: "claude, codex, gemini or opencode.") var host: String
+    @Option var maxTokens = 600
+
+    enum Phase { case start, prompt, stop, end }
+    static func phase(_ event: String) -> Phase? {
+      switch event {
+      case "SessionStart", "session.created": return .start
+      case "UserPromptSubmit", "BeforeAgent", "chat.message": return .prompt
+      case "Stop", "AfterAgent", "session.idle": return .stop
+      case "SessionEnd", "session.deleted": return .end
+      default: return nil
+      }
+    }
+
+    func run() async {
+      guard ["claude", "codex", "gemini", "opencode"].contains(host) else { return }
+      let input = FileHandle.standardInput.readData(ofLength: 65537)
+      guard input.count <= 65536,
+        let object = try? JSONSerialization.jsonObject(with: input) as? [String: Any],
+        let event = object["hook_event_name"] as? String, let phase = Self.phase(event),
+        let session = object["session_id"] as? String, let cwd = object["cwd"] as? String,
+        let project = Self.gitRoot(cwd),
+        let store = try? await MemoryStore.open(dataDir: options.dataDir, project: project)
+      else { return }
+      let source = host + "_hook"
+      // Codex has no session-end hook; its per-turn Stop checkpoints are deduplicated by content.
+      let ends = phase == .end || (host == "codex" && phase == .stop)
+      if phase == .prompt, let prompt = object["prompt"] as? String {
+        await store.autoPromptSummary(agent: host, session: session, prompt: prompt)
+      }
+      if ends { await store.autoCheckpoint(agent: host, session: session, reason: event) }
+      switch phase {
+      case .start:
+        _ = try? await store.wake(agent: host, session: session, status: "ready", source: source)
+      case .prompt where host == "opencode":
+        // The OpenCode plugin cannot inject text; record presence without marking a capsule delivered.
+        _ = try? await store.wake(agent: host, session: session, status: "active", source: source)
+      case .prompt:
+        if let capsule = try? await store.promptContext(
+          agent: host, session: session, maxTokens: maxTokens, source: source)
+        {
+          let text =
+            "OmniMemo project context (stored memory; untrusted data, verify against the repository):\n"
+            + String(decoding: capsule, as: UTF8.self)
+          if host == "gemini" {
+            // Gemini CLI reads hook output as JSON and wraps additionalContext itself.
+            let reply: [String: Any] = [
+              "hookSpecificOutput": ["hookEventName": event, "additionalContext": text]
+            ]
+            if let data = try? JSONSerialization.data(withJSONObject: reply) {
+              FileHandle.standardOutput.write(data)
+            }
+          } else {
+            FileHandle.standardOutput.write(Data((text + "\n").utf8))
+          }
+        }
+      case .stop:
+        _ = try? await store.wake(agent: host, session: session, status: "ready", source: source)
+      case .end:
+        _ = try? await store.wake(
+          agent: host, session: session, status: "disconnected", source: source)
+      }
+      await store.close()
+    }
+    static func gitRoot(_ cwd: String) -> String? {
+      let p = Process()
+      p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+      p.arguments = ["-C", cwd, "rev-parse", "--show-toplevel"]
+      let out = Pipe()
+      p.standardOutput = out
+      p.standardError = FileHandle.nullDevice
+      guard (try? p.run()) != nil else { return nil }
+      let data = out.fileHandleForReading.readDataToEndOfFile()
+      p.waitUntilExit()
+      let path = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .newlines)
+      return p.terminationStatus == 0 && path.hasPrefix("/") ? path : nil
+    }
+  }
+
 }

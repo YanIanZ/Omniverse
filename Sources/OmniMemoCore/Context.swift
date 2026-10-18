@@ -89,10 +89,11 @@ public enum ContextBudget {
     return data
   }
 }
-extension MongoStore {
+extension MemoryStore {
   public func context(task: String, maxTokens: Int = 500) async throws -> Data {
-    let matches = try await search(task, limit: 8)
-    let recent = try await search(limit: 8)
+    // Prompt summaries are searchable history, never part of a capsule (no token inflation).
+    let matches = try await search(task, limit: 8).filter { $0.kind != "prompt" }
+    let recent = try await search(limit: 16).filter { $0.kind != "prompt" }
     var records: [MemoryRecord] = []
     if let checkpoint = recent.first(where: { $0.kind == "checkpoint" }) {
       records.append(checkpoint)

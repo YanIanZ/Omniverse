@@ -9,8 +9,8 @@ struct Options: ParsableArguments {
     String = FileManager.default.currentDirectoryPath
   @Option(name: .long, help: "Provenance label; not an authentication identity.") var agent:
     String = "cli"
-  func open() async throws -> MongoStore {
-    try await MongoStore.open(dataDir: dataDir, project: project)
+  func open() async throws -> MemoryStore {
+    try await MemoryStore.open(dataDir: dataDir, project: project)
   }
 }
 func output<T: Encodable>(_ value: T) throws {
@@ -24,7 +24,7 @@ struct OmniMemo: AsyncParsableCommand {
     subcommands: [
       Init.self, Status.self, Doctor.self, Project.self, Memory.self, Context.self, Checkpoint.self,
       Cache.self, MCP.self, Rea.self, Install.self, Uninstall.self, Wake.self, Recall.self,
-      Agents.self, Tasks.self, Serve.self, Office.self, Stop.self, Hook.self,
+      Agents.self, Tasks.self, Approvals.self, Redis.self, Autosave.self, Serve.self, Office.self, Stop.self, Hook.self,
     ])
   @OptionGroup var options: Options
   /// Bare `om`: status plus the next useful command; never starts a server.
@@ -41,7 +41,7 @@ struct OmniMemo: AsyncParsableCommand {
       await store.close()
     } catch {
       await store.close()
-      throw MongoStore.safeError(error)
+      throw MemoryStore.safeError(error)
     }
   }
   struct Init: AsyncParsableCommand {
@@ -51,15 +51,17 @@ struct OmniMemo: AsyncParsableCommand {
     @Option(help: "MongoDB URI without credentials; OMNIMEM_MONGO_URI, if set, takes precedence.")
     var mongoUri: String?
     @Option(help: "Disposable cache quota in MiB.") var cacheMib: Int = 32
+    @Option(help: "Storage profile: mongodb (MongoDB, optional Redis) or sqlite (embedded db/memory.sqlite).")
+    var backend = "mongodb"
     @Flag(help: "Make this data directory the default via a small user-level pointer.")
     var setDefault = false
     func run() async throws {
       guard (0...2048).contains(cacheMib) else {
         throw ValidationError("cache-mib must be 0...2048")
       }
-      let store = try await MongoStore.initialize(
+      let store = try await MemoryStore.initialize(
         dataDir: options.dataDir, project: options.project, uri: mongoUri,
-        cacheMaxBytes: cacheMib * 1024 * 1024)
+        cacheMaxBytes: cacheMib * 1024 * 1024, backend: backend)
       do {
         if setDefault {
           let pointer = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(
@@ -78,7 +80,7 @@ struct OmniMemo: AsyncParsableCommand {
         await store.close()
       } catch {
         await store.close()
-        throw MongoStore.safeError(error)
+        throw MemoryStore.safeError(error)
       }
     }
   }
@@ -91,7 +93,7 @@ struct OmniMemo: AsyncParsableCommand {
         await store.close()
       } catch {
         await store.close()
-        throw MongoStore.safeError(error)
+        throw MemoryStore.safeError(error)
       }
     }
   }
@@ -109,7 +111,7 @@ struct OmniMemo: AsyncParsableCommand {
         await store.close()
       } catch {
         await store.close()
-        throw MongoStore.safeError(error)
+        throw MemoryStore.safeError(error)
       }
     }
   }
@@ -166,7 +168,7 @@ struct OmniMemo: AsyncParsableCommand {
           await store.close()
         } catch {
           await store.close()
-          throw MongoStore.safeError(error)
+          throw MemoryStore.safeError(error)
         }
       }
     }
@@ -181,7 +183,7 @@ struct OmniMemo: AsyncParsableCommand {
           await store.close()
         } catch {
           await store.close()
-          throw MongoStore.safeError(error)
+          throw MemoryStore.safeError(error)
         }
       }
     }
@@ -195,7 +197,7 @@ struct OmniMemo: AsyncParsableCommand {
           await store.close()
         } catch {
           await store.close()
-          throw MongoStore.safeError(error)
+          throw MemoryStore.safeError(error)
         }
       }
     }
@@ -209,7 +211,7 @@ struct OmniMemo: AsyncParsableCommand {
           await store.close()
         } catch {
           await store.close()
-          throw MongoStore.safeError(error)
+          throw MemoryStore.safeError(error)
         }
       }
     }
@@ -227,7 +229,7 @@ struct OmniMemo: AsyncParsableCommand {
           await store.close()
         } catch {
           await store.close()
-          throw MongoStore.safeError(error)
+          throw MemoryStore.safeError(error)
         }
       }
     }
@@ -251,7 +253,7 @@ struct OmniMemo: AsyncParsableCommand {
           await store.close()
         } catch {
           await store.close()
-          throw MongoStore.safeError(error)
+          throw MemoryStore.safeError(error)
         }
       }
     }
@@ -287,7 +289,7 @@ struct OmniMemo: AsyncParsableCommand {
         await store.close()
       } catch {
         await store.close()
-        throw MongoStore.safeError(error)
+        throw MemoryStore.safeError(error)
       }
     }
   }
@@ -311,7 +313,7 @@ struct OmniMemo: AsyncParsableCommand {
         await store.close()
       } catch {
         await store.close()
-        throw MongoStore.safeError(error)
+        throw MemoryStore.safeError(error)
       }
     }
   }
@@ -327,7 +329,7 @@ struct OmniMemo: AsyncParsableCommand {
           await store.close()
         } catch {
           await store.close()
-          throw MongoStore.safeError(error)
+          throw MemoryStore.safeError(error)
         }
       }
     }
@@ -341,7 +343,7 @@ struct OmniMemo: AsyncParsableCommand {
           await store.close()
         } catch {
           await store.close()
-          throw MongoStore.safeError(error)
+          throw MemoryStore.safeError(error)
         }
       }
     }

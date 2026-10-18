@@ -5,6 +5,8 @@ cd "$(dirname "$0")/.."
 BIN_DIR="$(./scripts/swift.sh build -c release --show-bin-path)"
 DEST="${1:-/Volumes/Ext/DevCache/OmniMemo/dist/0.2.0}"
 mkdir -p "$DEST"
+# A new inode: overwriting a signed binary in place gets it killed by the kernel.
+rm -f "$DEST/omnimem"
 cp "$BIN_DIR/omnimem" "$DEST/omnimem"
 for asset in "$BIN_DIR"/*.bundle "$BIN_DIR"/*.resources; do
   [ -e "$asset" ] || continue

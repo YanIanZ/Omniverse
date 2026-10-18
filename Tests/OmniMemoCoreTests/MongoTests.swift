@@ -3,7 +3,7 @@ import XCTest
 @testable import OmniMemoCore
 
 final class MongoTests: XCTestCase {
-  func fixture() async throws -> (URL, MongoStore) {
+  func fixture() async throws -> (URL, MemoryStore) {
     guard let uri = ProcessInfo.processInfo.environment["OMNIMEM_TEST_MONGO_URI"] else {
       throw XCTSkip("Set OMNIMEM_TEST_MONGO_URI for real MongoDB integration tests")
     }
@@ -14,7 +14,7 @@ final class MongoTests: XCTestCase {
     let project = root.appendingPathComponent("project")
     try privateDirectory(project)
     try Data("let answer = 42\n".utf8).write(to: project.appendingPathComponent("main.swift"))
-    let store = try await MongoStore.initialize(
+    let store = try await MemoryStore.initialize(
       dataDir: root.appendingPathComponent("memory").path, project: project.path, uri: uri)
     addTeardownBlock {
       await store.close()
@@ -37,7 +37,7 @@ final class MongoTests: XCTestCase {
       _ = try await store.save(conflicting)
       XCTFail("expected idempotency conflict")
     } catch { XCTAssertTrue(error is MemoError) }
-    let reopened = try await MongoStore.open(
+    let reopened = try await MemoryStore.open(
       dataDir: root.appendingPathComponent("memory").path,
       project: root.appendingPathComponent("project").path)
     let value = try await reopened.get(saved.id)
@@ -53,7 +53,7 @@ final class MongoTests: XCTestCase {
         title: "Evidence", content: "main.swift declares the answer", sources: ["main.swift"]))
     let other = root.appendingPathComponent("other")
     try privateDirectory(other)
-    let peer = try await MongoStore.open(
+    let peer = try await MemoryStore.open(
       dataDir: root.appendingPathComponent("memory").path, project: other.path)
     let results = try await peer.search()
     XCTAssertTrue(results.isEmpty)
@@ -104,7 +104,7 @@ final class MongoTests: XCTestCase {
       XCTFail("missing storage accepted")
     } catch { XCTAssertTrue(error.localizedDescription.contains("storage_unavailable")) }
     do {
-      _ = try await MongoStore.open(
+      _ = try await MemoryStore.open(
         dataDir: root.appendingPathComponent("memory").path,
         project: root.appendingPathComponent("project").path)
       XCTFail("recreated store")
@@ -113,15 +113,15 @@ final class MongoTests: XCTestCase {
   }
   func testConcurrentIdempotentWritesAcrossConnections() async throws {
     let (root, store) = try await fixture()
-    let connections = try await withThrowingTaskGroup(of: MongoStore.self) { group in
+    let connections = try await withThrowingTaskGroup(of: MemoryStore.self) { group in
       for _ in 0..<4 {
         group.addTask {
-          try await MongoStore.open(
+          try await MemoryStore.open(
             dataDir: root.appendingPathComponent("memory").path,
             project: root.appendingPathComponent("project").path)
         }
       }
-      var output: [MongoStore] = []
+      var output: [MemoryStore] = []
       for try await connection in group { output.append(connection) }
       return output
     }
@@ -184,7 +184,7 @@ final class MongoTests: XCTestCase {
     object["schema_version"] = 2
     try JSONSerialization.data(withJSONObject: object).write(to: meta)
     do {
-      _ = try await MongoStore.open(
+      _ = try await MemoryStore.open(
         dataDir: root.appendingPathComponent("memory").path,
         project: root.appendingPathComponent("project").path)
       XCTFail("future schema accepted")

@@ -4,7 +4,7 @@ import XCTest
 @testable import OmniMemoCore
 
 final class RuntimeTests: XCTestCase {
-  func store() async throws -> MongoStore {
+  func store() async throws -> MemoryStore {
     let (_, store) = try await MongoTests().fixture()
     try await store.ensureRuntimeIndexes()
     return store
@@ -24,13 +24,13 @@ final class RuntimeTests: XCTestCase {
     let agents = try await store.agents()
     XCTAssertEqual(agents.count, 1)
     XCTAssertEqual(agents.first?.status, "disconnected")
-    XCTAssertThrowsError(try MongoStore.label("bad id; rm", "session"))
+    XCTAssertThrowsError(try MemoryStore.label("bad id; rm", "session"))
   }
 
   func testStalePresenceIsUnknown() async throws {
     let store = try await store()
     _ = try await store.wake(agent: "codex", session: "s2", source: "cli")
-    _ = try await store.db["omnimem_sessions"].updateMany(
+    _ = try await store.mongoDatabase!["omnimem_sessions"].updateMany(
       where: ["project_id": store.binding.id], to: ["$set": ["last_seen": "2020-01-01T00:00:00Z"]])
     let agents = try await store.agents()
     XCTAssertEqual(agents.first?.status, "unknown")
@@ -90,6 +90,39 @@ final class RuntimeTests: XCTestCase {
     } catch MemoError.invalid {}
     let events = try await store.events(after: 0)
     XCTAssertEqual(events.filter { $0.type == "task.updated" }.count, 2)
+  }
+
+  func testConcurrentIdempotentCreateOnFreshStoreMakesOneTask() async throws {
+    // No server ever ran here, so the unique index must be created by the first writer.
+    let (_, store) = try await MongoTests().fixture()
+    try? await store.mongoDatabase!["omnimem_tasks"].dropIndex(.name("project_task"))
+    let made = await withTaskGroup(of: String?.self) { group in
+      for _ in 0..<4 {
+        group.addTask { try? await store.createTask(title: "idempotency probe", idempotencyKey: "p1").id }
+      }
+      return await group.reduce(into: [String]()) { if let id = $1 { $0.append(id) } }
+    }
+    XCTAssertEqual(Set(made).count, 1)
+    let tasks = try await store.listTasks()
+    XCTAssertEqual(tasks.count, 1)
+  }
+
+  func testDuplicateTaskCopiesMergeToHighestRevision() async throws {
+    let (_, store) = try await MongoTests().fixture()
+    // Reproduce a store written before the unique index existed.
+    try? await store.mongoDatabase!["omnimem_tasks"].dropIndex(.name("project_task"))
+    for revision in [1, 2] {
+      var doc = try BSONEncoder().encode(
+        TaskRecord(
+          id: "task_dup", title: "probe", status: revision == 2 ? "done" : "todo",
+          revision: revision, owner: nil, priority: "P2", createdAt: nowISO(), updatedAt: nowISO()))
+      doc["project_id"] = store.binding.id
+      _ = try await store.mongoDatabase!["omnimem_tasks"].insert(doc)
+    }
+    try await store.ensureRuntimeIndexes()
+    let tasks = try await store.listTasks()
+    XCTAssertEqual(tasks.map(\.revision), [2])
+    XCTAssertEqual(tasks.first?.status, "done")
   }
 
   func testRedisUnavailableDoesNotBlockDurableWrites() async throws {

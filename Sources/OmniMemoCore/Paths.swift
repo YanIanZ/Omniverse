@@ -65,7 +65,21 @@ public struct ProjectBinding: Sendable {
   }
   public var branch: String { Self.git(root, ["symbolic-ref", "--quiet", "--short", "HEAD"]) }
   public var head: String { Self.git(root, ["rev-parse", "--verify", "HEAD"]) }
-  private static func git(_ root: URL, _ args: [String]) -> String {
+  /// Modified, added and untracked paths (relative to the root); deletions are omitted.
+  public func changedFiles() -> [String] {
+    let raw = Self.git(root, ["status", "--porcelain", "-z", "--untracked-files=all"], limit: 65536, trim: false)
+    var paths: [String] = []
+    var entries = raw.split(separator: "\0", omittingEmptySubsequences: true).makeIterator()
+    while let entry = entries.next() {
+      guard entry.count > 3 else { continue }
+      let code = entry.prefix(2)
+      let path = String(entry.dropFirst(3))
+      if code.contains("R") || code.contains("C") { _ = entries.next() }  // skip the original name
+      if !code.contains("D") { paths.append(path) }
+    }
+    return paths
+  }
+  private static func git(_ root: URL, _ args: [String], limit: Int = 4096, trim: Bool = true) -> String {
     let p = Process()
     p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
     p.arguments = ["-C", root.path] + args
@@ -76,8 +90,9 @@ public struct ProjectBinding: Sendable {
       try p.run()
       let d = out.fileHandleForReading.readDataToEndOfFile()
       p.waitUntilExit()
-      guard p.terminationStatus == 0, d.count < 4096 else { return "" }
-      return String(decoding: d, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+      guard p.terminationStatus == 0, d.count < limit else { return "" }
+      let text = String(decoding: d, as: UTF8.self)
+      return trim ? text.trimmingCharacters(in: .whitespacesAndNewlines) : text
     } catch { return "" }
   }
   public func evidence(_ path: String) throws -> Evidence {

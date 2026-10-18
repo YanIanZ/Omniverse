@@ -68,12 +68,71 @@ def servers(host, binary, data, launcher, rea):
         result[name] = entry
     return result
 
-HOOK_EVENTS=('SessionStart','UserPromptSubmit','SessionEnd')
+# Each host's own documented lifecycle events; every command fails open and never blocks a prompt.
+HOOK_EVENTS={
+    'claude':('SessionStart','UserPromptSubmit','Stop','SessionEnd'),
+    'codex':('SessionStart','UserPromptSubmit','Stop'),
+    'gemini':('SessionStart','BeforeAgent','AfterAgent','SessionEnd'),
+}
 
-def claude_hooks(binary, data):
-    # Official Claude Code hook events only; the command fails open and never blocks a prompt.
-    command=shlex.quote(str(binary))+' --data-dir '+shlex.quote(str(data))+' hook claude'
-    return {event:{'hooks':[{'type':'command','command':command,'timeout':10}]} for event in HOOK_EVENTS}
+def host_hooks(host, binary, data):
+    command=shlex.quote(str(binary))+' --data-dir '+shlex.quote(str(data))+' hook '+host
+    return {event:{'hooks':[{'type':'command','command':command,'timeout':10}]} for event in HOOK_EVENTS[host]}
+
+def opencode_plugin(binary, data, layout='v2'):
+    # OpenCode exposes lifecycle events only to plugins; this one forwards them to `om hook opencode`.
+    head=('// Installed by the OmniMemo global installer; uninstall with its --uninstall.\n'
+          'import { spawn } from "node:child_process";\n'
+          'const BIN = '+json.dumps(str(binary))+';\nconst DATA = '+json.dumps(str(data))+';\n'
+          'function send(event, sessionID, directory) {\n'
+          '  if (!sessionID || !directory) return;\n'
+          '  try {\n'
+          '    const child = spawn(BIN, ["--data-dir", DATA, "hook", "opencode"], { stdio: ["pipe", "ignore", "ignore"] });\n'
+          '    child.on("error", () => {});\n'
+          '    child.stdin.end(JSON.stringify({ hook_event_name: event, session_id: sessionID, cwd: directory }));\n'
+          '  } catch {}\n'
+          '}\n')
+    if layout=='v1':
+        return head+('export const OmniMemoPresence = async ({ directory }) => ({\n'
+                     '  event: async ({ event }) => {\n'
+                     '    const type = event?.type;\n'
+                     '    if (type === "session.created" || type === "session.deleted") send(type, event.properties?.info?.id, directory);\n'
+                     '    else if (type === "session.idle") send(type, event.properties?.sessionID, directory);\n'
+                     '  },\n'
+                     '  "chat.message": async (input) => send("chat.message", input?.sessionID, directory),\n'
+                     '});\n')
+    # OpenCode 2.x: default export with id + setup(api); events carry their own location.
+    return head+('const field = (e, k) => e?.[k] ?? e?.data?.[k] ?? e?.properties?.[k];\n'
+                 'const sessionOf = (e) => field(e, "sessionID") ?? field(e, "info")?.id ?? field(e, "id");\n'
+                 'const dirOf = (e) => field(e, "location")?.directory ?? e?.location?.directory ?? field(e, "directory");\n'
+                 'const dirs = new Map();\n'
+                 'export default {\n'
+                 '  id: "omnimemo-presence",\n'
+                 '  setup(api) {\n'
+                 '    // subscribe() can run for the life of the stream: never make setup wait on it.\n'
+                 '    const running = api.event.subscribe((e) => {\n'
+                 '      const id = sessionOf(e);\n'
+                 '      if (!id) return;\n'
+                 '      const dir = dirOf(e) ?? dirs.get(id);\n'
+                 '      if (dir) dirs.set(id, dir);\n'
+                 '      const status = field(e, "status")?.type;\n'
+                 '      if (e?.type === "session.created") send("session.created", id, dir);\n'
+                 '      else if (e?.type === "session.status" && status === "busy") send("chat.message", id, dir);\n'
+                 '      else if (e?.type === "session.idle" || (e?.type === "session.status" && status === "idle")) send("session.idle", id, dir);\n'
+                 '      else if (e?.type === "session.deleted" || e?.type === "session.removed") { send("session.deleted", id, dir); dirs.delete(id); }\n'
+                 '    });\n'
+                 '    if (typeof running === "function") return running;\n'
+                 '    Promise.resolve(running).catch(() => {});\n'
+                 '  },\n'
+                 '};\n')
+
+def plan_file(path, original, expected, uninstall):
+    body=expected.encode()
+    if uninstall:
+        if original!=body:raise ValueError('Managed file changed or missing: '+str(path))
+        return path, original, None
+    if original is not None and original!=body:raise ValueError('Existing file needs review: '+str(path))
+    return path, original, body
 
 def plan_hooks(path, original, expected, uninstall):
     obj=json.loads((original or b'{}').decode() or '{}')
@@ -83,7 +142,7 @@ def plan_hooks(path, original, expected, uninstall):
     for event, group in expected.items():
         groups=hooks.setdefault(event,[])
         if not isinstance(groups,list):raise ValueError('Unexpected Claude hook schema: '+str(path))
-        ours=[g for g in groups if ' hook claude' in json.dumps(g)]
+        ours=[g for g in groups if ' hook ' in json.dumps(g) and json.dumps(group['hooks'][0]['command']) in json.dumps(g)]
         if uninstall:
             if ours!=[group]:raise ValueError('Managed Claude hook changed or missing: '+str(path))
             groups.remove(group)
@@ -94,11 +153,12 @@ def plan_hooks(path, original, expected, uninstall):
     if original is not None and json.loads(original)==obj:return path, original, original
     return path, original, encoded(obj)
 
-def plan_entry(path, kind, keys, expected, uninstall):
+def plan_entry(path, kind, keys, expected, uninstall, original=...):
     # Intentional host-directory symlinks (e.g. ~/.claude -> Ext) are preserved.
     path = path.resolve()
-    original = read(path)
+    if original is ...: original = read(path)
     if kind=='hooks':return plan_hooks(path, original, expected, uninstall)
+    if kind=='file':return plan_file(path, original, expected, uninstall)
     text = (original or b'').decode()
     if kind=='toml':
         parsed = tomllib.loads(text)
@@ -186,10 +246,26 @@ def main():
             entries.append({'host':host,'path':str(path.resolve()),'kind':kind,'keys':keys,'servers':expected})
         if args.with_hooks:
             claude_dir=home/'.claude' if args.home else pathlib.Path(os.environ.get('CLAUDE_CONFIG_DIR',str(home/'.claude')))
-            entries.append({'host':'claude-hooks','path':str((claude_dir/'settings.json').resolve()),'kind':'hooks','keys':['hooks'],'servers':claude_hooks(binary,data)})
+            codex_dir=home/'.codex' if args.home else pathlib.Path(os.environ.get('CODEX_HOME',str(home/'.codex')))
+            config_dir=home/'.config' if args.home else pathlib.Path(os.environ.get('XDG_CONFIG_HOME',str(home/'.config')))
+            hook_files={'claude':claude_dir/'settings.json','codex':codex_dir/'hooks.json','gemini':home/'.gemini/settings.json'}
+            # Hooks are added only for hosts already selected for MCP, plus Claude as before.
+            for host in ['claude']+[h for h in ('codex','gemini') if h in selected]:
+                entries.append({'host':host+'-hooks','path':str(hook_files[host].resolve()),'kind':'hooks','keys':['hooks'],'servers':host_hooks(host,binary,data)})
+            # OpenCode 2.x: any plugin using api.event.subscribe stalled sessions in 2.0.31 (verified),
+            # so presence comes from the MCP connection only; the event plugin ships for 1.x.
+            if 'opencode' in selected and layout=='v1':
+                entries.append({'host':'opencode-plugin','path':str((config_dir/'opencode/plugins/omnimemo.js').resolve()),'kind':'file','keys':[],'servers':opencode_plugin(binary,data,layout)})
         if manifest and any(previous not in json.loads(json.dumps(entries)) for previous in manifest['entries']):
             raise ValueError('Global installation profile changed; uninstall the previous profile first.')
-    planned=[plan_entry(pathlib.Path(e['path']),e['kind'],e['keys'],e['servers'],args.uninstall) for e in entries]
+    # Entries sharing one file (e.g. Gemini MCP + hooks) are planned as a chain on that file.
+    chained={}
+    for e in entries:
+        path=pathlib.Path(e['path']).resolve()
+        start=chained[path][1] if path in chained else read(path)
+        _,_,new=plan_entry(path,e['kind'],e['keys'],e['servers'],args.uninstall,original=start)
+        chained[path]=(chained[path][0] if path in chained else read(path),new)
+    planned=[(path,old,new) for path,(old,new) in chained.items()]
     print(json.dumps({'apply':args.apply,'uninstall':args.uninstall,'hosts':[e['host'] for e in entries],
           'files_to_change':[str(path) for path,old,new in planned if old!=new],
           'project_scope':'launch Git root or explicit OMNIMEM_PROJECT; no fallback project',
@@ -211,7 +287,8 @@ def main():
             if old==new:continue
             if read(path)!=old:raise ValueError('Config changed during installation; retry: '+str(path))
             if old is not None:atomic(backups/(str(time.time_ns())+'-'+digest(str(path).encode())[:12]),old)
-            atomic(path,new)
+            if new is None:path.unlink()
+            else:atomic(path,new)
             changed.append((path,old,new))
         if args.uninstall:
             manifest_path.unlink()
@@ -223,7 +300,7 @@ def main():
     except Exception:
         for path,old,new in reversed(changed):
             if read(path)==new:
-                if old is None:path.unlink()
+                if old is None:path.unlink(missing_ok=True)
                 else:atomic(path,old)
         raise
     finally:lock.rmdir()

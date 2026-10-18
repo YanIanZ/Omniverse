@@ -8,6 +8,7 @@ CACHE="${OMNIMEM_INSTALL_CACHE:-$CACHE_DEFAULT}"
 DATA="${OMNIMEM_HOME:-$HOME/Library/Application Support/OmniMemo/data}"
 PROJECT="$PWD"
 URI=mongodb://127.0.0.1:27018/omnimemo
+BACKEND=mongodb
 AGENTS=codex,claude
 SETUP=0; START_MONGO=0; WITH_REA=0; DRY_RUN=0; GLOBAL=0; WITH_HOOKS=0
 fail() { printf 'OmniMemo installer: %s\n' "$*" >&2; exit 1; }
@@ -23,23 +24,24 @@ Usage: bash install.sh [options]
                       (Python 3.11+ and Node/npm required; preview with --dry-run)
   --with-hooks        With --global, add Claude Code session/prompt hooks (opt-in)
   --agents LIST       Project adapters: codex,claude (default: both)
+  --backend NAME      Storage profile for --setup: mongodb (default) or sqlite (no server needed)
   --mongo-uri URI     Existing mongodb:// server; OMNIMEM_MONGO_URI overrides it (use it for secrets)
   --start-mongo       With --setup, start the dedicated local server on port 27018
   --with-rea          Prepare the pinned Node REA runtime and include its skills
   --dry-run           Print the plan without building, downloading or writing
   -h, --help          Show help
-Requires macOS, Swift 6+, and Git. Setup requires a running MongoDB server.
+Requires macOS, Swift 6+, and Git. Setup with the mongodb backend requires a running MongoDB server.
 REA additionally requires compatible Node/npm and Python 3. No sudo, shell-profile
 changes, global agent config, Git hooks or Homebrew services are installed.
 EOF
 }
 while (($#)); do
   case "$1" in
-    --prefix|--cache-dir|--data-dir|--project|--agents|--mongo-uri)
+    --prefix|--cache-dir|--data-dir|--project|--agents|--mongo-uri|--backend)
       (($# >= 2)) && [[ -n "$2" && "$2" != --* ]] || fail "Missing value for $1"
       case "$1" in
         --prefix) PREFIX="$2" ;; --cache-dir) CACHE="$2" ;; --data-dir) DATA="$2" ;;
-        --project) PROJECT="$2" ;; --agents) AGENTS="$2" ;; --mongo-uri) URI="$2" ;;
+        --project) PROJECT="$2" ;; --agents) AGENTS="$2" ;; --mongo-uri) URI="$2" ;; --backend) BACKEND="$2" ;;
       esac
       shift 2 ;;
     --global) GLOBAL=1; shift ;; --with-hooks) WITH_HOOKS=1; shift ;;
@@ -63,6 +65,8 @@ case ",$AGENTS," in *,codex,*|*,claude,*) ;; *) fail 'Choose codex and/or claude
 IFS=, read -r -a selected_agents <<< "$AGENTS"
 for agent in "${selected_agents[@]}"; do [[ "$agent" == codex || "$agent" == claude ]] || fail 'Unsupported project adapter.'; done
 ((!WITH_HOOKS || GLOBAL)) || fail '--with-hooks requires --global.'
+[[ "$BACKEND" == mongodb || "$BACKEND" == sqlite ]] || fail '--backend must be mongodb or sqlite.'
+[[ "$BACKEND" == mongodb || "$START_MONGO" == 0 ]] || fail '--start-mongo is only for the mongodb backend.'
 if ((START_MONGO)); then
   ((SETUP)) || fail '--start-mongo requires --setup.'
   [[ "$URI" == mongodb://127.0.0.1:27018/* ]] || fail '--start-mongo requires loopback port 27018.'
@@ -147,7 +151,11 @@ if ((START_MONGO)); then
   OMNIMEM_MONGO_ROOT="${OMNIMEM_MONGO_ROOT:-$CACHE/mongodb}" OMNIMEM_MONGO_PORT=27018 "$ROOT/scripts/mongodb.sh" start
 fi
 if ((SETUP)); then
-  init_args=(--data-dir "$DATA" --project "$PROJECT" init --mongo-uri "$URI")
+  if [[ "$BACKEND" == sqlite ]]; then
+    init_args=(--data-dir "$DATA" --project "$PROJECT" init --backend sqlite)
+  else
+    init_args=(--data-dir "$DATA" --project "$PROJECT" init --mongo-uri "$URI")
+  fi
   if ((GLOBAL)); then init_args+=(--set-default); fi
   "$LAUNCHER" "${init_args[@]}"
   if ((!GLOBAL)); then

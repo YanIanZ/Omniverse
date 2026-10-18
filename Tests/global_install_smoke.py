@@ -64,14 +64,24 @@ with tempfile.TemporaryDirectory(prefix='global fixture ',dir=workspace) as fold
     mine={'hooks':[{'type':'command','command':'echo user-hook'}]}
     settings.write_text(json.dumps({'theme':'dark','hooks':{'UserPromptSubmit':[mine]}}))
     before=json.loads(settings.read_text())
-    hargs=[sys.executable,str(script),'--home',str(home),'--hosts','codex','--with-hooks',
+    gemini_before=json.loads(paths['gemini'].read_text())
+    hargs=[sys.executable,str(script),'--home',str(home),'--hosts','codex,gemini,opencode','--opencode-layout','v2','--with-hooks',
            '--binary','/Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem','--data-dir',str(root/'data space'),
            '--state-dir',str(hstate)]
     p=subprocess.run(hargs,text=True,capture_output=True,timeout=30);assert p.returncode==0,p.stderr
     assert json.loads(settings.read_text())==before, 'preview must not write'
     p=subprocess.run(hargs+['--apply'],text=True,capture_output=True,timeout=30);assert p.returncode==0,p.stderr
     hooks=json.loads(settings.read_text())['hooks']
-    assert sorted(hooks)==['SessionEnd','SessionStart','UserPromptSubmit'] and hooks['UserPromptSubmit'][0]==mine
+    assert sorted(hooks)==['SessionEnd','SessionStart','Stop','UserPromptSubmit'] and hooks['UserPromptSubmit'][0]==mine
+    codex_hooks=json.loads((home/'.codex/hooks.json').read_text())['hooks']
+    assert sorted(codex_hooks)==['SessionStart','Stop','UserPromptSubmit']
+    assert codex_hooks['Stop'][0]['hooks'][0]['command'].endswith(' hook codex')
+    # Gemini MCP entry and hooks share settings.json; both must land and unrelated keys survive.
+    gem=json.loads(paths['gemini'].read_text())
+    assert 'omnimemo' in gem['mcpServers'] and gem['keep']=={'value':42}
+    assert sorted(gem['hooks'])==['AfterAgent','BeforeAgent','SessionEnd','SessionStart']
+    # OpenCode 2.x gets no event plugin (its subscribe API stalls sessions); MCP gives presence.
+    assert not (home/'.config/opencode/plugins/omnimemo.js').exists()
     command=hooks['SessionStart'][0]['hooks'][0]['command']
     assert command.endswith(' hook claude') and "'"+str(root/'data space')+"'" in command
     applied_hooks=settings.read_bytes()
@@ -80,4 +90,6 @@ with tempfile.TemporaryDirectory(prefix='global fixture ',dir=workspace) as fold
     p=subprocess.run([sys.executable,str(script),'--home',str(home),'--state-dir',str(hstate),'--uninstall','--apply'],
                      text=True,capture_output=True,timeout=30);assert p.returncode==0,p.stderr
     assert json.loads(settings.read_text())==before
+    assert json.loads(paths['gemini'].read_text())==gemini_before
+    assert not (home/'.config/opencode/plugins/omnimemo.js').exists()
 print('PASS: global preview; Claude hooks opt-in merge/uninstall; all config schemas; unrelated settings; no fixed project; repeat apply; private backups; edited-entry refusal; preserving uninstall')

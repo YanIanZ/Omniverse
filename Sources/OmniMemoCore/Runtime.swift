@@ -19,7 +19,7 @@ public struct AgentSession: Codable, Sendable {
 
 public struct TaskRecord: Codable, Sendable, Equatable {
   enum CodingKeys: String, CodingKey {
-    case id, title, status, revision, owner
+    case id, title, status, revision, owner, priority
     case createdAt = "created_at"
     case updatedAt = "updated_at"
   }
@@ -28,9 +28,30 @@ public struct TaskRecord: Codable, Sendable, Equatable {
   public var status: String
   public var revision: Int
   public var owner: String?
+  /// P0 (urgent) ... P3; older records without a priority read as P2.
+  public var priority: String?
   public var createdAt: String
   public var updatedAt: String
   public static let statuses = ["todo", "doing", "review", "done", "blocked"]
+  public static let priorities = ["P0", "P1", "P2", "P3"]
+}
+
+/// A request for a human decision. Recording a decision never performs the action.
+public struct ApprovalRecord: Codable, Sendable, Equatable {
+  enum CodingKeys: String, CodingKey {
+    case id, action, reason, status, revision
+    case requestedBy = "requested_by"
+    case createdAt = "created_at"
+    case decidedAt = "decided_at"
+  }
+  public var id: String
+  public var action: String
+  public var reason: String
+  public var requestedBy: String
+  public var status: String
+  public var revision: Int
+  public var createdAt: String
+  public var decidedAt: String?
 }
 
 /// Versioned WebSocket/REST event envelope; committed to MongoDB before any broadcast.
@@ -51,26 +72,26 @@ public struct RuntimeEvent: Codable, Sendable {
   public var data: [String: String]
 }
 
-extension MongoStore {
+extension MemoryStore {
   /// A session without a signal for this long is shown as `unknown`, never `idle`.
   public static let presenceTimeout: TimeInterval = 600
   private static let eventHistory = 1000
 
-  private var sessions: MongoCollection { db["omnimem_sessions"] }
-  private var tasks: MongoCollection { db["omnimem_tasks"] }
-  private var events: MongoCollection { db["omnimem_events"] }
+  /// Maps a host-reported client name (MCP clientInfo, hook argument) to a stable provider label.
+  public static func provider(_ raw: String) -> String {
+    let name = raw.lowercased()
+    for known in ["claude", "codex", "opencode", "gemini", "cursor", "copilot"] where name.contains(known) {
+      return known
+    }
+    let cleaned = name.replacingOccurrences(of: "[^a-z0-9._-]", with: "-", options: .regularExpression)
+    return cleaned.isEmpty ? "agent" : String(cleaned.prefix(32))
+  }
 
   public func ensureRuntimeIndexes() async throws {
+    if runtimeIndexesReady { return }
     do {
-      var task = CreateIndexes.Index(named: "project_task", keys: ["project_id": 1, "id": 1])
-      task.unique = true
-      var event = CreateIndexes.Index(named: "project_seq", keys: ["project_id": 1, "revision": 1])
-      event.unique = true
-      try await tasks.createIndexes([task])
-      try await events.createIndexes([event])
-      try await sessions.createIndexes([
-        CreateIndexes.Index(named: "project_seen", keys: ["project_id": 1, "last_seen": -1])
-      ])
+      try await backend.prepareRuntime(project: binding.id)
+      runtimeIndexesReady = true
     } catch { throw Self.safeError(error) }
   }
 
@@ -85,41 +106,25 @@ extension MongoStore {
 
   @discardableResult
   func emit(_ type: String, entity: String, data: [String: String]) async throws -> RuntimeEvent {
-    let counter = try await db["omnimem_counters"].findOneAndUpsert(
-      where: ["_id": "events:" + binding.id],
-      replacement: ["$inc": ["seq": 1]], returnValue: .modified
-    ).execute()
-    guard let seq = counter.value?["seq"] as? Int ?? (counter.value?["seq"] as? Int32).map(Int.init)
-    else { throw MemoError.database("event sequence unavailable") }
-    let event = RuntimeEvent(
-      eventID: "evt_" + UUID().uuidString.lowercased(), projectID: binding.id, type: type,
-      entityID: entity, revision: seq, timestamp: nowISO(), data: data)
-    var doc = try BSONEncoder().encode(event)
-    doc["_id"] = event.eventID
-    _ = try await events.insert(doc)
-    _ = try? await events.deleteAll(where: [
-      "project_id": binding.id, "revision": ["$lte": seq - Self.eventHistory],
-    ])
-    await RedisSignal.publish(projectID: binding.id)
+    let event = try await backend.appendEvent(
+      project: binding.id, type: type, entity: entity, data: data, keep: Self.eventHistory)
+    await RedisSignal.publish(projectID: binding.id, url: redisURL)
     return event
   }
 
   public func events(after revision: Int, limit: Int = 200) async throws -> [RuntimeEvent] {
     try validate()
     guard revision >= 0, (1...500).contains(limit) else { throw MemoError.invalid("bad range") }
-    do {
-      return try await events.find(["project_id": binding.id, "revision": ["$gt": revision]])
-        .sort(["revision": 1]).limit(limit).decode(RuntimeEvent.self).drain()
-    } catch { throw Self.safeError(error) }
+    do { return try await backend.events(project: binding.id, after: revision, limit: limit) } catch {
+      throw Self.safeError(error)
+    }
   }
 
   public func latestRevision() async throws -> Int {
     try validate()
-    do {
-      let last = try await events.find(["project_id": binding.id]).sort(["revision": -1]).limit(1)
-        .decode(RuntimeEvent.self).drain()
-      return last.first?.revision ?? 0
-    } catch { throw Self.safeError(error) }
+    do { return try await backend.latestRevision(project: binding.id) } catch {
+      throw Self.safeError(error)
+    }
   }
 
   // MARK: Sessions
@@ -138,17 +143,8 @@ extension MongoStore {
     let source = try Self.label(source, "source")
     let now = nowISO()
     do {
-      let reply = try await sessions.findOneAndUpsert(
-        where: ["_id": binding.id + ":" + agent + ":" + session],
-        replacement: [
-          "$set": [
-            "project_id": binding.id, "agent": agent, "session_id": session, "status": status,
-            "source": source, "last_seen": now,
-          ] as Document,
-          "$setOnInsert": ["first_seen": now] as Document,
-        ], returnValue: .original
-      ).execute()
-      let previous = reply.value?["status"] as? String
+      let (previous, firstSeen) = try await backend.upsertSession(
+        project: binding.id, agent: agent, session: session, status: status, source: source, now: now)
       if previous != status {
         try await emit(
           "agent.status.changed", entity: agent + ":" + session,
@@ -156,7 +152,7 @@ extension MongoStore {
       }
       return AgentSession(
         agent: agent, sessionID: session, status: status, source: source,
-        firstSeen: reply.value?["first_seen"] as? String ?? now, lastSeen: now)
+        firstSeen: firstSeen ?? now, lastSeen: now)
     } catch { throw Self.safeError(error) }
   }
 
@@ -171,25 +167,17 @@ extension MongoStore {
     guard let envelope = try? JSONDecoder().decode(ContextEnvelope.self, from: capsule),
       !envelope.result.isEmpty
     else { return nil }
-    let stamp = digest(capsule)
     do {
-      let reply = try await sessions.findOneAndUpdate(
-        where: [
-          "_id": binding.id + ":" + agent + ":" + session, "context_digest": ["$ne": stamp],
-        ], to: ["$set": ["context_digest": stamp]]
-      ).execute()
-      return reply.value == nil ? nil : capsule
+      return try await backend.replaceContextDigest(
+        project: binding.id, agent: agent, session: session, digest: digest(capsule)) ? capsule : nil
     } catch { throw Self.safeError(error) }
   }
 
   public func agents(limit: Int = 50) async throws -> [AgentSession] {
     try validate()
-    let cutoff = ISO8601DateFormatter().string(
-      from: Date().addingTimeInterval(-Self.presenceTimeout))
+    let cutoff = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-Self.presenceTimeout))
     do {
-      let found = try await sessions.find(["project_id": binding.id])
-        .sort(["last_seen": -1]).limit(limit).decode(AgentSession.self).drain()
-      return found.map {
+      return try await backend.sessions(project: binding.id, limit: limit).map {
         var s = $0
         if s.status != "disconnected" && s.lastSeen < cutoff { s.status = "unknown" }
         return s
@@ -201,17 +189,18 @@ extension MongoStore {
 
   public func listTasks(limit: Int = 200) async throws -> [TaskRecord] {
     try validate()
-    do {
-      return try await tasks.find(["project_id": binding.id]).sort(["created_at": 1]).limit(limit)
-        .decode(TaskRecord.self).drain()
-    } catch { throw Self.safeError(error) }
+    do { return try await backend.tasks(project: binding.id, limit: limit) } catch {
+      throw Self.safeError(error)
+    }
   }
 
   /// Idempotent when `idempotencyKey` is reused with the same title.
-  public func createTask(title: String, idempotencyKey: String? = nil, agent: String = "cli")
-    async throws -> TaskRecord
-  {
+  public func createTask(
+    title: String, idempotencyKey: String? = nil, priority: String = "P2", agent: String = "cli"
+  ) async throws -> TaskRecord {
     try validate()
+    try await ensureRuntimeIndexes()
+    guard TaskRecord.priorities.contains(priority) else { throw MemoError.invalid("priority") }
     let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
     guard (1...240).contains(title.utf8.count) else { throw MemoError.invalid("title length") }
     try SecretFilter.check(title)
@@ -220,30 +209,26 @@ extension MongoStore {
       ?? "task_" + UUID().uuidString.lowercased().prefix(16)
     let now = nowISO()
     let task = TaskRecord(
-      id: String(id), title: title, status: "todo", revision: 1, owner: nil, createdAt: now,
-      updatedAt: now)
+      id: String(id), title: title, status: "todo", revision: 1, owner: nil, priority: priority,
+      createdAt: now, updatedAt: now)
     do {
-      var doc = try BSONEncoder().encode(task)
-      doc["project_id"] = binding.id
-      let result = try await tasks.insert(doc)
-      if !(result.writeErrors ?? []).isEmpty {
-        guard
-          let existing = try await tasks.findOne(
-            ["project_id": binding.id, "id": task.id], as: TaskRecord.self)
-        else { throw MemoError.database("write rejected") }
+      guard try await backend.insert(task: task, project: binding.id) else {
+        guard let existing = try await backend.task(project: binding.id, id: task.id) else {
+          throw MemoError.database("write rejected")
+        }
         guard existing.title == title else { throw MemoError.conflict }
         return existing
       }
       try await emit(
-        "task.updated", entity: task.id,
-        data: ["status": task.status, "revision": "1", "agent": agent])
+        "task.updated", entity: task.id, data: ["status": task.status, "revision": "1", "agent": agent])
       return task
     } catch { throw Self.safeError(error) }
   }
 
   /// Compare-and-set update: succeeds only if `expectedRevision` is still current.
   public func updateTask(
-    id: String, expectedRevision: Int, status: String?, owner: String?, agent: String = "cli"
+    id: String, expectedRevision: Int, status: String?, owner: String?, priority: String? = nil,
+    agent: String = "cli"
   ) async throws -> TaskRecord {
     try validate()
     let id = try Self.label(id, "task id")
@@ -251,23 +236,140 @@ extension MongoStore {
       throw MemoError.invalid("invalid task status")
     }
     if let owner { _ = try Self.label(owner, "owner") }
-    var set: Document = ["updated_at": nowISO()]
-    if let status { set["status"] = status }
-    if let owner { set["owner"] = owner }
+    if let priority, !TaskRecord.priorities.contains(priority) {
+      throw MemoError.invalid("priority")
+    }
     do {
-      let reply = try await tasks.findOneAndUpdate(
-        where: ["project_id": binding.id, "id": id, "revision": expectedRevision],
-        to: ["$set": set, "$inc": ["revision": 1]], returnValue: .modified
-      ).execute()
-      guard let value = reply.value else {
-        let exists = try await tasks.findOne(["project_id": binding.id, "id": id]) != nil
-        throw exists ? MemoError.revisionConflict : MemoError.notFound
-      }
-      let task = try BSONDecoder().decode(TaskRecord.self, from: value)
+      let before = try await backend.task(project: binding.id, id: id)
+      guard
+        let task = try await backend.updateTask(
+          project: binding.id, id: id, expectedRevision: expectedRevision,
+          change: TaskChange(status: status, owner: owner, priority: priority, updatedAt: nowISO()))
+      else { throw before == nil ? MemoError.notFound : MemoError.revisionConflict }
       try await emit(
         "task.updated", entity: task.id,
         data: ["status": task.status, "revision": String(task.revision), "agent": agent])
+      if before?.status != task.status, ["review", "done", "blocked"].contains(task.status) {
+        await autoSaveTransition(
+          kind: "task", key: "auto-task:\(task.id):\(task.revision)",
+          title: "Task \(task.status): \(task.title)",
+          content: "\(task.title) moved to \(task.status) by \(agent) (revision \(task.revision), owner \(task.owner ?? "unassigned")).",
+          agent: agent)
+      }
       return task
     } catch { throw Self.safeError(error) }
+  }
+
+  // MARK: Approvals
+
+  public func listApprovals(limit: Int = 100) async throws -> [ApprovalRecord] {
+    try validate()
+    do { return try await backend.approvals(project: binding.id, limit: limit) } catch {
+      throw Self.safeError(error)
+    }
+  }
+
+  /// An agent asks a human to decide. The record is advisory: it never runs the action.
+  public func requestApproval(action: String, reason: String, agent: String) async throws
+    -> ApprovalRecord
+  {
+    try validate()
+    let action = action.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard (1...160).contains(action.utf8.count), reason.utf8.count <= 1000 else {
+      throw MemoError.invalid("action or reason length")
+    }
+    try SecretFilter.check(action + "\n" + reason)
+    let agent = try Self.label(agent, "agent")
+    try await ensureRuntimeIndexes()
+    let record = ApprovalRecord(
+      id: "apr_" + UUID().uuidString.lowercased().prefix(16), action: action, reason: reason,
+      requestedBy: agent, status: "pending", revision: 1, createdAt: nowISO(), decidedAt: nil)
+    do {
+      try await backend.insert(approval: record, project: binding.id)
+      try await emit(
+        "approval.requested", entity: record.id, data: ["agent": agent, "status": "pending"])
+      await autoSaveTransition(
+        kind: "decision", key: "auto-approval:\(record.id):pending",
+        title: "Approval requested: \(action)",
+        content: "\(agent) asked a human to approve: \(action).\(reason.isEmpty ? "" : " Reason: " + reason)",
+        agent: agent)
+      return record
+    } catch { throw Self.safeError(error) }
+  }
+
+  /// Records a human decision once; a second decision on the same request conflicts.
+  public func decideApproval(id: String, decision: String) async throws -> ApprovalRecord {
+    try validate()
+    let id = try Self.label(id, "approval id")
+    guard ["approved", "denied"].contains(decision) else { throw MemoError.invalid("decision") }
+    do {
+      guard
+        let record = try await backend.decideApproval(
+          project: binding.id, id: id, decision: decision, at: nowISO())
+      else {
+        throw try await backend.approval(project: binding.id, id: id) == nil
+          ? MemoError.notFound : MemoError.revisionConflict
+      }
+      try await emit(
+        "approval.decided", entity: record.id, data: ["agent": record.requestedBy, "status": decision])
+      await autoSaveTransition(
+        kind: "decision", key: "auto-approval:\(record.id):\(decision)",
+        title: "Approval \(decision): \(record.action)",
+        content: "A human \(decision) \(record.requestedBy)'s request: \(record.action). Recording it ran nothing.",
+        agent: "mission-control")
+      return record
+    } catch { throw Self.safeError(error) }
+  }
+
+  // MARK: Auto-save (opt-in, FR-15)
+
+  /// Best effort: an automatic memory never makes the triggering operation fail.
+  private func autoSaveTransition(kind: String, key: String, title: String, content: String, agent: String) async {
+    guard autoSave.transitions else { return }
+    _ = try? await save(
+      SaveInput(
+        kind: kind, title: String(title.prefix(240)), content: content, tags: ["auto", "transition"],
+        idempotencyKey: key), agent: agent)
+  }
+
+  /// Short, secret-checked summary of a user prompt; never the full text. Prompt memories
+  /// are searchable but excluded from context capsules, so they add no prompt tokens.
+  @discardableResult
+  public func autoPromptSummary(agent: String, session: String, prompt: String) async -> SaveResult? {
+    guard autoSave.prompts else { return nil }
+    let collapsed = prompt.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    guard !collapsed.isEmpty else { return nil }
+    let summary = collapsed.count > 160 ? String(collapsed.prefix(159)) + "…" : collapsed
+    guard (try? SecretFilter.check(prompt)) != nil else { return nil }  // skip, never store secrets
+    return try? await save(
+      SaveInput(
+        kind: "prompt", title: "Prompt (\(agent)): " + String(summary.prefix(60)), content: summary,
+        tags: ["auto", "prompt", agent],
+        idempotencyKey: "auto-prompt:\(session):" + digest(summary).prefix(16)), agent: agent)
+  }
+
+  /// Session-end checkpoint from verifiable state only: branch/commit (recorded by save),
+  /// changed files from `git status`, and the tasks this agent owns. No conversation content.
+  @discardableResult
+  public func autoCheckpoint(agent: String, session: String, reason: String) async -> SaveResult? {
+    guard autoSave.checkpoints else { return nil }
+    let changed = binding.changedFiles()
+    let evidence = changed.filter { (try? binding.evidence($0)) != nil }.prefix(8)
+    let owned = ((try? await listTasks()) ?? []).filter {
+      $0.owner == agent && ["doing", "review", "blocked"].contains($0.status)
+    }
+    var done = ["Session ended (\(reason))"]
+    if !changed.isEmpty {
+      let names = changed.prefix(12).joined(separator: ", ")
+      done.append("Changed \(changed.count) file(s): " + names + (changed.count > 12 ? ", …" : ""))
+    }
+    let input = CheckpointInput(
+      title: "Auto checkpoint: \(agent) session \(session.prefix(8))", done: done,
+      next: owned.map { "\($0.status == "review" ? "Review" : "Continue"): \($0.title)" },
+      blocked: owned.filter { $0.status == "blocked" }.map(\.title), tests: [],
+      changedFiles: Array(evidence),
+      idempotencyKey: "auto-ckpt:\(agent):\(session):\(binding.head.prefix(12)):"
+        + digest(changed.joined(separator: "\n")).prefix(12))
+    return try? await checkpoint(input, agent: agent)
   }
 }

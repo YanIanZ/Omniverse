@@ -13,12 +13,39 @@ struct ContextInput: Codable {
   var maxTokens: Int?
 }
 
+/// MCP first use is a verified presence signal: the client named itself in `initialize`.
+actor MCPPresence {
+  let store: MemoryStore
+  let session = "mcp-" + UUID().uuidString.lowercased().prefix(12)
+  private(set) var agent: String?
+  init(store: MemoryStore) { self.store = store }
+  func connected(_ clientName: String) async {
+    agent = MemoryStore.provider(clientName)
+    _ = try? await store.wake(agent: agent!, session: session, status: "ready", source: "mcp")
+  }
+  func used() async {
+    guard let agent else { return }
+    _ = try? await store.wake(agent: agent, session: session, status: "active", source: "mcp")
+  }
+  func closed() async {
+    guard let agent else { return }
+    await store.autoCheckpoint(agent: agent, session: session, reason: "mcp disconnect")
+    _ = try? await store.wake(agent: agent, session: session, status: "disconnected", source: "mcp")
+  }
+}
+
 enum MCPService {
-  static func serve(store: MongoStore, agent: String) async throws {
+  static func serve(store: MemoryStore, agent: String) async throws {
+    let presence = MCPPresence(store: store)
+    // An explicit --agent label wins; otherwise attribute writes to the client's provider.
+    let label: @Sendable () async -> String = {
+      agent == "cli" ? (await presence.agent ?? agent) : agent
+    }
     let server = Server(
       name: "OmniMemo", version: "0.2.0", capabilities: .init(tools: .init(listChanged: false)))
     await server.withMethodHandler(ListTools.self) { _ in .init(tools: tools) }
     await server.withMethodHandler(CallTool.self) { params in
+      await presence.used()
       do {
         let arguments = params.arguments ?? [:]
         let data = try JSONEncoder().encode(arguments)
@@ -43,10 +70,10 @@ enum MCPService {
         switch params.name {
         case "memory_save":
           let input = try JSONDecoder().decode(SaveInput.self, from: data)
-          output = try encodeJSON(await store.save(input, agent: agent))
+          output = try encodeJSON(await store.save(input, agent: await label()))
         case "memory_checkpoint":
           let input = try JSONDecoder().decode(CheckpointInput.self, from: data)
-          output = try encodeJSON(await store.checkpoint(input, agent: agent))
+          output = try encodeJSON(await store.checkpoint(input, agent: await label()))
         case "memory_get":
           output = try encodeJSON(
             await store.get(JSONDecoder().decode(GetInput.self, from: data).id))
@@ -70,9 +97,27 @@ enum MCPService {
         return .init(content: [.text(text: message, annotations: nil, _meta: nil)], isError: true)
       }
     }
+    // Hosts usually stop MCP servers with a signal; record the disconnect before exiting.
+    var watchers: [DispatchSourceSignal] = []
+    for code in [SIGTERM, SIGINT, SIGHUP] {
+      signal(code, SIG_IGN)
+      let source = DispatchSource.makeSignalSource(signal: code, queue: .global())
+      source.setEventHandler {
+        Task {
+          await presence.closed()
+          exit(0)
+        }
+      }
+      source.resume()
+      watchers.append(source)
+    }
+    defer { watchers.forEach { $0.cancel() } }
     let transport = StdioTransport()
-    try await server.start(transport: transport)
+    try await server.start(transport: transport) { client, _ in
+      await presence.connected(client.name)
+    }
     await server.waitUntilCompleted()
+    await presence.closed()
     await store.close()
   }
   static func schema(_ properties: [String: Value], required: [String]) -> Value {

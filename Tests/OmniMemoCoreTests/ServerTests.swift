@@ -7,7 +7,7 @@ import XCTest
 final class ServerTests: XCTestCase {
   let token = String(repeating: "a", count: 64)
 
-  func app(dist: String? = nil) async throws -> (Application, MongoStore) {
+  func app(dist: String? = nil) async throws -> (Application, MemoryStore) {
     let (_, store) = try await MongoTests().fixture()
     let app = try await Application.make(.testing)
     try await OmniServer.configure(
@@ -85,6 +85,30 @@ final class ServerTests: XCTestCase {
       let events = try res.content.decode([RuntimeEvent].self)
       XCTAssertEqual(events.map(\.revision), [1, 2])
     }
+  }
+
+  func testApprovalDecisionsOnlyFromBrowserSession() async throws {
+    let (app, store) = try await app()
+    let request = try await store.requestApproval(
+      action: "Push main to origin", reason: "release", agent: "codex")
+    let path = "api/v1/approvals/\(request.id)/decision"
+    let body = ByteBuffer(string: #"{"decision":"approved"}"#)
+    let json = ("Content-Type", "application/json")
+    let origin = ("Origin", "http://127.0.0.1:8787")
+    // Agents and CLIs hold the bearer token: they may never decide.
+    try await app.test(.POST, path, headers: headers([json, origin]), body: body) {
+      XCTAssertEqual($0.status, .forbidden)
+    }
+    let browser = headers([json, origin, ("Cookie", "omnimemo_session=\(token)")], auth: false)
+    try await app.test(.POST, path, headers: browser, body: body) { res in
+      XCTAssertEqual(res.status, .ok)
+      XCTAssertEqual(try res.content.decode(ApprovalRecord.self).status, "approved")
+    }
+    try await app.test(.POST, path, headers: browser, body: body) {
+      XCTAssertEqual($0.status, .conflict, "a request is decided once")
+    }
+    let events = try await store.events(after: 0).map(\.type)
+    XCTAssertEqual(events, ["approval.requested", "approval.decided"])
   }
 
   func testSpaFallbackNeverSwallowsApi() async throws {

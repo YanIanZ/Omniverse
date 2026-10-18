@@ -31,7 +31,7 @@ public enum OmniServer {
 
   /// Registers middleware and routes. Returns the hub so callers can stop polling on shutdown.
   @discardableResult
-  public static func configure(_ app: Application, store: MongoStore, config: ServerConfig)
+  public static func configure(_ app: Application, store: MemoryStore, config: ServerConfig)
     async throws -> LiveHub
   {
     try await store.ensureRuntimeIndexes()
@@ -72,10 +72,12 @@ public enum OmniServer {
       struct Body: Content {
         var title: String
         var idempotency_key: String?
+        var priority: String?
       }
       let body = try req.content.decode(Body.self)
       let task = try await store.createTask(
-        title: body.title, idempotencyKey: body.idempotency_key, agent: "mission-control")
+        title: body.title, idempotencyKey: body.idempotency_key, priority: body.priority ?? "P2",
+        agent: "mission-control")
       await hub.poll()
       return try json(task, status: .created)
     }
@@ -83,6 +85,7 @@ public enum OmniServer {
       struct Body: Content {
         var status: String?
         var owner: String?
+        var priority: String?
       }
       guard let raw = req.headers.first(name: .ifMatch),
         let revision = Int(raw.trimmingCharacters(in: CharacterSet(charactersIn: "\" ")))
@@ -90,9 +93,23 @@ public enum OmniServer {
       let body = try req.content.decode(Body.self)
       let task = try await store.updateTask(
         id: req.parameters.get("id") ?? "", expectedRevision: revision, status: body.status,
-        owner: body.owner, agent: "mission-control")
+        owner: body.owner, priority: body.priority, agent: "mission-control")
       await hub.poll()
       return try json(task)
+    }
+    api.get("approvals") { _ async throws -> Response in try json(try await store.listApprovals()) }
+    // Human decision: only a browser session (cookie + allowed Origin) may decide.
+    // Bearer tokens are what CLIs and agents hold, so they are refused here.
+    api.post("approvals", ":id", "decision") { req async throws -> Response in
+      guard req.headers.bearerAuthorization == nil, req.headers.first(name: .origin) != nil else {
+        throw Abort(.forbidden, reason: "decisions require the Mission Control browser session")
+      }
+      struct Body: Content { var decision: String }
+      let body = try req.content.decode(Body.self)
+      let record = try await store.decideApproval(
+        id: req.parameters.get("id") ?? "", decision: body.decision)
+      await hub.poll()
+      return try json(record)
     }
     api.get("memory", "search") { req async throws -> Response in
       let query = req.query[String.self, at: "q"] ?? ""
@@ -131,7 +148,7 @@ public enum OmniServer {
 
   /// Foreground server until SIGINT/SIGTERM. `onReady` runs after routes are configured.
   public static func run(
-    store: MongoStore, config: ServerConfig, onReady: () throws -> Void
+    store: MemoryStore, config: ServerConfig, onReady: () throws -> Void
   ) async throws {
     let app = try await Application.make(Environment(name: "production", arguments: ["om"]))
     app.logger.logLevel = .warning
@@ -183,6 +200,13 @@ struct GuardMiddleware: AsyncMiddleware {
         "default-src 'self'; connect-src 'self' ws://\(host); img-src 'self' data:; frame-ancestors 'none'"
     )
     response.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
+    // Vite fingerprints assets; the HTML that names them must be revalidated after upgrades.
+    let path = req.url.path
+    if path.hasPrefix("/assets/") {
+      response.headers.replaceOrAdd(name: .cacheControl, value: "public, max-age=31536000, immutable")
+    } else {
+      response.headers.replaceOrAdd(name: .cacheControl, value: "no-cache")
+    }
     response.headers.replaceOrAdd(name: "Referrer-Policy", value: "no-referrer")
     return response
   }

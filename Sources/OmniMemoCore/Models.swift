@@ -144,13 +144,18 @@ public struct StoreConfig: Codable, Sendable, Equatable {
     case mongoURI = "mongo_uri"
     case cacheMaxBytes = "cache_max_bytes"
     case cacheTTLSeconds = "cache_ttl_seconds"
+    case backend
   }
 
   public var schemaVersion: Int
   public var storeID: String
-  public var mongoURI: String
+  /// Present for the `mongodb` profile only.
+  public var mongoURI: String?
   public var cacheMaxBytes: Int
   public var cacheTTLSeconds: Int
+  /// Storage profile; stores created before profiles existed are MongoDB.
+  public var backend: String?
+  public var profile: String { backend ?? "mongodb" }
 }
 public struct StoreStatus: Codable, Sendable {
   enum CodingKeys: String, CodingKey {
