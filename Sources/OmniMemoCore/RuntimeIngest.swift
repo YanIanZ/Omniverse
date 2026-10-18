@@ -154,7 +154,10 @@ extension MemoryStore {
         ?? tasks.filter { $0.owner == s.agent && ["doing", "review", "blocked"].contains($0.status) }
           .max { $0.updatedAt < $1.updatedAt }
       return RuntimeAgentView(
-        runtimeID: s.runtimeID, displaySlug: s.agent + "-" + (model ?? "model-unavailable"), client: s.agent,
+        // `client-model`, without repeating a client name the model id already carries.
+        runtimeID: s.runtimeID,
+        displaySlug: model.map { $0.hasPrefix(s.agent + "-") ? $0 : s.agent + "-" + $0 } ?? s.agent + "-model-unavailable",
+        client: s.agent,
         model: s.model, sessionID: s.sessionID, status: s.status, observability: s.observability ?? "passive",
         source: s.source, lastSeen: s.lastSeen, lastEvent: s.lastEvent, toolCategory: s.toolCategory,
         eventCount: s.eventCount ?? 0,

@@ -82,6 +82,7 @@ final class ContextRolloverTests: XCTestCase {
     XCTAssertEqual(card?.context.measurement, "reported")
     XCTAssertEqual(card?.context.windowTokens, 200_000)
     XCTAssertEqual(card?.model, "claude-test")
+    XCTAssertEqual(card?.displaySlug, "claude-test", "the client name is not repeated")
     XCTAssertEqual(card?.progress.kind, "indeterminate", "context usage is never task progress")
 
     // An ended session keeps no numeric occupancy.
