@@ -90,8 +90,8 @@ A running local MongoDB server is required. Swift + MongoDB supersede the origin
 With Swift 6+, Git, and MongoDB already installed on macOS:
 
 ```sh
-git clone https://github.com/YanIanZ/OmniMemo.git
-cd OmniMemo
+git clone https://github.com/YanIanZ/Omniverse.git
+cd Omniverse
 ./install.sh --dry-run
 ./install.sh
 ```
@@ -120,10 +120,10 @@ See [installation, supported global profiles, backups, and uninstall](docs/INSTA
 The repository works directly with the standard [Agent Skills CLI](https://github.com/vercel-labs/skills):
 
 ```sh
-npx skills add YanIanZ/OmniMemo --list
-npx skills add YanIanZ/OmniMemo
+npx skills add YanIanZ/Omniverse --list
+npx skills add YanIanZ/Omniverse
 # Global, noninteractive installation for selected hosts:
-npx skills add YanIanZ/OmniMemo --global --agent codex claude-code opencode gemini-cli --skill '*' --yes
+npx skills add YanIanZ/Omniverse --global --agent codex claude-code opencode gemini-cli --skill '*' --yes
 # From a local checkout; the wrapper pins skills CLI 1.5.12:
 ./scripts/install-skills.sh --global --agent codex claude-code --skill '*' --yes
 ```
@@ -139,8 +139,8 @@ created where required by the skills CLI.
 For a fresh macOS clone with Swift and `mongod` available:
 
 ```sh
-git clone https://github.com/YanIanZ/OmniMemo.git
-cd OmniMemo
+git clone https://github.com/YanIanZ/Omniverse.git
+cd Omniverse
 export OMNIMEM_BUILD_CACHE="$HOME/Library/Caches/OmniMemo/swift"
 export OMNIMEM_MONGO_ROOT="$HOME/Library/Application Support/OmniMemo/mongodb"
 export OMNIMEM_REA_RUNTIME="$HOME/Library/Caches/OmniMemo/integrations/rea-runtime.json"
