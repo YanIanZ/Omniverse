@@ -1,8 +1,29 @@
 # OmniMemo 0.2.0
 
-Local memory and handoff for coding agents, built with **Swift + MongoDB**. This implements MVP-1 of PRD v1.2; the remaining roadmap is documented below.
+Local memory and handoff for coding agents, built with **Swift + MongoDB**, with an optional **Vapor 4** HTTP/WebSocket server and **React + TypeScript + Vite** Mission Control (PRD v1.9 vertical slice). Redis is optional and never stores durable data.
 
 One executable provides a CLI and MCP stdio server. MongoDB stores records; local directories hold storage pointers and disposable caches. Agents working on the same project share its database. OmniMemo does not read private agent histories or require an LLM/API key.
+
+## Mission Control and `om` (v1.9 vertical slice)
+
+`om` is a short alias of `omnimem`. Bare `om` prints status and never starts a server.
+
+```sh
+om office            # start or reuse ONE loopback Vapor server, open the React UI
+om serve --port 8787 # same server in the foreground
+om stop              # stops only the OmniMemo server, never MongoDB/Redis
+om recall "query"    # search memory
+om agents            # observed sessions; stale presence shows as unknown
+om tasks add "Review hook" ; om tasks move <id> doing --revision 1
+om --agent claude wake --session <id>
+om --agent claude context --first-prompt --session <id>
+```
+
+- **Claude Code hooks (opt-in):** `bash install.sh --global --with-hooks` adds `SessionStart`, `UserPromptSubmit` and `SessionEnd` hooks next to any existing hooks. On the first prompt of a session the hook injects one bounded capsule (600 tokens by default); unchanged capsules and empty projects inject nothing. Hooks fail open and never block a prompt. Other hosts use MCP or manual `om` commands; no IDE-open event is assumed.
+- **Server:** loopback only; per-install token in `<data-dir>/server-token` (0600); browser login sets an HttpOnly `SameSite=Strict` cookie; Host allowlist, Origin checks for writes and WebSockets, CSP. API: `/api/v1/health|agents|tasks|memory/search|events`, WebSocket `/ws/v1/live`. Task updates require `If-Match: <revision>` and return 409 on a stale revision.
+- **Data:** sessions, tasks and events live in MongoDB; events are committed before broadcast. `OMNIMEM_REDIS_URL` (optional) only sends a Pub/Sub hint so the UI updates immediately; without Redis the server polls MongoDB every second.
+- **Frontend development:** `cd frontend && npm run dev`, with `om serve --dev-origin http://127.0.0.1:5173`. Release builds copy `frontend/dist` next to the binary; no Node runtime is needed.
+- **Not built yet (PRD P1/P2):** approvals, 2D office, Codex/Gemini/OpenCode lifecycle adapters, reconnect history beyond 1000 events.
 
 ## REA integration
 
@@ -185,10 +206,11 @@ OMNIMEM_TEST_ROOT=/Volumes/Ext/DevCache/OmniMemo/test-workspaces \
 python3 Tests/mcp_smoke.py /Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem
 python3.12 Tests/cli_smoke.py /Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem
 python3 Tests/rea_smoke.py /Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem
+python3 Tests/office_smoke.py /Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem  # needs redis-server on PATH
 ./scripts/test-mongo.sh stop
 ```
 
-Version 0.2.0 validation: **27 XCTest cases passed, zero failures, zero skips**, plus seven independent smoke tests against the packaged release. See [validation scope and results](docs/VALIDATION.md). Python 3.11+ is required for the CLI smoke test's TOML parser; the memory core does not require Python. Individual REA tools retain their upstream dependencies.
+Version 0.2.0 validation: **35 XCTest cases passed, zero failures, zero skips**, plus eight independent smoke tests (including `Tests/office_smoke.py` for the v1.9 slice) against the packaged release. See [validation scope and results](docs/VALIDATION.md). Python 3.11+ is required for the CLI smoke test's TOML parser; the memory core does not require Python. Individual REA tools retain their upstream dependencies.
 
 Real MongoDB tests cover multiple writer connections, persistence, isolation, deduplication, secret rejection, evidence staleness, cache invalidation, and missing metadata. An independent Python client tests MCP wire behavior and handoff between two subprocesses labeled as Codex/Claude fixtures. These are not live paid conversations with either product. Without `OMNIMEM_TEST_MONGO_URI`, database tests are reported as skipped.
 
@@ -198,7 +220,7 @@ Real MongoDB tests cover multiple writer connections, persistence, isolation, de
 
 Not implemented: transactional MongoDB migration/relocation, physical drive-disconnection recovery, automatic conflict resolution/revision ledgers, graphs, automatic capture hooks, HTTP, complete adapters for all four hosts, embeddings, cloud sync, or ROI benchmarks. Do not move a WiredTiger dbPath while its server is running. Use appropriate MongoDB backup/restore procedures; the cache directory is not a database backup.
 
-The v1.4–v1.7 rules packs are included: both v1.4 PRDs, the cumulative v1.7 PRD, and technical specs for REA Bridge (v1.5), Omni Reach (v1.6) and OmniBias Guard (v1.7), with example configs and on-demand skills in `skills/`. Omni Agent delegation, Mission Control, REA Bridge, Omni Reach and OmniBias Guard remain proposed features. Your Swift + MongoDB amendments remain authoritative.
+The v1.4–v1.9 rules packs are included: v1.4 PRDs, cumulative v1.7–v1.9 PRDs, and technical specs for REA Bridge (v1.5), Omni Reach (v1.6), OmniBias Guard (v1.7), hybrid MongoDB+Redis storage (v1.8) and Swift/Vapor/React (v1.9), with example configs and on-demand skills in `skills/`. The v1.9 P0 slice above is implemented; Omni Agent delegation, REA Bridge, Omni Reach, OmniBias Guard and the P1/P2 Mission Control views remain proposed. Your Swift + MongoDB amendments remain authoritative.
 
 Project rules are in `AGENTS.md`. The original supplied PRD is retained in `docs/OmniMemo_PRD_v1.2_Guardrails.md`, with user amendments recorded in `SPEC.md`. Historical source documents retain their original language. Git uses the owner's configured identity; remote changes and pushes require explicit approval.
 

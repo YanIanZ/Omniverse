@@ -9,7 +9,7 @@ DATA="${OMNIMEM_HOME:-$HOME/Library/Application Support/OmniMemo/data}"
 PROJECT="$PWD"
 URI=mongodb://127.0.0.1:27018/omnimemo
 AGENTS=codex,claude
-SETUP=0; START_MONGO=0; WITH_REA=0; DRY_RUN=0; GLOBAL=0
+SETUP=0; START_MONGO=0; WITH_REA=0; DRY_RUN=0; GLOBAL=0; WITH_HOOKS=0
 fail() { printf 'OmniMemo installer: %s\n' "$*" >&2; exit 1; }
 usage() {
   cat <<'EOF'
@@ -21,6 +21,7 @@ Usage: bash install.sh [options]
   --setup             Initialize memory and apply project Codex/Claude adapters
   --global            Register MCP + npx skills for detected user-level hosts
                       (Python 3.11+ and Node/npm required; preview with --dry-run)
+  --with-hooks        With --global, add Claude Code session/prompt hooks (opt-in)
   --agents LIST       Project adapters: codex,claude (default: both)
   --mongo-uri URI     Existing mongodb:// server; OMNIMEM_MONGO_URI overrides it (use it for secrets)
   --start-mongo       With --setup, start the dedicated local server on port 27018
@@ -41,7 +42,7 @@ while (($#)); do
         --project) PROJECT="$2" ;; --agents) AGENTS="$2" ;; --mongo-uri) URI="$2" ;;
       esac
       shift 2 ;;
-    --global) GLOBAL=1; shift ;;
+    --global) GLOBAL=1; shift ;; --with-hooks) WITH_HOOKS=1; shift ;;
     --setup) SETUP=1; shift ;; --start-mongo) START_MONGO=1; shift ;;
     --with-rea) WITH_REA=1; shift ;; --dry-run) DRY_RUN=1; shift ;;
     -h|--help) usage; exit 0 ;; *) fail "Unknown option: $1" ;;
@@ -61,6 +62,7 @@ done
 case ",$AGENTS," in *,codex,*|*,claude,*) ;; *) fail 'Choose codex and/or claude adapters.' ;; esac
 IFS=, read -r -a selected_agents <<< "$AGENTS"
 for agent in "${selected_agents[@]}"; do [[ "$agent" == codex || "$agent" == claude ]] || fail 'Unsupported project adapter.'; done
+((!WITH_HOOKS || GLOBAL)) || fail '--with-hooks requires --global.'
 if ((START_MONGO)); then
   ((SETUP)) || fail '--start-mongo requires --setup.'
   [[ "$URI" == mongodb://127.0.0.1:27018/* ]] || fail '--start-mongo requires loopback port 27018.'
@@ -91,6 +93,7 @@ if ((GLOBAL)); then
 fi
 TARGET="$PREFIX/lib/omnimemo"
 LAUNCHER="$PREFIX/bin/omnimem"
+OM_LAUNCHER="$PREFIX/bin/om"
 LAUNCHER_TEXT="$(cat <<'EOF'
 #!/bin/sh
 # OmniMemo installer launcher v1
@@ -98,7 +101,7 @@ exec "$(CDPATH='' cd -- "$(dirname -- "$0")/../lib/omnimemo" && pwd)/omnimem" "$
 EOF
 )"
 # Refuse to replace unrelated installations or follow redirected destination leaves.
-for path in "$PREFIX/bin" "$PREFIX/lib" "$TARGET" "$LAUNCHER"; do [[ ! -L "$path" ]] || fail "Destination is a symlink: $path"; done
+for path in "$PREFIX/bin" "$PREFIX/lib" "$TARGET" "$LAUNCHER" "$OM_LAUNCHER"; do [[ ! -L "$path" ]] || fail "Destination is a symlink: $path"; done
 if [[ -e "$TARGET" || -e "$LAUNCHER" ]]; then
   [[ -f "$TARGET/.omnimemo-install" ]] && [[ "$(cat "$TARGET/.omnimemo-install")" == 'YanIanZ/OmniMemo installer v1' ]] || fail 'Destination already exists and is not owned by this installer.'
   if [[ -e "$LAUNCHER" ]]; then
@@ -133,6 +136,12 @@ if [[ -e "$TARGET" ]]; then
 fi
 mv -- "$STAGE" "$TARGET"; STAGE=""
 mv -f -- "$TARGET/launcher" "$LAUNCHER"
+# Short `om` alias; never replace an unrelated command of the same name.
+if [[ ! -e "$OM_LAUNCHER" || "$(cat "$OM_LAUNCHER")" == "$LAUNCHER_TEXT" ]]; then
+  printf '%s\n' "$LAUNCHER_TEXT" > "$OM_LAUNCHER"; chmod +x "$OM_LAUNCHER"
+else
+  printf 'Skipped %s: an unrelated file exists; use omnimem instead.\n' "$OM_LAUNCHER"
+fi
 "$LAUNCHER" --version
 if ((START_MONGO)); then
   OMNIMEM_MONGO_ROOT="${OMNIMEM_MONGO_ROOT:-$CACHE/mongodb}" OMNIMEM_MONGO_PORT=27018 "$ROOT/scripts/mongodb.sh" start
@@ -150,6 +159,7 @@ fi
 if ((GLOBAL)); then
   global_args=(--binary "$TARGET/omnimem" --data-dir "$DATA" --state-dir "$CACHE/global-install" --apply --install-skills)
   if ((WITH_REA)); then global_args+=(--with-rea); fi
+  if ((WITH_HOOKS)); then global_args+=(--with-hooks); fi
   "$ROOT/scripts/install-global.sh" "${global_args[@]}"
 fi
 printf '\nInstalled: %s\nAdd %s/bin to PATH if needed; no shell profile was changed.\n' "$LAUNCHER" "$PREFIX"

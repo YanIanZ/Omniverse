@@ -80,3 +80,23 @@ sanitized errors. Results: 27 XCTest passed, 0 failed, 0 skipped (real MongoDB, 
 `global_install_smoke`, `skills_smoke` all PASS against a release packaged under
 `/Volumes/Ext`. Packaging under `/private/tmp` makes `cli_smoke` fail only because
 Foundation's `resolvingSymlinksInPath()` rewrites `/private/tmp` to `/tmp`.
+
+## v1.9 vertical slice (2026-10-18)
+
+Implemented PRD v1.9 P0-A/B/C: `om` alias and commands (`wake`, `context --first-prompt`,
+`recall`, `agents`, `tasks`, `serve`, `office`, `stop`, `hook claude`); MongoDB sessions, ordered
+events and revision-checked tasks; optional Redis Pub/Sub hint (RediStack 1.6.3, tested against
+local Redis 8.10.2); Vapor 4.122.2 REST/WebSocket server; React 19 + TypeScript 7 + Vite 8 UI;
+opt-in Claude Code hooks in the global installer.
+
+Results: 35 XCTest passed, 0 failed (8 new: runtime idempotency, stale presence, prompt capsule
+once-per-change, task idempotency and a two-writer CAS race, Redis outage, server auth/Host/
+Origin/CSRF guards, If-Match/409, SPA fallback vs `/api`). All eight smoke tests PASS, including
+`office_smoke.py`: Claude-format hook stdin, office reuse (same pid), React served by Vapor,
+WebSocket origin/auth/scope denial, live task event in 0.03 s with Redis, Redis outage with
+MongoDB writes intact, `om stop`. A Chrome session confirmed cookie login, live task/agent
+updates without reload, browser POST/PATCH, and no console errors.
+
+Not verified: a live paid Claude Code session firing the installed hooks (fixtures use the
+documented stdin JSON), Codex/Gemini/OpenCode lifecycle hooks, approvals, 2D office, multi-process
+server deployment, TLS/remote access (unsupported by design).

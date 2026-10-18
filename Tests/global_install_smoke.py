@@ -59,4 +59,25 @@ with tempfile.TemporaryDirectory(prefix='global fixture ',dir=workspace) as fold
     assert 'omnimemo' not in tomllib.loads(codex.read_text())['mcp_servers']
     assert json.loads(paths['claude'].read_text())['new_setting']=='preserve'
     assert all(json.loads(p.read_text())['keep']=={'value':42} for p in paths.values())
-print('PASS: global preview; all config schemas; unrelated settings; no fixed project; repeat apply; private backups; edited-entry refusal; preserving uninstall')
+    # Opt-in Claude hooks merge beside existing user hooks and uninstall only their own entries.
+    hstate=root/'hook-state';settings=home/'.claude/settings.json';settings.parent.mkdir(exist_ok=True)
+    mine={'hooks':[{'type':'command','command':'echo user-hook'}]}
+    settings.write_text(json.dumps({'theme':'dark','hooks':{'UserPromptSubmit':[mine]}}))
+    before=json.loads(settings.read_text())
+    hargs=[sys.executable,str(script),'--home',str(home),'--hosts','codex','--with-hooks',
+           '--binary','/Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem','--data-dir',str(root/'data space'),
+           '--state-dir',str(hstate)]
+    p=subprocess.run(hargs,text=True,capture_output=True,timeout=30);assert p.returncode==0,p.stderr
+    assert json.loads(settings.read_text())==before, 'preview must not write'
+    p=subprocess.run(hargs+['--apply'],text=True,capture_output=True,timeout=30);assert p.returncode==0,p.stderr
+    hooks=json.loads(settings.read_text())['hooks']
+    assert sorted(hooks)==['SessionEnd','SessionStart','UserPromptSubmit'] and hooks['UserPromptSubmit'][0]==mine
+    command=hooks['SessionStart'][0]['hooks'][0]['command']
+    assert command.endswith(' hook claude') and "'"+str(root/'data space')+"'" in command
+    applied_hooks=settings.read_bytes()
+    p=subprocess.run(hargs+['--apply'],text=True,capture_output=True,timeout=30);assert p.returncode==0,p.stderr
+    assert settings.read_bytes()==applied_hooks
+    p=subprocess.run([sys.executable,str(script),'--home',str(home),'--state-dir',str(hstate),'--uninstall','--apply'],
+                     text=True,capture_output=True,timeout=30);assert p.returncode==0,p.stderr
+    assert json.loads(settings.read_text())==before
+print('PASS: global preview; Claude hooks opt-in merge/uninstall; all config schemas; unrelated settings; no fixed project; repeat apply; private backups; edited-entry refusal; preserving uninstall')

@@ -121,8 +121,21 @@ The original full PRD and standalone Omni Agent technical PRD are included uncha
 archive/member hashes in `rules-v1.4-provenance.json`. Their Rust/SQLite examples are historical;
 the user's Swift + MongoDB amendment applies. The active repository rules include v1.3/v1.4
 safety policies. `omni-agent.example.toml` is a proposed configuration, not a working delegation
-engine. This installer does not implement Omni Agent scheduling, task leases, Mission Control,
-or provider launches.
+engine. This installer does not implement Omni Agent scheduling, task leases or provider launches.
+
+## Claude Code hooks and Mission Control (v1.9)
+
+`--with-hooks` (only with `--global`) merges three entries into `~/.claude/settings.json`
+(or `$CLAUDE_CONFIG_DIR/settings.json`): `SessionStart`, `UserPromptSubmit` and `SessionEnd`,
+each running `<binary> --data-dir <data> hook claude`. Existing hooks are kept; a preview runs
+first; uninstall removes only the OmniMemo entries and refuses edited ones. Restart Claude Code
+after installation. The hook resolves the Git root of the session's `cwd`; outside Git, or when
+storage is unavailable, it does nothing and exits 0.
+
+`om office` starts one loopback Vapor server per data directory (`server.json`, `server.log`,
+`server-token` live there) and reuses it on later calls; `om stop` stops it. Set
+`OMNIMEM_REDIS_URL` only if a Redis server is already available; OmniMemo never configures,
+flushes or stops Redis or MongoDB.
 
 ## Primary host references
 

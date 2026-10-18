@@ -4,7 +4,7 @@ public enum MemoError: Error, LocalizedError {
   case invalid(String)
   case storageUnavailable
   case database(String)
-  case denied, notFound, secret, conflict
+  case denied, notFound, secret, conflict, revisionConflict
   public var errorDescription: String? {
     switch self {
     case .invalid(let message): return "invalid_request: \(message)"
@@ -15,6 +15,7 @@ public enum MemoError: Error, LocalizedError {
     case .notFound: return "not_found"
     case .secret: return "secret_detected: rejected content; no data saved"
     case .conflict: return "idempotency_conflict: key already used with different content"
+    case .revisionConflict: return "revision_conflict: record changed; refresh and retry"
     }
   }
 }

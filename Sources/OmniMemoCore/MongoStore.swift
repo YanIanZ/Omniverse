@@ -3,11 +3,11 @@ import Logging
 import MongoKitten
 
 public actor MongoStore {
-  public let binding: ProjectBinding
+  public nonisolated let binding: ProjectBinding
   public let dataRoot: URL
   public let config: StoreConfig
   public let cache: DiskCache
-  private let db: MongoDatabase
+  let db: MongoDatabase
   private struct Metadata: Codable {
     enum CodingKeys: String, CodingKey {
       case schemaVersion = "schema_version"
@@ -123,7 +123,7 @@ public actor MongoStore {
     }
   }
   public func close() async { await (db.pool as? MongoCluster)?.disconnect() }
-  private func validate() throws {
+  func validate() throws {
     try binding.validate()
     guard dataRoot.resolvingSymlinksInPath() == dataRoot,
       let data = try? Data(contentsOf: dataRoot.appendingPathComponent("meta.json")),

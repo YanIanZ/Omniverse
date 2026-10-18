@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Merge supported user-level MCP configurations with private backups and owned uninstall."""
-import argparse, copy, hashlib, json, os, pathlib, re, shutil, subprocess, sys, tempfile, time, tomllib
+import argparse, copy, hashlib, json, os, pathlib, re, shlex, shutil, subprocess, sys, tempfile, time, tomllib
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BEGIN = '# BEGIN OmniMemo global installer v1\n'
@@ -68,10 +68,37 @@ def servers(host, binary, data, launcher, rea):
         result[name] = entry
     return result
 
+HOOK_EVENTS=('SessionStart','UserPromptSubmit','SessionEnd')
+
+def claude_hooks(binary, data):
+    # Official Claude Code hook events only; the command fails open and never blocks a prompt.
+    command=shlex.quote(str(binary))+' --data-dir '+shlex.quote(str(data))+' hook claude'
+    return {event:{'hooks':[{'type':'command','command':command,'timeout':10}]} for event in HOOK_EVENTS}
+
+def plan_hooks(path, original, expected, uninstall):
+    obj=json.loads((original or b'{}').decode() or '{}')
+    if not isinstance(obj,dict) or not isinstance(obj.setdefault('hooks',{}),dict):
+        raise ValueError('Unexpected Claude settings schema: '+str(path))
+    hooks=obj['hooks']
+    for event, group in expected.items():
+        groups=hooks.setdefault(event,[])
+        if not isinstance(groups,list):raise ValueError('Unexpected Claude hook schema: '+str(path))
+        ours=[g for g in groups if ' hook claude' in json.dumps(g)]
+        if uninstall:
+            if ours!=[group]:raise ValueError('Managed Claude hook changed or missing: '+str(path))
+            groups.remove(group)
+            if not groups:del hooks[event]
+        elif ours and ours!=[group]:raise ValueError('Existing OmniMemo Claude hook needs review: '+str(path))
+        elif not ours:groups.append(group)
+    if not hooks:del obj['hooks']
+    if original is not None and json.loads(original)==obj:return path, original, original
+    return path, original, encoded(obj)
+
 def plan_entry(path, kind, keys, expected, uninstall):
     # Intentional host-directory symlinks (e.g. ~/.claude -> Ext) are preserved.
     path = path.resolve()
     original = read(path)
+    if kind=='hooks':return plan_hooks(path, original, expected, uninstall)
     text = (original or b'').decode()
     if kind=='toml':
         parsed = tomllib.loads(text)
@@ -124,6 +151,7 @@ def main():
     p.add_argument('--opencode-layout',choices=['auto','v1','v2'],default='auto')
     p.add_argument('--with-rea',action='store_true')
     p.add_argument('--install-skills',action='store_true')
+    p.add_argument('--with-hooks',action='store_true',help='Also add Claude Code session/prompt hooks (opt-in).')
     p.add_argument('--uninstall',action='store_true')
     p.add_argument('--apply',action='store_true',help='Apply; otherwise preview without writes.')
     args=p.parse_args()
@@ -156,6 +184,9 @@ def main():
             path,kind,keys=available[host]
             expected=servers(host,binary,data,launcher,args.with_rea)
             entries.append({'host':host,'path':str(path.resolve()),'kind':kind,'keys':keys,'servers':expected})
+        if args.with_hooks:
+            claude_dir=home/'.claude' if args.home else pathlib.Path(os.environ.get('CLAUDE_CONFIG_DIR',str(home/'.claude')))
+            entries.append({'host':'claude-hooks','path':str((claude_dir/'settings.json').resolve()),'kind':'hooks','keys':['hooks'],'servers':claude_hooks(binary,data)})
         if manifest and any(previous not in json.loads(json.dumps(entries)) for previous in manifest['entries']):
             raise ValueError('Global installation profile changed; uninstall the previous profile first.')
     planned=[plan_entry(pathlib.Path(e['path']),e['kind'],e['keys'],e['servers'],args.uninstall) for e in entries]

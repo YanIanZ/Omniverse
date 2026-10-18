@@ -23,9 +23,27 @@ struct OmniMemo: AsyncParsableCommand {
     version: "0.2.0",
     subcommands: [
       Init.self, Status.self, Doctor.self, Project.self, Memory.self, Context.self, Checkpoint.self,
-      Cache.self, MCP.self, Rea.self, Install.self, Uninstall.self,
+      Cache.self, MCP.self, Rea.self, Install.self, Uninstall.self, Wake.self, Recall.self,
+      Agents.self, Tasks.self, Serve.self, Office.self, Stop.self, Hook.self,
     ])
   @OptionGroup var options: Options
+  /// Bare `om`: status plus the next useful command; never starts a server.
+  func run() async throws {
+    let store = try await options.open()
+    do {
+      let s = try await store.status()
+      let running = ServerState.read(dataDir: options.dataDir).map { "http://127.0.0.1:\($0.port)/" }
+      try output([
+        "project_id": s.projectID, "records": String(s.records), "storage": "available",
+        "office": running ?? "not running",
+        "next": "om context \"<task>\" | om recall <query> | om office",
+      ])
+      await store.close()
+    } catch {
+      await store.close()
+      throw MongoStore.safeError(error)
+    }
+  }
   struct Init: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
       abstract: "Explicitly initialize MongoDB indexes and local metadata/cache.")
@@ -240,14 +258,32 @@ struct OmniMemo: AsyncParsableCommand {
   }
   struct Context: AsyncParsableCommand {
     @OptionGroup var options: Options
-    @Argument var task: String
+    @Argument var task: String?
     @Option var maxTokens: Int = 500
+    @Flag(help: "Session capsule; printed only when changed since this session last received it.")
+    var firstPrompt = false
+    @Option(help: "Session for --first-prompt; --agent names the provider.") var session: String?
+    func validate() throws {
+      if firstPrompt {
+        guard session != nil else {
+          throw ValidationError("--first-prompt requires --session")
+        }
+      } else if task == nil {
+        throw ValidationError("provide a task or --first-prompt")
+      }
+    }
     func run() async throws {
       let store = try await options.open()
       do {
-        let data = try await store.context(task: task, maxTokens: maxTokens)
-        FileHandle.standardOutput.write(data)
-        print("")
+        let data =
+          firstPrompt
+          ? try await store.promptContext(
+            agent: options.agent, session: session!, maxTokens: maxTokens)
+          : try await store.context(task: task!, maxTokens: maxTokens)
+        if let data {
+          FileHandle.standardOutput.write(data)
+          print("")
+        }
         await store.close()
       } catch {
         await store.close()

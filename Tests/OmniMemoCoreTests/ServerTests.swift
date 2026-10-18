@@ -1,0 +1,105 @@
+import OmniServer
+import XCTVapor
+import XCTest
+
+@testable import OmniMemoCore
+
+final class ServerTests: XCTestCase {
+  let token = String(repeating: "a", count: 64)
+
+  func app(dist: String? = nil) async throws -> (Application, MongoStore) {
+    let (_, store) = try await MongoTests().fixture()
+    let app = try await Application.make(.testing)
+    try await OmniServer.configure(
+      app, store: store, config: ServerConfig(port: 8787, token: token, distPath: dist))
+    addTeardownBlock { try? await app.asyncShutdown() }
+    return (app, store)
+  }
+
+  func headers(_ extra: [(String, String)] = [], auth: Bool = true) -> HTTPHeaders {
+    var h = HTTPHeaders([("Host", "127.0.0.1:8787")] + extra)
+    if auth { h.bearerAuthorization = .init(token: token) }
+    return h
+  }
+
+  func testAuthHostAndOriginGuards() async throws {
+    let (app, store) = try await app()
+    try await app.test(.GET, "api/v1/health", headers: headers(auth: false)) {
+      XCTAssertEqual($0.status, .unauthorized)
+    }
+    try await app.test(.GET, "api/v1/health", headers: HTTPHeaders([("Host", "evil.test:8787")])) {
+      XCTAssertEqual($0.status, .misdirectedRequest)
+    }
+    try await app.test(
+      .GET, "api/v1/tasks", headers: headers([("Origin", "http://evil.test")])
+    ) { XCTAssertEqual($0.status, .forbidden) }
+    // Cookie-authenticated writes without an Origin are refused (CSRF defence).
+    try await app.test(
+      .POST, "api/v1/tasks",
+      headers: headers(
+        [("Cookie", "omnimemo_session=\(token)"), ("Content-Type", "application/json")],
+        auth: false),
+      body: ByteBuffer(string: #"{"title":"x"}"#)
+    ) { XCTAssertEqual($0.status, .forbidden) }
+    try await app.test(.GET, "auth?token=wrong", headers: headers(auth: false)) {
+      XCTAssertEqual($0.status, .unauthorized)
+    }
+    try await app.test(.GET, "auth?token=\(token)", headers: headers(auth: false)) {
+      XCTAssertEqual($0.status, .seeOther)
+      let cookie = $0.headers.first(name: .setCookie) ?? ""
+      XCTAssertTrue(cookie.contains("HttpOnly") && cookie.contains("SameSite=Strict"))
+    }
+    try await app.test(.GET, "api/v1/health", headers: headers()) { res in
+      XCTAssertEqual(res.status, .ok)
+      XCTAssertTrue(res.body.string.contains(store.binding.id))
+      XCTAssertFalse(res.body.string.contains("mongodb://"))
+      XCTAssertNotNil(res.headers.first(name: "Content-Security-Policy"))
+    }
+  }
+
+  func testTaskLifecycleRequiresRevision() async throws {
+    let (app, _) = try await app()
+    var id = ""
+    try await app.test(
+      .POST, "api/v1/tasks",
+      headers: headers([
+        ("Origin", "http://127.0.0.1:8787"), ("Content-Type", "application/json"),
+      ]),
+      body: ByteBuffer(string: #"{"title":"Ship the vertical slice","idempotency_key":"vs"}"#)
+    ) { res in
+      XCTAssertEqual(res.status, .created)
+      id = try res.content.decode(TaskRecord.self).id
+    }
+    let patch = ByteBuffer(string: #"{"status":"doing"}"#)
+    let json = ("Content-Type", "application/json")
+    try await app.test(.PATCH, "api/v1/tasks/\(id)", headers: headers([json]), body: patch) {
+      XCTAssertEqual($0.status, .preconditionRequired)
+    }
+    try await app.test(
+      .PATCH, "api/v1/tasks/\(id)", headers: headers([json, ("If-Match", "1")]), body: patch
+    ) { XCTAssertEqual($0.status, .ok) }
+    try await app.test(
+      .PATCH, "api/v1/tasks/\(id)", headers: headers([json, ("If-Match", "1")]), body: patch
+    ) { XCTAssertEqual($0.status, .conflict) }
+    try await app.test(.GET, "api/v1/events?after=0", headers: headers()) { res in
+      let events = try res.content.decode([RuntimeEvent].self)
+      XCTAssertEqual(events.map(\.revision), [1, 2])
+    }
+  }
+
+  func testSpaFallbackNeverSwallowsApi() async throws {
+    let dist = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try privateDirectory(dist)
+    try Data("<div id=root></div>".utf8).write(to: dist.appendingPathComponent("index.html"))
+    addTeardownBlock { try? FileManager.default.removeItem(at: dist) }
+    let (app, _) = try await app(dist: dist.path)
+    try await app.test(.GET, "office/agents", headers: headers(auth: false)) {
+      XCTAssertEqual($0.status, .ok)
+      XCTAssertTrue($0.body.string.contains("root"))
+    }
+    try await app.test(.GET, "api/v1/missing", headers: headers()) {
+      XCTAssertEqual($0.status, .notFound)
+      XCTAssertFalse($0.body.string.contains("root"))
+    }
+  }
+}

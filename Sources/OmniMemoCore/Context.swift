@@ -14,6 +14,13 @@ public struct MemoryBrief: Codable, Sendable {
   public var summary: String
   public var state: String
   public var sourceRefs: [String]?
+  public init(id: String, title: String, summary: String, state: String, sourceRefs: [String]?) {
+    self.id = id
+    self.title = title
+    self.summary = summary
+    self.state = state
+    self.sourceRefs = sourceRefs
+  }
 }
 public struct ContextEnvelope: Codable, Sendable {
   enum CodingKeys: String, CodingKey {
