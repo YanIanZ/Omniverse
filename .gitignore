@@ -7,3 +7,20 @@
 .omnimemo-installer/
 __pycache__/
 *.pyc
+
+# Local credentials, runtime pointers, dependencies and release artifacts
+.env
+.env.*
+!.env.example
+node_modules/
+/dist/
+rea-runtime.json
+*.pem
+*.key
+
+# Local MongoDB data (never a source or release artifact)
+/mongodb/
+/test-mongo/
+WiredTiger*
+mongod.lock
+*.wt

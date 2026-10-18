@@ -36,6 +36,33 @@ MongoDB lokal **wajib berjalan**. Ini menggantikan keputusan Rust/SQLite dan sya
 
 ## Build
 
+Untuk clone baru di macOS, dengan Swift dan `mongod` sudah tersedia:
+
+```sh
+git clone https://github.com/YanIanZ/OmniMemo.git
+cd OmniMemo
+export OMNIMEM_BUILD_CACHE="$HOME/Library/Caches/OmniMemo/swift"
+export OMNIMEM_MONGO_ROOT="$HOME/Library/Application Support/OmniMemo/mongodb"
+export OMNIMEM_REA_RUNTIME="$HOME/Library/Caches/OmniMemo/integrations/rea-runtime.json"
+./scripts/package.sh "$HOME/Library/Application Support/OmniMemo/bin"
+./scripts/mongodb.sh start
+
+BIN="$HOME/Library/Application Support/OmniMemo/bin/omnimem"
+DATA="$HOME/Library/Application Support/OmniMemo/data"
+PROJECT="$PWD"
+"$BIN" --data-dir "$DATA" --project "$PROJECT" init \
+  --mongo-uri mongodb://127.0.0.1:27018/omnimemo
+"$BIN" --data-dir "$DATA" --project "$PROJECT" status
+```
+
+REA opsional memerlukan Node/npm yang sesuai; siapkan dengan
+`python3 scripts/prepare-rea.py --base "$HOME/Library/Caches/OmniMemo"`,
+lalu ulangi `package.sh` agar pointer runtime ikut tersedia. Jangan commit pointer runtime,
+database, credential atau artifact build. Contoh `/Volumes/Ext` di bawah adalah layout mesin pengembangan;
+override di atas dapat dipakai tanpa disk Ext.
+
+Build pada layout mesin pengembangan:
+
 ```sh
 cd /Volumes/Ext/MinionsProject/OmniMemo
 ./scripts/swift.sh build

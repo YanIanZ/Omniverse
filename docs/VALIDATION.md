@@ -24,6 +24,15 @@ See `SPEC.md` §V for invariants and §B for failures considered during implemen
 
 ## Explicit limits
 
+Public-source preparation on 2026-10-18 reran all 25 XCTest cases with real
+MongoDB and the pinned REA runtime: zero failures and zero skips. A pattern-based
+scan of all 65 historical Git blobs found only the intentional private-key header
+and dummy credential URI in `CoreTests.swift`; neither contains an actual key or
+credential. This scan is a bounded heuristic, not proof that every possible secret
+format is detectable. Build output, databases and the local REA runtime pointer
+are excluded from the source repository. Upstream REA license and notices remain
+included; no external engine or binary release is published by a source push.
+
 No live paid Codex/Claude conversation is used. Client names in the wire test are fixtures. There is no measured claim of token ROI, retrieval recall, production crash recovery, database volume relocation, drive ejection, cross-platform support or full PRD completion.
 
 The storage-unavailable test removes the local metadata anchor, not a physical mounted disk. Concurrent-write tests use several driver connections and CLI subprocesses; the server uses single-document atomicity and unique indexes, not multi-document transactions requiring a replica set.
