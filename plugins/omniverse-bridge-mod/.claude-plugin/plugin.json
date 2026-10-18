@@ -1,8 +1,36 @@
 {
   "name": "omniverse-bridge",
-  "version": "0.1.0",
-  "description": "Read-only live agent cards through local OmniMemo bridge. Experimental example.",
+  "version": "0.2.0",
+  "description": "OmniMemo agent cards, context usage reporting and opt-in fresh-context rollover for Claude Code.",
   "author": {
     "name": "YanIanZ"
+  },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "rollover": {
+      "type": "string",
+      "title": "Context rollover",
+      "description": "suggest tells you when context is high and /om-rollover hands off; auto replaces the conversation with the verified OmniMemo capsule at the threshold; off reports usage only.",
+      "default": "suggest",
+      "options": ["suggest", "auto", "off"]
+    },
+    "rolloverAt": {
+      "type": "number",
+      "title": "Rollover at (percent)",
+      "description": "Reported context usage that triggers the handoff (spec default 80).",
+      "default": 80
+    },
+    "prepareAt": {
+      "type": "number",
+      "title": "Prepare checkpoint at (percent)",
+      "description": "Reported context usage that saves a checkpoint ahead of the handoff (spec default 70).",
+      "default": 70
+    },
+    "omPath": {
+      "type": "string",
+      "title": "om command",
+      "description": "OmniMemo CLI the mod runs (no shell).",
+      "default": "om"
+    }
   }
 }

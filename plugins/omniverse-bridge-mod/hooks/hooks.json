@@ -1,6 +1,6 @@
 {
-  "description": "Omniverse agent cards module",
+  "description": "Omniverse agent cards and context rollover",
   "modules": [
-    "./register.js"
+    "./register.tsx"
   ]
 }

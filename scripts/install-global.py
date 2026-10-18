@@ -84,12 +84,12 @@ def opencode_plugin(binary, data, layout='v2'):
     head=('// Installed by the OmniMemo global installer; uninstall with its --uninstall.\n'
           'import { spawn } from "node:child_process";\n'
           'const BIN = '+json.dumps(str(binary))+';\nconst DATA = '+json.dumps(str(data))+';\n'
-          'function send(event, sessionID, directory) {\n'
+          'function send(event, sessionID, directory, extra) {\n'
           '  if (!sessionID || !directory) return;\n'
           '  try {\n'
           '    const child = spawn(BIN, ["--data-dir", DATA, "hook", "opencode"], { stdio: ["pipe", "ignore", "ignore"] });\n'
           '    child.on("error", () => {});\n'
-          '    child.stdin.end(JSON.stringify({ hook_event_name: event, session_id: sessionID, cwd: directory }));\n'
+          '    child.stdin.end(JSON.stringify({ ...extra, hook_event_name: event, session_id: sessionID, cwd: directory }));\n'
           '  } catch {}\n'
           '}\n')
     if layout=='v1':
@@ -101,28 +101,43 @@ def opencode_plugin(binary, data, layout='v2'):
                      '  },\n'
                      '  "chat.message": async (input) => send("chat.message", input?.sessionID, directory),\n'
                      '});\n')
-    # OpenCode 2.x: default export with id + setup(api); events carry their own location.
-    return head+('const field = (e, k) => e?.[k] ?? e?.data?.[k] ?? e?.properties?.[k];\n'
-                 'const sessionOf = (e) => field(e, "sessionID") ?? field(e, "info")?.id ?? field(e, "id");\n'
-                 'const dirOf = (e) => field(e, "location")?.directory ?? e?.location?.directory ?? field(e, "directory");\n'
-                 'const dirs = new Map();\n'
+    # OpenCode 2.x: default export { id, setup(ctx) }. Hooks verified live on OpenCode 2.0.32:
+    # ctx.tool.hook execute.before/after, ctx.session.hook prompt/context, a detached ctx.event.subscribe.
+    return head+('const used = (t) => (t?.input ?? 0) + (t?.cache?.read ?? 0) + (t?.cache?.write ?? 0);\n'
                  'export default {\n'
                  '  id: "omnimemo-presence",\n'
-                 '  setup(api) {\n'
-                 '    // subscribe() can run for the life of the stream: never make setup wait on it.\n'
-                 '    const running = api.event.subscribe((e) => {\n'
-                 '      const id = sessionOf(e);\n'
-                 '      if (!id) return;\n'
-                 '      const dir = dirOf(e) ?? dirs.get(id);\n'
-                 '      if (dir) dirs.set(id, dir);\n'
-                 '      const status = field(e, "status")?.type;\n'
-                 '      if (e?.type === "session.created") send("session.created", id, dir);\n'
-                 '      else if (e?.type === "session.status" && status === "busy") send("chat.message", id, dir);\n'
-                 '      else if (e?.type === "session.idle" || (e?.type === "session.status" && status === "idle")) send("session.idle", id, dir);\n'
-                 '      else if (e?.type === "session.deleted" || e?.type === "session.removed") { send("session.deleted", id, dir); dirs.delete(id); }\n'
-                 '    });\n'
-                 '    if (typeof running === "function") return running;\n'
-                 '    Promise.resolve(running).catch(() => {});\n'
+                 '  async setup(ctx) {\n'
+                 '    const dir = ctx.location?.directory;\n'
+                 '    const seen = new Set();\n'
+                 '    const models = new Map();\n'
+                 '    let windows;\n'
+                 '    const start = (id) => { if (id && !seen.has(id)) { seen.add(id); send("session.created", id, dir, { model: models.get(id)?.id }); } };\n'
+                 '    // Tool name only: arguments and results are never read.\n'
+                 '    await ctx.tool.hook("execute.before", (e) => { start(e?.sessionID); send("tool.execute.before", e?.sessionID, dir, { tool_name: e?.tool, model: models.get(e?.sessionID)?.id }); });\n'
+                 '    await ctx.tool.hook("execute.after", (e) => send(e?.status === "error" ? "tool.execute.failed" : "tool.execute.after", e?.sessionID, dir, { tool_name: e?.tool, model: models.get(e?.sessionID)?.id }));\n'
+                 '    await ctx.session.hook("prompt", (e) => { start(e?.sessionID); send("chat.message", e?.sessionID, dir, { model: models.get(e?.sessionID)?.id }); });\n'
+                 '    await ctx.session.hook("context", (e) => { if (e?.sessionID && e?.model) models.set(e.sessionID, e.model); });\n'
+                 '    // Context occupancy: the last step\'s input tokens over the model\'s reported window.\n'
+                 '    const report = async (id, tokens) => {\n'
+                 '      const model = models.get(id);\n'
+                 '      if (!model) return;\n'
+                 '      windows ??= ctx.model.list().then((r) => new Map((r?.data ?? []).map((m) => [m.providerID + "/" + m.id, m.limit?.context]))).catch(() => new Map());\n'
+                 '      const size = (await windows).get(model.providerID + "/" + model.id);\n'
+                 '      if (!size || !tokens) return;\n'
+                 '      send("context.usage", id, dir, { model: model.id, context_window: { used_percentage: Math.min(100, (used(tokens) * 100) / size), context_window_size: size } });\n'
+                 '    };\n'
+                 '    // Detached: setup must never wait on the stream.\n'
+                 '    const controller = new AbortController();\n'
+                 '    (async () => {\n'
+                 '      for await (const ev of ctx.event.subscribe({ signal: controller.signal })) {\n'
+                 '        const id = ev?.data?.sessionID;\n'
+                 '        if (ev?.type === "session.execution.started") start(id);\n'
+                 '        else if (ev?.type === "session.execution.succeeded" || ev?.type === "session.execution.failed") send("session.idle", id, dir);\n'
+                 '        else if (ev?.type === "session.step.ended") void report(id, ev.data?.tokens);\n'
+                 '        else if (ev?.type === "session.deleted") { send("session.deleted", id, dir); seen.delete(id); }\n'
+                 '        else if (ev?.type === "location.shutdown") { for (const s of seen) send("session.deleted", s, dir); seen.clear(); }\n'
+                 '      }\n'
+                 '    })().catch(() => {});\n'
                  '  },\n'
                  '};\n')
 
@@ -271,9 +286,9 @@ def main():
             # Hooks are added only for hosts already selected for MCP, plus Claude as before.
             for host in ['claude']+[h for h in ('codex','gemini') if h in selected]:
                 entries.append({'host':host+'-hooks','path':str(hook_files[host].resolve()),'kind':'hooks','keys':['hooks'],'servers':host_hooks(host,binary,data)})
-            # OpenCode 2.x: any plugin using api.event.subscribe stalled sessions in 2.0.31 (verified),
-            # so presence comes from the MCP connection only; the event plugin ships for 1.x.
-            if 'opencode' in selected and layout=='v1':
+            # OpenCode 2.x: the callback-style api.event.subscribe stalled sessions in 2.0.31; the v2
+            # plugin now uses tool/session hooks and a detached async stream (verified on 2.0.32).
+            if 'opencode' in selected:
                 entries.append({'host':'opencode-plugin','path':str((config_dir/'opencode/plugins/omnimemo.js').resolve()),'kind':'file','keys':[],'servers':opencode_plugin(binary,data,layout)})
         if args.with_statusline:
             claude_dir=home/'.claude' if args.home else pathlib.Path(os.environ.get('CLAUDE_CONFIG_DIR',str(home/'.claude')))

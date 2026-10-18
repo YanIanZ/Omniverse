@@ -133,7 +133,8 @@ are rejected rather than retained.
 | Codex (any session) | `om hook codex` (SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop) | passive | session, prompt, tool, turn |
 | Codex (OmniMemo-launched) | `om codex run` over `codex app-server` stdio | managed (20 s heartbeat, stale after 45 s) | session, task, prompt, tool, turn, context usage |
 | Gemini CLI | `om hook gemini` (SessionStart, BeforeAgent, BeforeTool, AfterTool, AfterAgent, SessionEnd) | passive | session, prompt, tool, turn |
-| OpenCode | plugin -> `om hook opencode` | passive | session and prompt; tool hooks are accepted (`tool.execute.before/after`) but the 2.x plugin wiring is not verified yet |
+| OpenCode 2.x | plugin (`ctx.tool.hook` execute.before/after, `ctx.session.hook` prompt/context, a detached `ctx.event.subscribe`) -> `om hook opencode`, verified on 2.0.32 | passive | session, prompt, tool (by name only; `execute` is shell), turn end, offline on shutdown, context usage |
+| Claude Code mod | `plugins/omniverse-bridge-mod` | passive | context usage after each turn, agent cards, fresh-context rollover |
 
 `om runtime ingest` accepts one JSON event or JSONL on stdin for any other adapter.
 
@@ -162,4 +163,8 @@ Managed rollover (opt-in): `om codex run --rollover [--rollover-at 80] [--max-ro
 
 Session fields: `parent_session_id`, `child_session_id`, `rollover_state` (`starting_child`, `waiting_ack`, `completed`, `failed_recoverable`).
 
-Not implemented: Claude or OpenCode fresh-session launch, compaction guards, a rollovers-per-hour cap across runs.
+Claude Code (mod, `rollover` option `auto`, or `/om-rollover`): a same-session reset. The mod saves the checkpoint, then runs `/compact` marked `omnimemo-rollover` and answers that compaction with the capsule alone. It asks once for `ACK <digest>`, then records the outcome with `om rollover report` (`rollover.completed` or `rollover.failed`, `mode: in_place`). The session id stays the same and no child session exists; at most 3 per hour.
+
+OpenCode context: the last step's input plus cache tokens (`session.step.ended`) over the model's `limit.context` from `ctx.model.list()`.
+
+Not implemented: OpenCode or Gemini rollover, compaction guards, a rollovers-per-hour cap across `om codex run` runs.

@@ -244,3 +244,30 @@ extension MemoryStore {
     } catch { throw Self.safeError(error) }
   }
 }
+
+extension MemoryStore {
+  /// Same-session rollover: the host replaced its own conversation with the persisted capsule
+  /// (a Claude Code mod answering its compaction). The session id does not change, so there is no
+  /// child; the outcome is whether the model acknowledged the capsule digest.
+  public func reportInPlaceRollover(
+    agent: String, session: String, digest: String, acknowledged: Bool, reason: String
+  ) async throws {
+    try validate()
+    let agent = try Self.label(agent, "agent")
+    let session = try Self.label(session, "session")
+    let digest = try Self.label(String(digest.prefix(64)), "digest")
+    do {
+      guard var s = try await backend.session(project: binding.id, agent: agent, session: session) else {
+        throw MemoError.notFound
+      }
+      s.rolloverState = acknowledged ? "completed" : "failed_recoverable"
+      try await backend.save(session: s, project: binding.id)
+      _ = try await emit(
+        acknowledged ? "rollover.completed" : "rollover.failed", entity: agent + ":" + session,
+        data: [
+          "agent": agent, "parent": session, "child": session, "mode": "in_place",
+          "digest": String(digest.prefix(16)), "reason": String(reason.prefix(120)),
+        ])
+    } catch { throw Self.safeError(error) }
+  }
+}

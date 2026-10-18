@@ -149,10 +149,12 @@ public enum RuntimeMapping {
     case "read", "read_file", "notebookread", "view", "read_many_files": return "file_read"
     case "glob", "grep", "ls", "list", "search", "search_file_content", "codesearch", "find":
       return "search"
-    case "bash", "shell", "exec_command", "run_shell_command", "local_shell", "terminal":
+    case "bash", "shell", "exec_command", "run_shell_command", "local_shell", "terminal", "execute":
       return "shell"
     case "webfetch", "websearch", "web_fetch", "google_web_search", "fetch": return "web"
     case "task", "agent", "subagent": return "subagent"
+    case "question", "askuserquestion", "ask_user": return "question"
+    case "skill": return "skill"
     case "todowrite", "todoread", "update_plan", "write_todos": return "planning"
     default: return n.isEmpty ? "unknown" : "other"
     }

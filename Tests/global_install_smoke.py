@@ -82,8 +82,10 @@ with tempfile.TemporaryDirectory(prefix='global fixture ',dir=workspace) as fold
     gem=json.loads(paths['gemini'].read_text())
     assert 'omnimemo' in gem['mcpServers'] and gem['keep']=={'value':42}
     assert sorted(gem['hooks'])==['AfterAgent','AfterTool','BeforeAgent','BeforeTool','SessionEnd','SessionStart']
-    # OpenCode 2.x gets no event plugin (its subscribe API stalls sessions); MCP gives presence.
-    assert not (home/'.config/opencode/plugins/omnimemo.js').exists()
+    # OpenCode 2.x plugin: tool/session hooks and a detached event stream (never a callback subscribe).
+    plugin=(home/'.config/opencode/plugins/omnimemo.js').read_text()
+    assert 'ctx.tool.hook("execute.before"' in plugin and 'ctx.tool.hook("execute.after"' in plugin
+    assert 'for await (const ev of ctx.event.subscribe' in plugin and 'api.event' not in plugin
     command=hooks['SessionStart'][0]['hooks'][0]['command']
     assert command.endswith(' hook claude') and "'"+str(root/'data space')+"'" in command
     applied_hooks=settings.read_bytes()

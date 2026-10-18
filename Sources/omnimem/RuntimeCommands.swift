@@ -575,7 +575,7 @@ extension OmniMemo {
   struct Rollover: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
       abstract: "Prepare a bounded handoff for a fresh session; never launches or controls one.",
-      subcommands: [Preview.self, Prepare.self])
+      subcommands: [Preview.self, Prepare.self, Report.self])
     struct Target: ParsableArguments {
       @Option(help: "Host session id whose reported context usage to include.") var session: String?
       @Option(help: "Provider whose tasks lead the capsule (default: all open tasks).") var provider: String?
@@ -599,6 +599,27 @@ extension OmniMemo {
           let digest = SHA256.hash(data: Data(capsule.text.utf8)).map { String(format: "%02x", $0) }.joined()
           let saved = try await store.prepareRollover(capsule, agent: options.agent, digest: digest)
           print(capsule.text + "Handoff: \(saved.id) · digest \(digest.prefix(16)) (\(saved.disposition))")
+        }
+      }
+    }
+
+    struct Report: AsyncParsableCommand {
+      static let configuration = CommandConfiguration(
+        abstract: "Record the outcome of a same-session rollover (a host that reset its own context).")
+      @OptionGroup var options: Options
+      @Option var session: String
+      @Option var provider = "claude"
+      @Option(help: "Digest printed by prepare.") var digest: String
+      @Option(help: "completed (acknowledged) or failed.") var outcome: String
+      @Option var reason = ""
+      func validate() throws {
+        guard ["completed", "failed"].contains(outcome) else { throw ValidationError("--outcome completed|failed") }
+      }
+      func run() async throws {
+        try await withStore(options) {
+          try await $0.reportInPlaceRollover(
+            agent: provider, session: session, digest: digest, acknowledged: outcome == "completed",
+            reason: reason.isEmpty ? outcome : reason)
         }
       }
     }
@@ -650,7 +671,7 @@ extension OmniMemo {
       case "SessionEnd", "session.deleted": return (.end, "session.ended")
       case "PreToolUse", "BeforeTool", "tool.execute.before": return (.tool, "tool.started")
       case "PostToolUse", "AfterTool", "tool.execute.after": return (.tool, "tool.succeeded")
-      case "PostToolUseFailure": return (.tool, "tool.failed")
+      case "PostToolUseFailure", "tool.execute.failed": return (.tool, "tool.failed")
       default: return nil
       }
     }
@@ -660,17 +681,29 @@ extension OmniMemo {
       let input = FileHandle.standardInput.readData(ofLength: 65537)
       guard input.count <= 65536,
         let object = try? JSONSerialization.jsonObject(with: input) as? [String: Any],
-        let event = object["hook_event_name"] as? String, let (phase, eventType) = Self.phase(event),
+        let event = object["hook_event_name"] as? String,
         let session = object["session_id"] as? String, let cwd = object["cwd"] as? String,
         let project = Self.gitRoot(cwd),
+        event == "context.usage" || Self.phase(event) != nil,
         let store = try? await MemoryStore.open(dataDir: options.dataDir, project: project)
       else { return }
+      let model = (object["model"] as? String) ?? ((object["model"] as? [String: Any])?["id"] as? String)
+      // Reported context occupancy from a plugin or mod (same fields as Claude's status line).
+      if event == "context.usage" {
+        let window = object["context_window"] as? [String: Any]
+        if let percent = (window?["used_percentage"] as? NSNumber)?.doubleValue {
+          _ = try? await store.recordContext(
+            agent: host, session: session, model: model.map { String($0.prefix(80)) }, usedPercent: percent,
+            windowTokens: (window?["context_window_size"] as? NSNumber)?.intValue)
+        }
+        return await store.close()
+      }
+      let (phase, eventType) = Self.phase(event)!
       let source = host + "_hook"
       // Categories only: the tool name is reduced here and its arguments are never read.
       var metadata: [String: MetaValue] = ["observability": .string("passive")]
       if phase == .tool { metadata["tool_category"] = .string(RuntimeMapping.toolCategory(object["tool_name"] as? String)) }
       if let mode = object["permission_mode"] as? String { metadata["permission_mode"] = .string(mode) }
-      let model = (object["model"] as? String) ?? ((object["model"] as? [String: Any])?["id"] as? String)
       let runtimeEvent = RuntimeEventInput(
         source: source, provider: host, externalSessionID: session, eventType: eventType,
         modelID: model.map { String($0.prefix(80)) }, metadata: metadata)

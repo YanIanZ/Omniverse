@@ -201,3 +201,22 @@ Multi-agent run: tasks and capsules went through the OmniMemo store.
 - Codex (`codex exec`, about 94k and 96k tokens) wrote the runtime tests and docs, and the context UI with the installer opt-in.
 - OpenCode Go `glm-5.3` stopped on its usage limit before editing anything; Claude did that task.
 - Each result was reviewed and re-verified before its task was marked done.
+
+## OpenCode 2.x tool hooks and the Claude Code mod (2026-10-19)
+
+- OpenCode 2.0.32, live with a free model (`opencode run --standalone`):
+  - A probe plugin confirmed the v2 shape: `export default { id, setup(ctx) }`, `ctx.tool.hook("execute.before"/"execute.after")` with `{ tool, sessionID, status }`, `ctx.session.hook("prompt"/"context")`, the `session.execution.*` and `session.step.ended` events from a detached `ctx.event.subscribe`, and `ctx.model.list()` limits.
+  - The generated plugin recorded session, prompt, shell tool (`execute`), context 5.3 % and offline on shutdown.
+  - A run with the plugin loaded exits normally; it no longer stalls as in 2.0.31.
+- Claude Code mod (`plugins/omniverse-bridge-mod`):
+  - `claude plugin validate` passed, and a strict `tsc` against the 2.1.302 engine types passed.
+  - `claude plugin test`: 5 tests passed. They cover the handoff through `/om-rollover` (checkpoint first, capsule replaces the compaction, Claude's own summarizer not reached, one ACK prompt), auto mode with ACK completed or failed, and suggest mode never compacting.
+  - Found by the tests: the engine refuses a compaction from a `command.run` hook, and a plugin's own `$.session.compact` skips its own hook. The mod therefore runs `/compact` with a marker after the command returns.
+  - Not run yet inside a live Claude Code session: it loads after a restart.
+- XCTest: 66 passed (+3: OpenCode tool names, in-place rollover report on SQLite and MongoDB). Smoke: all nine passed; `global_install_smoke` now expects the v2 plugin.
+- Activated on this machine:
+  - `om` 0.3.0 reinstalled.
+  - Global profile re-applied with `--with-hooks`: Claude 7 hook events, Codex 5, OpenCode v2 plugin.
+  - The mod is loaded via `CLAUDE_CODE_PLUGIN_DIRS` with `rollover: auto`. `settings.json` was backed up under `global-install/backups`.
+  - Mission Control was restarted on the new binary.
+  - This Claude session appeared live through the hooks before any restart.

@@ -199,4 +199,33 @@ final class ContextRolloverTests: XCTestCase {
     let types = try await store.events(after: 0).map(\.type).filter { $0.hasPrefix("rollover.") }
     XCTAssertEqual(types, ["rollover.created", "rollover.failed", "rollover.created", "rollover.completed"])
   }
+
+  func testOpenCodeToolNames() {
+    XCTAssertEqual(RuntimeMapping.toolCategory("execute"), "shell", "OpenCode 2.x names its shell tool execute")
+    XCTAssertEqual(RuntimeMapping.toolCategory("question"), "question")
+    XCTAssertEqual(RuntimeMapping.toolCategory("subagent"), "subagent")
+  }
+
+  func testSQLiteInPlaceRollover() async throws { try await inPlace(mongo: false) }
+  func testMongoInPlaceRollover() async throws { try await inPlace(mongo: true) }
+
+  private func inPlace(mongo: Bool) async throws {
+    let store = try await fixture(mongo: mongo)
+    try await start(store)
+    try await store.reportInPlaceRollover(
+      agent: "claude", session: "s1", digest: "0123456789abcdef", acknowledged: true, reason: "acknowledged")
+    var s = try await store.backend.session(project: store.binding.id, agent: "claude", session: "s1")!
+    XCTAssertEqual(s.rolloverState, "completed")
+    try await store.reportInPlaceRollover(
+      agent: "claude", session: "s1", digest: "fedcba9876543210", acknowledged: false, reason: "no ack")
+    s = try await store.backend.session(project: store.binding.id, agent: "claude", session: "s1")!
+    XCTAssertEqual(s.rolloverState, "failed_recoverable")
+    let events = try await store.events(after: 0).filter { $0.type.hasPrefix("rollover.") }
+    XCTAssertEqual(events.map(\.type), ["rollover.completed", "rollover.failed"])
+    XCTAssertEqual(events.first?.data["mode"], "in_place")
+    do {
+      try await store.reportInPlaceRollover(agent: "claude", session: "nobody", digest: "ab", acknowledged: true, reason: "x")
+      XCTFail("unknown session accepted")
+    } catch MemoError.notFound {}
+  }
 }

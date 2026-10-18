@@ -28,3 +28,7 @@ mongod.lock
 # Impeccable local review captures and caches
 .impeccable/review/
 .impeccable/hook.cache.json
+
+# Engine-written mod types (Claude Code lays them when it loads a mod)
+plugins/*/.claude-plugin/types/
+plugins/*/tsconfig.json
