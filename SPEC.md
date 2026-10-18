@@ -40,7 +40,7 @@ id|status|goal|cites
 T1|x|MongoDB core, identity/scope/evidence/FTS/cache + CLI|V1,V2,V3,V4,V6,V7,V8,V10,V12,V13,I.storage,I.cli
 T2|x|Bounded context + official MCP stdio + wire tests|V5,V9,I.mcp
 T3|x|Two adapters + recall/handoff skills + config roundtrip tests|V11,I.adapters
-T4|~|Integration tests, release build, reproducible docs and handoff|V1,V2,V3,V4,V5,V6,V7,V8,V9,V10,V11,V12,V13
+T4|x|Integration tests, release build, reproducible docs and handoff|V1,V2,V3,V4,V5,V6,V7,V8,V9,V10,V11,V12,V13
 
 ## §B
 id|date|cause|fix
