@@ -45,7 +45,7 @@ public struct REARuntime: Sendable {
   public let manifestPath: String
   public static func defaultManifestPath() -> String {
     if let path = ProcessInfo.processInfo.environment["OMNIMEM_REA_RUNTIME"] { return path }
-    let packaged = canonical(CommandLine.arguments[0]).deletingLastPathComponent()
+    let packaged = canonical(executablePath()).deletingLastPathComponent()
       .appendingPathComponent("rea-runtime.json")
     if FileManager.default.fileExists(atPath: packaged.path) { return packaged.path }
     return "/Volumes/Ext/DevCache/OmniMemo/integrations/rea-runtime.json"

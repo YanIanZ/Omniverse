@@ -43,6 +43,19 @@ final class CoreTests: XCTestCase {
     try Data("secret".utf8).write(to: project.appendingPathComponent(".env"))
     XCTAssertThrowsError(try binding.evidence(".env"))
   }
+  func testSensitiveNamesCheckedOnlyInsideProject() throws {
+    // A project stored under a folder named like a secret store must still accept sources.
+    let project = try workspace().appendingPathComponent("credentials/project")
+    try privateDirectory(project.appendingPathComponent(".ssh"))
+    try Data("let x = 1".utf8).write(to: project.appendingPathComponent("src.swift"))
+    try Data("key".utf8).write(to: project.appendingPathComponent(".ssh/id"))
+    let binding = try ProjectBinding(path: project.path)
+    XCTAssertEqual(try binding.evidence("src.swift").path, "src.swift")
+    XCTAssertThrowsError(try binding.evidence(".ssh/id"))
+  }
+  func testBareExecutableNameResolvesToAbsolutePath() {
+    XCTAssertTrue(executablePath().hasPrefix("/"))
+  }
   func testBindingRejectsReplacedRoot() throws {
     let root = try workspace()
     let p = root.appendingPathComponent("project")

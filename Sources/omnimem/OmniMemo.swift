@@ -30,7 +30,7 @@ struct OmniMemo: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
       abstract: "Explicitly initialize MongoDB indexes and local metadata/cache.")
     @OptionGroup var options: Options
-    @Option(help: "MongoDB URI without credentials; use OMNIMEM_MONGO_URI for authentication.")
+    @Option(help: "MongoDB URI without credentials; OMNIMEM_MONGO_URI, if set, takes precedence.")
     var mongoUri: String?
     @Option(help: "Disposable cache quota in MiB.") var cacheMib: Int = 32
     @Flag(help: "Make this data directory the default via a small user-level pointer.")
@@ -335,7 +335,7 @@ struct OmniMemo: AsyncParsableCommand {
     func run() async throws {
       let installer = try AgentInstaller(
         configRoot: configRoot ?? options.project, project: options.project,
-        executable: CommandLine.arguments[0], dataDir: options.dataDir,
+        executable: executablePath(), dataDir: options.dataDir,
         agents: agents.split(separator: ",").map(String.init), withRea: withRea,
         reaManifestPath: reaRuntimeManifest)
       if apply { try installer.apply() }
@@ -350,7 +350,7 @@ struct OmniMemo: AsyncParsableCommand {
     func run() async throws {
       let installer = try AgentInstaller(
         configRoot: configRoot ?? options.project, project: options.project,
-        executable: CommandLine.arguments[0], dataDir: options.dataDir,
+        executable: executablePath(), dataDir: options.dataDir,
         agents: agents.split(separator: ",").map(String.init))
       try output(installer.uninstall(apply: apply))
     }

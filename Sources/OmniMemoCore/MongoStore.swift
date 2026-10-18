@@ -50,8 +50,9 @@ public actor MongoStore {
     guard (0...2048 * 1024 * 1024).contains(cacheMaxBytes) else {
       throw MemoError.invalid("cache quota out of range")
     }
+    // Same precedence as open(): the environment wins, so init and later reads use one database.
     let address =
-      uri ?? ProcessInfo.processInfo.environment["OMNIMEM_MONGO_URI"]
+      ProcessInfo.processInfo.environment["OMNIMEM_MONGO_URI"] ?? uri
       ?? "mongodb://127.0.0.1:27017/omnimemo"
     // Credentials only come from the process environment, never the on-disk pointer.
     let credentialed =
@@ -259,22 +260,27 @@ public actor MongoStore {
   }
   public func delete(_ id: String) async throws {
     try validate()
-    let result = try await db["omnimem_records"].deleteOne(where: [
-      "project_id": binding.id, "id": id,
-    ])
-    guard result.deletes == 1 else { throw MemoError.notFound }
-    try cache.clear()
+    guard id.utf8.count <= 128 else { throw MemoError.invalid("invalid id") }
+    do {
+      let result = try await db["omnimem_records"].deleteOne(where: [
+        "project_id": binding.id, "id": id,
+      ])
+      guard result.deletes == 1 else { throw MemoError.notFound }
+      try cache.clear()
+    } catch { throw Self.safeError(error) }
   }
   public func exportRecords() async throws -> [MemoryRecord] {
     try validate()
     // CLI export is intentionally explicit and separate from MCP discovery.
-    let count = try await db["omnimem_records"].count(["project_id": binding.id])
-    guard count <= 10000 else {
-      throw MemoError.invalid("export exceeds 10000 records; use an administrative backup")
-    }
-    return try await db["omnimem_records"].find(["project_id": binding.id]).limit(10000).decode(
-      MemoryRecord.self
-    ).drain()
+    do {
+      let count = try await db["omnimem_records"].count(["project_id": binding.id])
+      guard count <= 10000 else {
+        throw MemoError.invalid("export exceeds 10000 records; use an administrative backup")
+      }
+      return try await db["omnimem_records"].find(["project_id": binding.id]).limit(10000).decode(
+        MemoryRecord.self
+      ).drain()
+    } catch { throw Self.safeError(error) }
   }
   public func status() async throws -> StoreStatus {
     try validate()

@@ -10,6 +10,13 @@ public func canonical(_ path: String) -> URL {
   URL(fileURLWithPath: NSString(string: path).expandingTildeInPath).standardizedFileURL
     .resolvingSymlinksInPath()
 }
+/// Absolute path of the running executable. A bare argv[0] (found via PATH) is not
+/// resolvable against the working directory, so fall back to the loader's path.
+public func executablePath() -> String {
+  let invoked = CommandLine.arguments[0]
+  if invoked.contains("/") { return invoked }
+  return Bundle.main.executablePath ?? invoked
+}
 public func protectedWrite(_ data: Data, to url: URL) throws {
   try data.write(to: url, options: .atomic)
   try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
@@ -79,7 +86,8 @@ public struct ProjectBinding: Sendable {
     let target = URL(fileURLWithPath: path, relativeTo: root).standardizedFileURL
       .resolvingSymlinksInPath()
     guard target.path.hasPrefix(root.path + "/") else { throw MemoError.denied }
-    let parts = target.pathComponents
+    // Only components inside the project; the project's own ancestors are not sensitive.
+    let parts = target.pathComponents.dropFirst(root.pathComponents.count)
     guard
       !parts.contains(where: {
         $0.hasPrefix(".env") || [".ssh", ".aws", ".gnupg", "credentials"].contains($0)
