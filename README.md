@@ -1,12 +1,12 @@
 # OmniMemo 0.2.0
 
-Memory dan handoff lokal untuk coding agent, dibuat dengan **Swift + MongoDB** sesuai revisi pengguna. Ini MVP-1 dari PRD v1.2, bukan seluruh roadmap.
+Local memory and handoff for coding agents, built with **Swift + MongoDB**. This implements MVP-1 of PRD v1.2; the remaining roadmap is documented below.
 
-Satu executable menyediakan CLI dan MCP stdio. MongoDB menyimpan record; folder lokal menyimpan pointer store dan cache disposable. Semua agent pada proyek yang sama membaca database yang sama. Tidak membaca history privat agent dan tidak memerlukan LLM/API key.
+One executable provides a CLI and MCP stdio server. MongoDB stores records; local directories hold storage pointers and disposable caches. Agents working on the same project share its database. OmniMemo does not read private agent histories or require an LLM/API key.
 
-## REA lengkap
+## REA integration
 
-Tambahan 0.2.0: skill dan seluruh referensi [YanIanZ/rea](https://github.com/YanIanZ/rea), runtime yang dipin, **184 tool MCP, 135 perintah CLI, dan 6 prompt**. Core memory tetap Swift + MongoDB; fitur REA memakai runtime Node terpisah melalui `omnimem rea run` / `omnimem rea mcp`. Installer `--with-rea` menambahkan kedua server dan skill lengkap. Default tetap memory-only.
+Version 0.2.0 includes the complete public investigation skill and references from [YanIanZ/rea](https://github.com/YanIanZ/rea), plus a pinned runtime exposing **184 MCP tools, 135 CLI commands, and 6 prompts**. The memory core uses Swift + MongoDB; REA runs through a separate Node runtime using `omnimem rea run` and `omnimem rea mcp`. Installing with `--with-rea` registers both servers and the complete skill. The default profile enables memory only.
 
 ```sh
 python3 scripts/prepare-rea.py
@@ -14,29 +14,29 @@ python3 scripts/prepare-rea.py
 /Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem rea status
 ```
 
-[Lihat pemasangan, seluruh kemampuan, evidence → memory, dan prasyarat engine](docs/REA.md). Tool native/runtime mengikuti dukungan OS dan engine upstream; tidak semua provider diklaim sudah diuji.
+See [REA setup, capabilities, evidence-to-memory workflows, and engine prerequisites](docs/REA.md). Native/runtime tools depend on upstream OS and engine support; every provider has not been tested.
 
-## Yang tersedia
+## Features
 
-- Empat tool MCP: `memory_save`, `memory_get`, `memory_context`, `memory_checkpoint` melalui SDK Swift resmi.
-- CLI save/search/show/list/delete/export, checkpoint, context, status, doctor dan cache.
-- Project binding saat proses diluncurkan; query record selalu difilter project ID.
-- Metadata agent/branch/commit, hash bukti file, status `unverified`/`active`/`stale`.
-- Unique indexes untuk deduplikasi dan idempotency; teks bilingual tanpa stemming dan pencarian literal code symbol.
-- Context ringkas dengan batas konservatif termasuk allowance envelope MCP. Checkpoint terbaru tetap tersedia jika task tidak cocok dengan pencarian.
-- Cache disk default 32 MiB, TTL 24 jam, eviction; key mencakup record dan bukti terkini. Database tetap diperiksa setiap retrieval.
-- Adapter **project-scoped** Codex/Claude, preview default, apply eksplisit, backup, uninstall yang menjaga setting lain.
-- Dua skill: recall dan handoff. Template canonical di `Sources/OmniMemoCore/Skills`; `skills` adalah symlink untuk distribusi.
+- Four MCP tools through the official Swift SDK: `memory_save`, `memory_get`, `memory_context`, and `memory_checkpoint`.
+- CLI save/search/show/list/delete/export, checkpoint, context, status, doctor, and cache commands.
+- Project binding at launch, with every record query filtered by project ID.
+- Agent/branch/commit metadata, file-evidence hashes, and `unverified`/`active`/`stale` states.
+- Unique indexes for deduplication and idempotency; bilingual text search without stemming and literal code-symbol search.
+- Compact context with conservative response limits, including an MCP envelope allowance. The latest checkpoint remains available when task search has no match.
+- A default 32 MiB disk cache, 24-hour TTL, and eviction. Keys include current records and evidence; retrieval still checks the database.
+- Project-scoped Codex/Claude adapters with preview by default, explicit application, backups, and uninstall that preserves unrelated settings.
+- Recall and handoff skills, plus the optional REA skill. Canonical resources live in `Sources/OmniMemoCore/Skills`; `skills` is a distribution symlink.
 
-## Persyaratan
+## Requirements
 
-Build ini diuji pada macOS Apple Silicon, Swift 6.4, MongoDB 7.0.31. Minimum package macOS 13; build minimum OS belum diuji secara terpisah. Linux/Windows belum didukung/dipaketkan; implementasi hash saat ini memakai CryptoKit. Swift language mode 5 menjaga kompatibilitas library; compiler yang dipakai Swift 6.
+Tested on macOS Apple Silicon with Swift 6.4 and MongoDB 7.0.31. The package declares macOS 13 as its minimum; that minimum OS has not been tested separately. Linux/Windows are not supported or packaged; hashing currently uses CryptoKit. Swift language mode 5 maintains library compatibility with the Swift 6 compiler.
 
-MongoDB lokal **wajib berjalan**. Ini menggantikan keputusan Rust/SQLite dan syarat tanpa database service dalam PRD asli. MongoKitten digunakan karena driver Swift resmi MongoDB telah diarsipkan. SDK MCP yang terkunci 0.12.1 mendukung handshake era 2025; kompatibilitas protokol 2026 tidak diklaim.
+A running local MongoDB server is required. Swift + MongoDB supersede the original PRD's Rust/SQLite and no-database-service requirements. MongoKitten is used because MongoDB's official Swift driver was archived. The pinned MCP SDK 0.12.1 supports 2025-era handshakes; 2026 protocol compatibility is not claimed.
 
 ## Build
 
-Untuk clone baru di macOS, dengan Swift dan `mongod` sudah tersedia:
+For a fresh macOS clone with Swift and `mongod` available:
 
 ```sh
 git clone https://github.com/YanIanZ/OmniMemo.git
@@ -55,13 +55,13 @@ PROJECT="$PWD"
 "$BIN" --data-dir "$DATA" --project "$PROJECT" status
 ```
 
-REA opsional memerlukan Node/npm yang sesuai; siapkan dengan
-`python3 scripts/prepare-rea.py --base "$HOME/Library/Caches/OmniMemo"`,
-lalu ulangi `package.sh` agar pointer runtime ikut tersedia. Jangan commit pointer runtime,
-database, credential atau artifact build. Contoh `/Volumes/Ext` di bawah adalah layout mesin pengembangan;
-override di atas dapat dipakai tanpa disk Ext.
+Optional REA support requires a compatible Node/npm installation. Run
+`python3 scripts/prepare-rea.py --base "$HOME/Library/Caches/OmniMemo"`, then rerun
+`package.sh` to include the local runtime pointer. Keep runtime pointers, databases,
+credentials, and build artifacts out of Git. The `/Volumes/Ext` examples below use
+the development machine's layout; the overrides above work without that disk.
 
-Build pada layout mesin pengembangan:
+To build using the development layout:
 
 ```sh
 cd /Volumes/Ext/MinionsProject/OmniMemo
@@ -69,14 +69,14 @@ cd /Volumes/Ext/MinionsProject/OmniMemo
 ./scripts/package.sh
 ```
 
-Artifact default: `/Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem`. Simpan executable **bersama bundle skill** di direktori yang sama. Package cache, checkouts, module cache dan hasil build diarahkan ke `/Volumes/Ext/DevCache/OmniMemo/swift`; ubah `OMNIMEM_BUILD_CACHE` untuk mesin lain. Tidak perlu Xcode project atau server aplikasi.
+Default artifact: `/Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem`. Keep the executable and its skill resource bundles in the same directory. Package caches, checkouts, module caches, and build output use `/Volumes/Ext/DevCache/OmniMemo/swift`; set `OMNIMEM_BUILD_CACHE` for another location. No Xcode project or application server is required.
 
-## Mulai
+## Getting started
 
-Bila belum memiliki server MongoDB yang sesuai, jalankan instance khusus OmniMemo; script tidak mengaktifkan login/background service Homebrew:
+If you do not already have a suitable MongoDB server, start the dedicated OmniMemo instance. The script does not enable a Homebrew login/background service:
 
 ```sh
-./scripts/mongodb.sh start  # loopback 127.0.0.1:27018, dbPath di Ext
+./scripts/mongodb.sh start  # loopback 127.0.0.1:27018; dbPath on Ext
 
 BIN=/Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem
 DATA=/Volumes/Ext/DevCache/OmniMemo/data
@@ -86,48 +86,48 @@ PROJECT=/Volumes/Ext/MinionsProject/OmniMemo
   --mongo-uri mongodb://127.0.0.1:27018/omnimemo
 
 "$BIN" --data-dir "$DATA" --project "$PROJECT" memory save \
-  --kind decision --title 'Storage pilihan' \
-  --content 'Gunakan Swift dan MongoDB.' --source Package.swift
+  --kind decision --title 'Storage choice' \
+  --content 'Use Swift and MongoDB.' --source Package.swift
 
 "$BIN" --data-dir "$DATA" --project "$PROJECT" context 'storage' --max-tokens 1000
 
 "$BIN" --data-dir "$DATA" --project "$PROJECT" checkpoint \
-  --done 'Core selesai' --next 'Verifikasi integrasi host' \
-  --tests 'swift test: hasil aktual' --changed-file Package.swift
+  --done 'Core implementation complete' --next 'Verify host integration' \
+  --tests 'swift test: actual results' --changed-file Package.swift
 ```
 
-Gunakan `memory save --stdin` bila teks tidak ingin muncul di daftar process/shell history. Jangan memasukkan secret. URI berkredensial harus melalui `OMNIMEM_MONGO_URI`; URI yang disimpan di metadata tidak berisi user/password. MVP menerima `mongodb://`, belum `mongodb+srv://`.
+Use `memory save --stdin` to keep input text out of process arguments and shell history. Do not store secrets. Supply credential-bearing URIs through `OMNIMEM_MONGO_URI`; metadata stores a URI without username/password. The MVP accepts `mongodb://`; `mongodb+srv://` is not supported.
 
-Resolusi lokasi: `--data-dir` → `OMNIMEM_HOME` → `~/.config/omnimem/location.json` → `~/.local/share/omnimem`. `init --set-default` secara eksplisit menulis pointer user-level dengan backup. Query/status/MCP tidak menginisialisasi database atau folder pengganti ketika storage hilang. Port dan dbPath MongoDB independen dari folder metadata/cache.
+Storage resolution: `--data-dir` → `OMNIMEM_HOME` → `~/.config/omnimem/location.json` → `~/.local/share/omnimem`. `init --set-default` explicitly writes a user-level pointer with a backup. Queries, status, and MCP do not initialize a replacement database or directory when storage is missing. MongoDB's port and dbPath are independent of the metadata/cache directory.
 
-## Integrasi Codex dan Claude
+## Codex and Claude integration
 
-Siapkan folder metadata dengan `init`, lalu lihat tambahan yang akan dibuat:
+Initialize the metadata directory, then preview the proposed additions:
 
 ```sh
 "$BIN" --data-dir "$DATA" --project "$PROJECT" install --agents codex,claude
-# Setelah meninjau preview:
+# After reviewing the preview:
 "$BIN" --data-dir "$DATA" --project "$PROJECT" install --agents codex,claude --apply
 ```
 
-Installer menulis `.codex/config.toml`, `.mcp.json`, dua skill canonical dalam `.agents/skills`, serta shim skill Claude yang menunjuk sumber yang sama. Scope adalah proyek terpilih; konfigurasi global tidak diubah. `--config-root /path/staging` dapat menyiapkan hasil untuk review tanpa menyentuh proyek asli. Server ID unik per project; perintah MCP terikat root tersebut dan memanggil `mcp serve --stdio`. Restart/approve MCP sesuai host. Installer tidak menjalankan Git hooks atau mengubah identitas Git.
+The installer writes `.codex/config.toml`, `.mcp.json`, two canonical skills in `.agents/skills`, and Claude skill shims pointing to the same sources. It targets the selected project and preserves global configuration. Use `--config-root /path/staging` to prepare output for review elsewhere. Each project has a unique server ID; its MCP command is bound to that root and invokes `mcp serve --stdio`. Restart/approve MCP as required by the host. The installer does not run Git hooks or change Git identity.
 
 ```sh
 "$BIN" --data-dir "$DATA" --project "$PROJECT" uninstall --apply
 ```
 
-Uninstall hanya menghapus entri yang masih cocok dengan manifest. Jika entri milik installer diedit, proses menolak penghapusan dan meminta review manual. Backup tetap di `.omnimemo-installer/` dengan direktori privat dan file mode 600; folder itu di-ignore Git. Hapus backup secara sadar bila berisi setting sensitif lama. Pemasangan ulang dengan host/path yang berbeda dilakukan setelah uninstall.
+Uninstall removes only entries that still match its manifest. Edited managed entries cause a refusal requiring manual review. Backups remain in the Git-ignored `.omnimemo-installer/` directory, with private directories and mode-600 files. Review backups before deleting them if they contain older sensitive settings. Uninstall before reinstalling with a different host/path.
 
-## Batas context
+## Context limits
 
-`--max-tokens` didukung pada 256–16384; budget yang tidak cukup untuk metadata ditolak. `estimated_tokens` adalah **upper bound berbasis UTF-8 bytes**, bukan hasil tokenizer model. Perhitungan mencakup escaping teks dan envelope MCP dengan cadangan request ID 64 byte; request ID fixture lebih pendek dari batas itu. Hasil bisa jauh lebih pendek dari kapasitas model. Overhead deklarasi tool/skill di host tidak termasuk budget satu response dan harus dihitung terpisah untuk benchmark biaya total.
+`--max-tokens` accepts 256–16384; a budget too small for metadata is rejected. `estimated_tokens` is a **UTF-8 byte-based upper bound**, rather than a model tokenizer result. It includes text escaping and the MCP envelope, reserving 64 bytes for the request ID; fixture IDs are shorter. Responses may be substantially smaller than a model's capacity. Host tool/skill declarations are outside this per-response budget and must be measured separately when benchmarking total cost.
 
-Tidak ada klaim persentase penghematan, recall@k, RAM atau latency target yang sudah tercapai. Batas 32 MiB hanya cache; database, journal WiredTiger, log, backup dan build cache dihitung terpisah.
+No achieved savings percentage, recall@k, RAM, or latency target is claimed. The 32 MiB limit applies only to the cache; database files, WiredTiger journals, logs, backups, and build caches are separate.
 
-## Pengujian
+## Testing
 
 ```sh
-./scripts/test-mongo.sh start  # port 27019; bukan server/data produksi
+./scripts/test-mongo.sh start  # port 27019; dedicated test data
 OMNIMEM_TEST_REA_MANIFEST=/Volumes/Ext/DevCache/OmniMemo/integrations/rea-runtime.json \
 OMNIMEM_TEST_MONGO_URI=mongodb://127.0.0.1:27019/omnimemo_tests \
 OMNIMEM_TEST_ROOT=/Volumes/Ext/DevCache/OmniMemo/test-workspaces \
@@ -139,22 +139,22 @@ python3 Tests/rea_smoke.py /Volumes/Ext/DevCache/OmniMemo/dist/0.2.0/omnimem
 ./scripts/test-mongo.sh stop
 ```
 
-Suite 0.1.0: **19 XCTest lulus, 0 gagal, 0 skip**; integrasi REA menambah tes runtime/profile (hasil terbaru di `docs/VALIDATION.md`), ditambah kedua smoke test pada artifact release. Python 3.11+ diperlukan untuk parser TOML di smoke test CLI; core memory OmniMemo tidak memerlukan Python. Tool REA tertentu tetap mengikuti dependency upstream.
+Version 0.2.0 validation: **25 XCTest cases passed, zero failures, zero skips**, plus three independent smoke tests against the packaged release. See [validation scope and results](docs/VALIDATION.md). Python 3.11+ is required for the CLI smoke test's TOML parser; the memory core does not require Python. Individual REA tools retain their upstream dependencies.
 
-Tes MongoDB nyata mencakup beberapa koneksi penulis, persistensi, isolasi, dedup, secret rejection, evidence staleness, cache invalidation dan metadata hilang. Klien Python independen menguji wire MCP dan handoff antara dua subprocess berlabel fixture Codex/Claude. Itu **bukan** klaim uji percakapan live berbayar pada kedua produk. Tanpa `OMNIMEM_TEST_MONGO_URI`, tes database diberi status skip, bukan dianggap lulus.
+Real MongoDB tests cover multiple writer connections, persistence, isolation, deduplication, secret rejection, evidence staleness, cache invalidation, and missing metadata. An independent Python client tests MCP wire behavior and handoff between two subprocesses labeled as Codex/Claude fixtures. These are not live paid conversations with either product. Without `OMNIMEM_TEST_MONGO_URI`, database tests are reported as skipped.
 
-## Trust dan batas MVP
+## Trust and MVP limitations
 
-`active` berarti sumber file masih cocok dengan hash; itu tidak membuktikan interpretasi semantik atau kebenaran klaim tes. Memory adalah data tidak tepercaya, bukan instruksi sistem. Provenance agent adalah label, bukan autentikasi. Project filtering melindungi kontrak MCP, bukan menghalangi proses lokal yang sudah punya akses langsung ke MongoDB/filesystem. Instance script hanya bind loopback; autentikasi MongoDB/izin OS harus diatur sesuai lingkungan pengguna. Secret filter bersifat heuristik dan bukan jaminan mendeteksi semua format rahasia.
+`active` means a source file still matches its hash; it does not prove a semantic interpretation or a test claim. Memory is untrusted data. Agent provenance is a label, not authentication. Project filtering enforces the MCP contract; local processes with direct MongoDB/filesystem access remain subject to database and OS permissions. The instance script binds only to loopback; configure MongoDB authentication and OS permissions for your environment. Secret detection is heuristic and cannot guarantee recognition of every secret format.
 
-Belum tersedia: migration/relocation transaksi MongoDB, actual drive-unplug recovery, konflik otomatis/revision ledger, graph, hooks auto-capture, HTTP, empat adapter penuh, embedding, cloud sync dan benchmark ROI. Jangan memindahkan WiredTiger dbPath saat server berjalan. Gunakan backup/restore MongoDB yang sesuai; folder cache bukan backup database.
+Not implemented: transactional MongoDB migration/relocation, physical drive-disconnection recovery, automatic conflict resolution/revision ledgers, graphs, automatic capture hooks, HTTP, complete adapters for all four hosts, embeddings, cloud sync, or ROI benchmarks. Do not move a WiredTiger dbPath while its server is running. Use appropriate MongoDB backup/restore procedures; the cache directory is not a database backup.
 
-Aturan proyek ada di `AGENTS.md`; PRD asli dipertahankan di `docs/OmniMemo_PRD_v1.2_Guardrails.md`, dengan koreksi pengguna tercatat di `SPEC.md`. Riwayat lokal Git menggunakan identitas pemilik yang sudah dikonfigurasi. Tidak ada remote/push otomatis.
+Project rules are in `AGENTS.md`. The original supplied PRD is retained in `docs/OmniMemo_PRD_v1.2_Guardrails.md`, with user amendments recorded in `SPEC.md`. Historical source documents retain their original language. Git uses the owner's configured identity; remote changes and pushes require explicit approval.
 
-## Referensi
+## References
 
 - [MCP Swift SDK](https://github.com/modelcontextprotocol/swift-sdk)
 - [MongoKitten](https://github.com/orlandos-nl/MongoKitten)
-- [Status driver Swift MongoDB](https://github.com/mongodb/mongo-swift-driver)
+- [MongoDB Swift driver status](https://github.com/mongodb/mongo-swift-driver)
 - [Codex MCP](https://developers.openai.com/codex/mcp/)
 - [Claude MCP](https://code.claude.com/docs/en/mcp)
