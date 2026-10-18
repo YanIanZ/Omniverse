@@ -4,6 +4,23 @@ Local memory and handoff for coding agents, built with **Swift + MongoDB**, with
 
 One executable provides a CLI and MCP stdio server. MongoDB stores records; local directories hold storage pointers and disposable caches. Agents working on the same project share its database. OmniMemo does not read private agent histories or require an LLM/API key.
 
+## Storage profiles and auto-save
+
+Each data directory picks one profile at `om init` (PRD §100); there is no automatic fallback between them:
+
+| Profile | Use | Storage |
+|---|---|---|
+| `mongodb` (default) | shared/hybrid setups, optional Redis live signal | existing MongoDB server |
+| `sqlite` | single machine, no database server | `<data-dir>/db/memory.sqlite` (FTS5, WAL, `BEGIN IMMEDIATE` writes) |
+
+```sh
+om init --backend sqlite            # or: bash install.sh --setup --backend sqlite
+om autosave enable                  # opt-in (PRD FR-15); add --no-prompts etc. to narrow it
+om autosave status
+```
+
+Auto-save records only verifiable state: a checkpoint when a session ends (hook `SessionEnd`, Codex `Stop`, MCP disconnect) with branch, commit, changed files from `git status` and the tasks the agent owns; a memory for task review/done/blocked and approval requests/decisions; and a short summary of each prompt. Prompt summaries are skipped when the secret filter matches, are never the full text, and are excluded from context capsules so they add no prompt tokens. Repeated checkpoints with unchanged state are merged.
+
 ## Mission Control and `om` (v1.9 vertical slice)
 
 `om` is a short alias of `omnimem`. Bare `om` prints status and never starts a server.
@@ -14,16 +31,29 @@ om serve --port 8787 # same server in the foreground
 om stop              # stops only the OmniMemo server, never MongoDB/Redis
 om recall "query"    # search memory
 om agents            # observed sessions; stale presence shows as unknown
-om tasks add "Review hook" ; om tasks move <id> doing --revision 1
+om tasks add "Review hook" --priority P1 ; om tasks move <id> doing --revision 1 --owner codex
+om --agent codex approvals request "Push main to origin" --reason "release"
 om --agent claude wake --session <id>
 om --agent claude context --first-prompt --session <id>
 ```
 
-- **Claude Code hooks (opt-in):** `bash install.sh --global --with-hooks` adds `SessionStart`, `UserPromptSubmit` and `SessionEnd` hooks next to any existing hooks. On the first prompt of a session the hook injects one bounded capsule (600 tokens by default); unchanged capsules and empty projects inject nothing. Hooks fail open and never block a prompt. Other hosts use MCP or manual `om` commands; no IDE-open event is assumed.
+- **Agent Office:** a pixel-art office (original sprites; design canvas "OmniMemo Pixel Office") where each agent stands in the room its verified state belongs to: Briefing (session ready), Workspace (task doing or prompt active), Review, Approvals (waiting for you), Handoffs (checkpoint saved), Lounge (no signal for 10 min, shown as unknown). Disconnected sessions leave the map. Views: Office, Tasks (Kanban with priority and owner), Agents, Approvals, Memory, Events.
+- **Host signals (opt-in hooks: `bash install.sh --global --with-hooks`):**
+
+  | Host | Signal | Context capsule |
+  |---|---|---|
+  | Claude Code | `SessionStart`, `UserPromptSubmit`, `Stop`, `SessionEnd` hooks | plain text, once per change |
+  | Codex | `~/.codex/hooks.json` `SessionStart`, `UserPromptSubmit`, `Stop` (Codex asks you to trust new hooks) | plain text, once per change |
+  | Gemini CLI | `SessionStart`, `BeforeAgent`, `AfterAgent`, `SessionEnd` | `hookSpecificOutput.additionalContext` |
+  | OpenCode 2.x | MCP connection (`initialize` client name, tool use, exit) | via MCP tools |
+  | Any MCP host | MCP connection | via MCP tools |
+
+  Hooks fail open and never block a prompt; unchanged capsules and empty projects inject nothing. OpenCode 2.0.31 stalls sessions whenever a plugin subscribes to events, so no OpenCode plugin is installed for 2.x (a 1.x event plugin is). No IDE-open event is assumed for any host.
+- **Approvals:** agents request with `om approvals request`; only the Mission Control browser session (cookie + Origin) can approve or deny, bearer tokens are refused, and a decision never runs the action or authorizes a Git push.
 - **Server:** loopback only; per-install token in `<data-dir>/server-token` (0600); browser login sets an HttpOnly `SameSite=Strict` cookie; Host allowlist, Origin checks for writes and WebSockets, CSP. API: `/api/v1/health|agents|tasks|memory/search|events`, WebSocket `/ws/v1/live`. Task updates require `If-Match: <revision>` and return 409 on a stale revision.
-- **Data:** sessions, tasks and events live in MongoDB; events are committed before broadcast. `OMNIMEM_REDIS_URL` (optional) only sends a Pub/Sub hint so the UI updates immediately; without Redis the server polls MongoDB every second.
+- **Data:** sessions, tasks, approvals and events live in MongoDB; events are committed before broadcast. Redis is optional: `om redis enable [--url redis://127.0.0.1:6379]` checks PING and stores the credential-free URL in the data directory (`om redis status`, `om redis disable`); `OMNIMEM_REDIS_URL` overrides it and is the place for credentials. OmniMemo only PUBLISHes/SUBSCRIBEs on `omnimemo:v1:<project>:events` so the UI updates immediately; it never writes keys, flushes or changes Redis configuration. Without Redis the server polls MongoDB every second.
 - **Frontend development:** `cd frontend && npm run dev`, with `om serve --dev-origin http://127.0.0.1:5173`. Release builds copy `frontend/dist` next to the binary; no Node runtime is needed.
-- **Not built yet (PRD P1/P2):** approvals, 2D office, Codex/Gemini/OpenCode lifecycle adapters, reconnect history beyond 1000 events.
+- **Not built yet (PRD P2):** REA/Reach/OmniBias review flows in the UI, multi-project server, LAN access, reconnect history beyond 1000 events.
 
 ## REA integration
 

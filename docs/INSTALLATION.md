@@ -125,17 +125,23 @@ engine. This installer does not implement Omni Agent scheduling, task leases or 
 
 ## Claude Code hooks and Mission Control (v1.9)
 
-`--with-hooks` (only with `--global`) merges three entries into `~/.claude/settings.json`
-(or `$CLAUDE_CONFIG_DIR/settings.json`): `SessionStart`, `UserPromptSubmit` and `SessionEnd`,
-each running `<binary> --data-dir <data> hook claude`. Existing hooks are kept; a preview runs
+`--with-hooks` (only with `--global`) merges hook entries for detected hosts, each running
+`<binary> --data-dir <data> hook <host>`: Claude Code `~/.claude/settings.json` (or
+`$CLAUDE_CONFIG_DIR`) `SessionStart`, `UserPromptSubmit`, `Stop`, `SessionEnd`; Codex
+`$CODEX_HOME/hooks.json` `SessionStart`, `UserPromptSubmit`, `Stop` (trust them when Codex asks);
+Gemini CLI `~/.gemini/settings.json` `SessionStart`, `BeforeAgent`, `AfterAgent`, `SessionEnd`
+(the same file as its MCP entry; both are merged in one write). OpenCode 1.x receives
+`plugins/omnimemo.js`; OpenCode 2.x receives no plugin because a plugin subscribing to events
+stalled sessions in 2.0.31, so its presence comes from the MCP connection. Existing hooks are kept; a preview runs
 first; uninstall removes only the OmniMemo entries and refuses edited ones. Restart Claude Code
 after installation. The hook resolves the Git root of the session's `cwd`; outside Git, or when
 storage is unavailable, it does nothing and exits 0.
 
 `om office` starts one loopback Vapor server per data directory (`server.json`, `server.log`,
 `server-token` live there) and reuses it on later calls; `om stop` stops it. Set
-`OMNIMEM_REDIS_URL` only if a Redis server is already available; OmniMemo never configures,
-flushes or stops Redis or MongoDB.
+`om redis enable` (or `OMNIMEM_REDIS_URL`) only if a Redis server is already available; OmniMemo
+never configures, flushes or stops Redis or MongoDB. Set `OMNIMEM_DEBUG=1` to print the
+underlying database error of a failed command to stderr (never in MCP or HTTP responses).
 
 ## Primary host references
 

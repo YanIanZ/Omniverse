@@ -100,3 +100,63 @@ updates without reload, browser POST/PATCH, and no console errors.
 Not verified: a live paid Claude Code session firing the installed hooks (fixtures use the
 documented stdin JSON), Codex/Gemini/OpenCode lifecycle hooks, approvals, 2D office, multi-process
 server deployment, TLS/remote access (unsupported by design).
+
+## v1.9 P1: Agent Office, approvals and host adapters (2026-10-19)
+
+Built: pixel-art Agent Office (original 12x16 sprites; Claude Design canvas "OmniMemo Pixel
+Office"), Tasks Kanban with priority and owner, Agents, Approvals (browser-session-only
+decisions), Memory and Events views; MCP `initialize` presence with SIGTERM/EOF disconnect;
+`om hook claude|codex|gemini|opencode`; `om approvals`; installer hooks for Codex and Gemini.
+
+Results: 36 XCTest passed, 0 failed (new: approval decisions refuse bearer tokens, decide once).
+All nine smoke tests PASS, including new `agents_smoke.py` (MCP clientInfo presence, Codex text
+capsule once, Gemini `hookSpecificOutput.additionalContext`, OpenCode presence-only events).
+
+Live test with OpenCode 2.0.31 (model `opencode-go/beam-free`; the configured Azure default
+failed DNS): OpenCode connected over MCP, claimed the task with `om`, wrote `hello.md`, saved a
+checkpoint through the MCP tool, moved the task to review and requested an approval (events
+#5-#9 within about 5 s). Screenshots 10 s apart showed the open browser move the agent from
+Briefing to Approvals ("Needs you") without reload; intermediate rooms were not captured. A human
+Approve in Mission Control moved the agent to Review (`approval.decided`).
+
+Found and fixed during the run: packaging overwrote a signed binary in place (kernel killed it);
+MCP sessions stayed `ready` when the host stopped the server with a signal; `index.html` lacked
+`Cache-Control` so browsers kept stale builds; map class collision; cramped Kanban controls.
+
+Not verified live: Codex (account rate-limited; fixture-tested with its hook payloads), Gemini
+CLI (fixture-tested), Claude Code hooks in a paid session. OpenCode 2.x event plugins stall
+sessions in 2.0.31 (a subscribe-only plugin reproduces it), so none is installed for 2.x.
+
+## SQLite profile and auto-save (2026-10-19)
+
+Added the PRD §100 `sqlite` profile behind a small storage interface shared with MongoDB
+(`MemoryStore` keeps validation, secret filtering, evidence, dedup, capsules and events; backends
+only persist): `db/memory.sqlite`, FTS5 (BM25) plus substring fallback, WAL, busy timeout,
+`BEGIN IMMEDIATE` read-check-write for task CAS, approvals and event sequencing. A missing database
+file is `storage_unavailable`; nothing is recreated. Opt-in auto-save (FR-15) via `om autosave`.
+
+Results: 44 XCTest passed, 0 failed (6 new SQLite tests: dedup/FTS/substring/reopen/delete, no
+shadow database, two connections racing on idempotent create, CAS and approval decisions with
+contiguous event revisions, prompt capsule once per change, auto-save opt-in/secret skip/no
+capsule inflation/merged repeat checkpoints, porcelain parsing with spaces). A CLI run confirmed
+WAL mode and `PRAGMA integrity_check` = ok.
+
+## Omni Agent delegation and design review (2026-10-19)
+
+Work was split into OmniMemo tasks in the real project store and executed by: two Claude
+subagents (pixel office detail; data views polish, both with the impeccable skill), two OpenCode
+2.0.31 workers on OpenCode Go models (`kimi-k2.7-code` for the map, `glm-5.3` for the views) and a
+second Kimi batch, coordinated with `om wake`, `om tasks move` and `om checkpoint`; each task was
+moved to done only after integration checks (typecheck, build, Playwright captures at 1440 and
+390, zero browser console errors). Mission Control on the real store showed the workers in the
+office while they worked, with Redis connected.
+
+Impeccable finish review: round 1 `recapture` (the phone capture was not 390 wide), round 2 `fix`
+(seven findings), verdict pass after the fix batch: five resolved, two partial plus three new map
+issues. A final map batch addressed those (bubbles kept inside rooms, plates on the room strip,
+full-width desktop map, bottom padding); it was checked with captures only, not re-reviewed.
+
+Bugs found by real use and fixed: a signed shift in the sprite palette crashed the page for some
+agent names; Vite inlined small fonts as data: URIs that the CSP blocks; duplicate tasks from a
+concurrent probe before indexes existed. Full suite after the backend changes: 44 XCTest and all
+nine smoke tests passed on a fresh package.
