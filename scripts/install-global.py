@@ -103,6 +103,7 @@ def opencode_plugin(binary, data, layout='v2'):
                      '});\n')
     # OpenCode 2.x: default export { id, setup(ctx) }. Hooks verified live on OpenCode 2.0.32:
     # ctx.tool.hook execute.before/after, ctx.session.hook prompt/context, a detached ctx.event.subscribe.
+    # The model ref also arrives on session.step.started, so a step that fails before the context hook still labels the session.
     return head+('const used = (t) => (t?.input ?? 0) + (t?.cache?.read ?? 0) + (t?.cache?.write ?? 0);\n'
                  'export default {\n'
                  '  id: "omnimemo-presence",\n'
@@ -132,10 +133,12 @@ def opencode_plugin(binary, data, layout='v2'):
                  '      for await (const ev of ctx.event.subscribe({ signal: controller.signal })) {\n'
                  '        const id = ev?.data?.sessionID;\n'
                  '        if (ev?.type === "session.execution.started") start(id);\n'
-                 '        else if (ev?.type === "session.execution.succeeded" || ev?.type === "session.execution.failed") send("session.idle", id, dir);\n'
+                 '        else if (ev?.type === "session.step.started") { if (ev.data?.model) models.set(id, ev.data.model); }\n'
+                 '        else if (ev?.type === "session.execution.succeeded" || ev?.type === "session.execution.failed") send("session.idle", id, dir, { model: models.get(id)?.id });\n'
                  '        else if (ev?.type === "session.step.ended") void report(id, ev.data?.tokens);\n'
-                 '        else if (ev?.type === "session.deleted") { send("session.deleted", id, dir); seen.delete(id); }\n'
-                 '        else if (ev?.type === "location.shutdown") { for (const s of seen) send("session.deleted", s, dir); seen.clear(); }\n'
+                 '        else if (ev?.type === "session.step.failed") { if (ev.data?.tokens) void report(id, ev.data.tokens); }\n'
+                 '        else if (ev?.type === "session.deleted") { send("session.deleted", id, dir, { model: models.get(id)?.id }); seen.delete(id); models.delete(id); }\n'
+                 '        else if (ev?.type === "location.shutdown") { for (const s of seen) send("session.deleted", s, dir, { model: models.get(s)?.id }); seen.clear(); models.clear(); }\n'
                  '      }\n'
                  '    })().catch(() => {});\n'
                  '  },\n'

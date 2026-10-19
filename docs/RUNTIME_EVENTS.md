@@ -133,7 +133,7 @@ are rejected rather than retained.
 | Codex (any session) | `om hook codex` (SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop) | passive | session, prompt, tool, turn |
 | Codex (OmniMemo-launched) | `om codex run` over `codex app-server` stdio | managed (20 s heartbeat, stale after 45 s) | session, task, prompt, tool, turn, context usage |
 | Gemini CLI | `om hook gemini` (SessionStart, BeforeAgent, BeforeTool, AfterTool, AfterAgent, SessionEnd) | passive | session, prompt, tool, turn |
-| OpenCode 2.x | plugin (`ctx.tool.hook` execute.before/after, `ctx.session.hook` prompt/context, a detached `ctx.event.subscribe`) -> `om hook opencode`, verified on 2.0.32 | passive | session, prompt, tool (by name only; `execute` is shell), turn end, offline on shutdown, context usage |
+| OpenCode 2.x | plugin (`ctx.tool.hook` execute.before/after, `ctx.session.hook` prompt/context, a detached `ctx.event.subscribe`) -> `om hook opencode`, verified on 2.0.32 | passive | session, prompt, tool (by name only; `execute` is shell), turn end (with the model label), offline on shutdown, context usage |
 | Claude Code mod | `plugins/omniverse-bridge-mod` | passive | context usage after each turn, agent cards, fresh-context rollover |
 
 `om runtime ingest` accepts one JSON event or JSONL on stdin for any other adapter.
@@ -172,6 +172,6 @@ Claude Code (mod, `rollover` option `auto`, or `/om-rollover`): a fresh session 
 
 At most 3 per hour. A parent left without an acknowledgement keeps its task and stays resumable with `claude --resume`. `om rollover report` without `--child` records a same-session reset (`mode: in_place`) for hosts that cannot start a new session.
 
-OpenCode context: the last step's input plus cache tokens (`session.step.ended`) over the model's `limit.context` from `ctx.model.list()`.
+OpenCode context: the last step's input plus cache tokens (`session.step.ended`, or `session.step.failed` when it reports tokens) over the model's `limit.context` from `ctx.model.list()`. The model ref comes from the `context` session hook or from `session.step.started`, so a turn that fails before any step completes still labels the session; it still has no context sample, because none was measured.
 
 Not implemented: OpenCode or Gemini rollover, compaction guards, a rollovers-per-hour cap across `om codex run` runs.

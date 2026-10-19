@@ -221,3 +221,9 @@ Multi-agent run: tasks and capsules went through the OmniMemo store.
   - The mod is loaded via `CLAUDE_CODE_PLUGIN_DIRS` with `rollover: auto`. `settings.json` was backed up under `global-install/backups`.
   - Mission Control was restarted on the new binary.
   - This Claude session appeared live through the hooks before any restart.
+
+## OpenCode plugin: model label on failed turns (2026-10-19)
+
+- Change: the generated plugin also takes the model ref from `session.step.started`, carries it on `session.idle` and `session.deleted`, and samples `session.step.failed` when it reports tokens. Installer template and the installed `~/.config/opencode/plugins/omnimemo.js` regenerated from it; `node --check` clean; `Tests/global_install_smoke.py` PASS.
+- Live on OpenCode 2.0.32 (`opencode run --standalone`): a turn rejected by the provider ("Rate limit exceeded", `opencode/beam-free`) now yields the card `opencode-beam-free` instead of `opencode-model-unavailable`. Context stays `unknown` for such a turn because no tokens were measured; the `session.step.ended` sample path is unchanged and was not re-run live (no provider with quota was available).
+
