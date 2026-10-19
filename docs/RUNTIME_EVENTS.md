@@ -85,7 +85,8 @@ Add milestones to an existing task using `addMilestone`; titles are 1–160 UTF-
 bytes, weight is 1–100, and at most 50 milestones are allowed. Verify/revert with
 `setMilestone`, including 1–240 UTF-8 bytes of evidence. Mutations use task revision
 checks and emit `task.updated`. `milestone.verified` requires both IDs and attempts
-verification with an event/source evidence reference. Acceptance of the event
+verification with an event/source evidence reference, only when the task is the one
+assigned to that session (`task.assigned`); for any other task it is recorded as activity. Acceptance of the event
 alone does not prove that the referenced milestone was updated; read task state.
 
 Without milestones, progress is `indeterminate` with no percentage. Otherwise it

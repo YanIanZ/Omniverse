@@ -101,7 +101,9 @@ with tempfile.TemporaryDirectory(prefix='office space ', dir=workspace) as folde
         # Sign in like the browser: /auth mints a session cookie that is not the server token.
         class Keep(urllib.request.HTTPRedirectHandler):
             def redirect_request(self, *a, **k): return None
-        try: urllib.request.build_opener(Keep).open(f'http://127.0.0.1:{PORT}/auth?token={token}', timeout=5)
+        mint = urllib.request.Request(f'http://127.0.0.1:{PORT}/api/v1/login-code', method='POST', headers={'Authorization': 'Bearer ' + token})
+        code = json.loads(urllib.request.urlopen(mint, timeout=5).read())['code']
+        try: urllib.request.build_opener(Keep).open(f'http://127.0.0.1:{PORT}/auth?code={code}', timeout=5)
         except urllib.error.HTTPError as e: signin = e.headers.get('Set-Cookie', '')
         session = signin.split('omnimemo_session=', 1)[1].split(';', 1)[0]
         assert session and session != token, 'the browser cookie must not carry the server token'

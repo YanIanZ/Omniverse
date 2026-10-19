@@ -753,7 +753,8 @@ export function ApprovalsView({ store }: { store: Store }) {
     <div className="stack">
       <p className="lede" id="approval-consequence">
         Your answer is a record, not a command. The agent reads it and acts on its own; OmniMemo never runs the action
-        and an approval here never authorizes a Git push.
+        and an approval here never authorizes a Git push. Approving asks you to confirm at this Mac with Touch ID or
+        your password.
       </p>
       {pending.length === 0 ? (
         <Empty title="Nothing is waiting for you">

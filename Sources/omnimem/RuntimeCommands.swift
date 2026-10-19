@@ -50,6 +50,18 @@ struct ServerState: Codable {
     }
     var projectID: String
   }
+  /// Single-use sign-in code for the browser URL.
+  static func loginCode(port: Int, token: String) async -> String? {
+    guard let url = URL(string: "http://127.0.0.1:\(port)/api/v1/login-code") else { return nil }
+    var request = URLRequest(url: url, timeoutInterval: 2)
+    request.httpMethod = "POST"
+    request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    guard let (data, response) = try? await URLSession.shared.data(for: request),
+      (response as? HTTPURLResponse)?.statusCode == 200
+    else { return nil }
+    return (try? JSONDecoder().decode([String: String].self, from: data))?["code"]
+  }
+
   static func probe(port: Int, token: String) async -> Health? {
     guard let url = URL(string: "http://127.0.0.1:\(port)/api/v1/health") else { return nil }
     var request = URLRequest(url: url, timeoutInterval: 1)
@@ -350,7 +362,10 @@ extension OmniMemo {
       if !noOpen {
         let open = Process()
         open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        open.arguments = [base + "auth?token=" + token]
+        guard let code = await ServerState.loginCode(port: state!.port, token: token) else {
+          throw ValidationError("server did not issue a sign-in code; see server.log in the data directory")
+        }
+        open.arguments = [base + "auth?code=" + code]
         try open.run()
         open.waitUntilExit()
       }

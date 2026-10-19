@@ -150,6 +150,13 @@ final class RuntimeIngestTests: XCTestCase {
       verified: true, evidence: "Observed build exit 0", agent: "codex")
     XCTAssertEqual(OmniMemoCore.Progress.of(verified.milestones).percent, 33)
     XCTAssertNotNil(verified.milestones?.first?.verifiedAt)
+    // Before the task is assigned to this session, its milestones are not this session's to verify.
+    var early = event("milestone.verified")
+    early.taskID = task.id
+    early.milestoneID = plan[1].id
+    _ = try await store.ingest(early)
+    let untouched = try await store.listTasks().first { $0.id == task.id }
+    XCTAssertEqual(OmniMemoCore.Progress.of(untouched?.milestones).percent, 33)
     var assigned = event("task.assigned")
     assigned.taskID = task.id
     _ = try await store.ingest(assigned)

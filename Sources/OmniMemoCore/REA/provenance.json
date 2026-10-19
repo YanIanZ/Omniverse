@@ -6,6 +6,7 @@
   "lock_sha256": "ee59a8d0b021f82b0b6cbe3e93024d1ad63b803d995d460aa5206ab5e7a3cad2",
   "catalog_sha256": "496dfe1a7a9191e0119a0c690ed87536c90316240e5b81060bdbc37ecd86b471",
   "mcp_sha256": "a95f59ca10b840fc9a598ebb49e927aed463d40688e82a9269093e9c2a3edb7e",
+  "dist_sha256": "e4e6058316255ea6899546452d326da91faaeed5da02f8a1b0c3eb10f8abc90f",
   "tool_count": 184,
   "cli_count": 135,
   "prompt_count": 6

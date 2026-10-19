@@ -139,7 +139,10 @@ extension MemoryStore {
       }
       saved = true
 
-      if e.eventType == "milestone.verified", let task = e.taskID, let milestone = e.milestoneID {
+      // A session verifies only the task assigned to it, never another agent's plan.
+      if e.eventType == "milestone.verified", let task = e.taskID, let milestone = e.milestoneID,
+        session.taskID == task
+      {
         _ = try? await setMilestone(
           taskID: task, milestoneID: milestone, verified: true,
           evidence: "runtime event \(e.eventID) from \(source)", agent: e.provider)
