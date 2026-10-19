@@ -5,7 +5,8 @@ import Foundation
 import OmniMemoCore
 import OmniServer
 
-/// Pointer to the one OmniMemo-owned HTTP server for a data directory.
+/// Pointer to the OmniMemo-owned HTTP server of one project: each project has its own server and
+/// port, recorded under `<data-dir>/servers/<project-id>.json`.
 struct ServerState: Codable {
   enum CodingKeys: String, CodingKey {
     case pid, port
@@ -15,14 +16,55 @@ struct ServerState: Codable {
   var port: Int
   var projectID: String
 
-  static func file(_ dataDir: String) -> URL {
+  /// One server per data directory before projects had their own.
+  static func legacyFile(_ dataDir: String) -> URL {
     canonical(dataDir).appendingPathComponent("server.json")
   }
-  static func read(dataDir: String) -> ServerState? {
-    guard let data = try? Data(contentsOf: file(dataDir)), data.count < 4096,
+  static func file(_ dataDir: String, project: String) -> URL {
+    canonical(dataDir).appendingPathComponent("servers").appendingPathComponent(project + ".json")
+  }
+  private static func load(_ url: URL) -> ServerState? {
+    guard let data = try? Data(contentsOf: url), data.count < 4096,
       let state = try? JSONDecoder().decode(ServerState.self, from: data), alive(state.pid)
     else { return nil }
     return state
+  }
+  /// This project's running server, if any (a legacy record counts when it names this project).
+  static func read(dataDir: String, project: String) -> ServerState? {
+    load(file(dataDir, project: project))
+      ?? load(legacyFile(dataDir)).flatMap { $0.projectID == project ? $0 : nil }
+  }
+  /// Every running server recorded in this data directory, whatever its project.
+  static func all(dataDir: String) -> [ServerState] {
+    let folder = canonical(dataDir).appendingPathComponent("servers")
+    let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+    var states = files.filter { $0.pathExtension == "json" }.compactMap(load)
+    if let legacy = load(legacyFile(dataDir)), !states.contains(where: { $0.pid == legacy.pid }) { states.append(legacy) }
+    return states
+  }
+  static func forget(dataDir: String, project: String) {
+    try? FileManager.default.removeItem(at: file(dataDir, project: project))
+    if let data = try? Data(contentsOf: legacyFile(dataDir)),
+      let state = try? JSONDecoder().decode(ServerState.self, from: data), state.projectID == project
+    {
+      try? FileManager.default.removeItem(at: legacyFile(dataDir))
+    }
+  }
+  /// A loopback port nothing listens on yet.
+  static func free(_ port: Int) -> Bool {
+    let fd = socket(AF_INET, SOCK_STREAM, 0)
+    guard fd >= 0 else { return false }
+    defer { close(fd) }
+    // As the server binds: a port a stopped server just released (TIME_WAIT) is free to reuse.
+    var yes: Int32 = 1
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, socklen_t(MemoryLayout<Int32>.size))
+    var address = sockaddr_in()
+    address.sin_family = sa_family_t(AF_INET)
+    address.sin_port = in_port_t(UInt16(port).bigEndian)
+    address.sin_addr.s_addr = inet_addr("127.0.0.1")
+    return withUnsafePointer(to: &address) {
+      $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) == 0 }
+    }
   }
   static func alive(_ pid: Int32) -> Bool { pid > 0 && kill(pid, 0) == 0 }
   /// Per-install browser/API credential; created once, private to the data directory.
@@ -253,7 +295,7 @@ extension OmniMemo {
           for state in ["waiting", "working", "blocked", "offline", "stale"] {
             report["status_" + state] = String(agents.filter { $0.status == state }.count)
           }
-          if let server = ServerState.read(dataDir: options.dataDir) {
+          if let server = ServerState.read(dataDir: options.dataDir, project: status.projectID) {
             report["server"] = "running on 127.0.0.1:\(server.port)"
             if let token = try? ServerState.token(dataDir: options.dataDir),
               let url = URL(string: "http://127.0.0.1:\(server.port)/api/runtime/health")
@@ -294,9 +336,10 @@ extension OmniMemo {
     }
     func run() async throws {
       let token = try ServerState.token(dataDir: options.dataDir)
-      if let running = ServerState.read(dataDir: options.dataDir), running.pid != getpid() {
+      let project = try ProjectBinding(path: options.project).id
+      if let running = ServerState.read(dataDir: options.dataDir, project: project), running.pid != getpid() {
         throw ValidationError(
-          "OmniMemo server already running (pid \(running.pid), port \(running.port)); use om office or om stop")
+          "this project's server is already running (pid \(running.pid), port \(running.port)); use om office or om stop")
       }
       let store = try await options.open()
       let packaged = canonical(executablePath()).deletingLastPathComponent()
@@ -304,7 +347,8 @@ extension OmniMemo {
       let config = ServerConfig(
         host: host, port: port, token: token, distPath: dist.map { canonical($0).path } ?? packaged,
         devOrigins: devOrigins)
-      let stateFile = ServerState.file(options.dataDir)
+      let stateFile = ServerState.file(options.dataDir, project: store.binding.id)
+      try privateDirectory(stateFile.deletingLastPathComponent())
       defer { try? FileManager.default.removeItem(at: stateFile) }
       do {
         try await OmniServer.run(store: store, config: config) {
@@ -323,9 +367,9 @@ extension OmniMemo {
 
   struct Office: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-      abstract: "Start or reuse the one OmniMemo server, then open Mission Control.")
+      abstract: "Start or reuse this project's Mission Control server, then open it in the browser.")
     @OptionGroup var options: Options
-    @Option(help: "Port for a new server; a running one is reused wherever it listens.") var port = 8787
+    @Option(help: "First port to try for a new server; the next free one is used when it is taken.") var port = 8787
     @Flag(help: "Do not open a browser; print a single-use sign-in link instead.") var noOpen = false
     func run() async throws {
       let token = try ServerState.token(dataDir: options.dataDir)
@@ -336,21 +380,21 @@ extension OmniMemo {
       }
       defer { rmdir(lock.path) }
       var reused = true
-      var state = ServerState.read(dataDir: options.dataDir)
+      var state = ServerState.read(dataDir: options.dataDir, project: binding.id)
       if let running = state {
         guard let health = await ServerState.probe(port: running.port, token: token),
-          health.pid == String(running.pid)
-        else { throw ValidationError("server pid \(running.pid) is not responding; run om stop") }
-        guard health.projectID == binding.id else {
-          throw ValidationError(
-            "Mission Control is already serving another project on port \(running.port). Run om stop, then om office here.")
-        }
+          health.pid == String(running.pid), health.projectID == binding.id
+        else { throw ValidationError("this project's server (pid \(running.pid)) is not responding; run om stop") }
       } else {
         reused = false
-        try spawnServer()
+        // Each project gets its own server: skip ports other projects' servers or other programs hold.
+        let taken = Set(ServerState.all(dataDir: options.dataDir).map(\.port))
+        guard let chosen = (port..<min(port + 20, 65536)).first(where: { !taken.contains($0) && ServerState.free($0) })
+        else { throw ValidationError("no free port in \(port)-\(port + 19); pass --port") }
+        try spawnServer(port: chosen)
         for _ in 0..<60 {
           try await Task.sleep(nanoseconds: 250_000_000)
-          state = ServerState.read(dataDir: options.dataDir)
+          state = ServerState.read(dataDir: options.dataDir, project: binding.id)
           if let s = state, await ServerState.probe(port: s.port, token: token) != nil { break }
           state = nil
         }
@@ -379,7 +423,7 @@ extension OmniMemo {
       try output(result)
     }
     /// New session (setsid) so the server survives the terminal; output goes to server.log.
-    func spawnServer() throws {
+    func spawnServer(port: Int) throws {
       let log = canonical(options.dataDir).appendingPathComponent("server.log").path
       let args = [
         executablePath(), "--data-dir", canonical(options.dataDir).path, "--project",
@@ -405,26 +449,35 @@ extension OmniMemo {
 
   struct Stop: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-      abstract: "Stop the OmniMemo-owned server only; databases are never touched.")
+      abstract: "Stop this project's Mission Control server (--all: every project's); databases are never touched.")
     @OptionGroup var options: Options
+    @Flag(help: "Stop the servers of every project in this data directory.") var all = false
     func run() async throws {
-      guard let state = ServerState.read(dataDir: options.dataDir) else {
-        try? FileManager.default.removeItem(at: ServerState.file(options.dataDir))
+      let project = try ProjectBinding(path: options.project).id
+      let states = all
+        ? ServerState.all(dataDir: options.dataDir)
+        : ServerState.read(dataDir: options.dataDir, project: project).map { [$0] } ?? []
+      guard !states.isEmpty else {
+        if !all { ServerState.forget(dataDir: options.dataDir, project: project) }
         try output(["server": "not running"])
         return
       }
       let token = try ServerState.token(dataDir: options.dataDir)
-      // Signal only a pid that proves it is our server on the recorded port.
-      guard let health = await ServerState.probe(port: state.port, token: token),
-        health.pid == String(state.pid)
-      else { throw ValidationError("pid \(state.pid) is not a responding OmniMemo server") }
-      kill(state.pid, SIGTERM)
-      for _ in 0..<40 where ServerState.alive(state.pid) {
-        try await Task.sleep(nanoseconds: 250_000_000)
+      var stopped: [String] = []
+      for state in states {
+        // Signal only a pid that proves it is our server on the recorded port.
+        guard let health = await ServerState.probe(port: state.port, token: token),
+          health.pid == String(state.pid)
+        else { throw ValidationError("pid \(state.pid) is not a responding OmniMemo server") }
+        kill(state.pid, SIGTERM)
+        for _ in 0..<40 where ServerState.alive(state.pid) {
+          try await Task.sleep(nanoseconds: 250_000_000)
+        }
+        guard !ServerState.alive(state.pid) else { throw ValidationError("server pid \(state.pid) did not stop") }
+        ServerState.forget(dataDir: options.dataDir, project: state.projectID)
+        stopped.append(String(state.pid))
       }
-      guard !ServerState.alive(state.pid) else { throw ValidationError("server did not stop") }
-      try? FileManager.default.removeItem(at: ServerState.file(options.dataDir))
-      try output(["server": "stopped", "pid": String(state.pid)])
+      try output(["server": "stopped", "pid": stopped.joined(separator: ",")])
     }
   }
 

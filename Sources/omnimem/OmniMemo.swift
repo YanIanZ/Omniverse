@@ -86,7 +86,9 @@ struct OmniMemo: AsyncParsableCommand {
     let store = try await options.open()
     do {
       let s = try await store.status()
-      let running = ServerState.read(dataDir: options.dataDir).map { _ in "running; open it with: om office" }
+      let running = ServerState.read(dataDir: options.dataDir, project: s.projectID).map {
+        "running on port \($0.port); open it with: om office"
+      }
       try output([
         "project": URL(fileURLWithPath: options.project).lastPathComponent, "project_id": s.projectID,
         "records": String(s.records), "storage": "available",

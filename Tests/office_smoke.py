@@ -18,7 +18,7 @@ def ws_open(path, origin, cookie=None):
     lines = [f'GET {path} HTTP/1.1', f'Host: 127.0.0.1:{PORT}', 'Upgrade: websocket',
              'Connection: Upgrade', f'Sec-WebSocket-Key: {key}', 'Sec-WebSocket-Version: 13']
     if origin: lines.append(f'Origin: {origin}')
-    if cookie: lines.append(f'Cookie: omnimemo_session={cookie}')
+    if cookie: lines.append(f'Cookie: omnimemo_session_{PORT}={cookie}')
     s.sendall(('\r\n'.join(lines) + '\r\n\r\n').encode())
     head = b''
     while b'\r\n\r\n' not in head:
@@ -56,7 +56,7 @@ with tempfile.TemporaryDirectory(prefix='office space ', dir=workspace) as folde
     run('init', '--mongo-uri', mongo)
     # Bare `om` is status only and never starts a server.
     status = json.loads(run().stdout)
-    assert status['office'].startswith('not running') and not (data / 'server.json').exists()
+    assert status['office'].startswith('not running') and not list((data / 'servers').glob('*.json'))
 
     # Claude hook flow (stdin JSON as Claude Code sends it); fail-open on garbage.
     def hook(event, session='sess-1', **kw):
@@ -105,7 +105,7 @@ with tempfile.TemporaryDirectory(prefix='office space ', dir=workspace) as folde
         code = json.loads(urllib.request.urlopen(mint, timeout=5).read())['code']
         try: urllib.request.build_opener(Keep).open(f'http://127.0.0.1:{PORT}/auth?code={code}', timeout=5)
         except urllib.error.HTTPError as e: signin = e.headers.get('Set-Cookie', '')
-        session = signin.split('omnimemo_session=', 1)[1].split(';', 1)[0]
+        session = signin.split(f'omnimemo_session_{PORT}=', 1)[1].split(';', 1)[0]
         assert session and session != token, 'the browser cookie must not carry the server token'
 
         # WebSocket guards: bad origin, missing auth, the raw token as cookie, out-of-scope project.
@@ -155,10 +155,23 @@ with tempfile.TemporaryDirectory(prefix='office space ', dir=workspace) as folde
         assert wait_for('connected', 20) == 'connected', 'a restarted Redis must be resubscribed'
     finally:
         redis.terminate(); redis.wait(timeout=10)
-    stop = json.loads(run('stop').stdout)
-    assert stop['server'] == 'stopped' and not (data / 'server.json').exists()
+    # A second project gets its own server on the next free port; each serves only its own project.
+    other = root / 'other project'; other.mkdir(); subprocess.run(['git', 'init', '-q', str(other)], check=True)
+    second = json.loads(subprocess.run([om, '--data-dir', str(data), '--project', str(other), 'office', '--no-open',
+                                        '--port', str(PORT)], capture_output=True, text=True, timeout=60, env=env,
+                                       check=True).stdout)
+    first = json.loads(run('office', '--no-open', '--port', str(PORT)).stdout)
+    assert first['reused'] == 'true' and second['reused'] == 'false' and second['url'] != first['url'], (first, second)
+    def health_of(url):
+        req = urllib.request.Request(url + 'api/v1/health', headers={'Authorization': 'Bearer ' + bearer})
+        return json.loads(urllib.request.urlopen(req, timeout=5).read())
+    assert health_of(first['url'])['project_name'] == 'project space'
+    assert health_of(second['url'])['project_name'] == 'other project'
+    stop = json.loads(run('stop', '--all').stdout)
+    assert stop['server'] == 'stopped' and len(stop['pid'].split(',')) == 2, stop
+    assert not list((data / 'servers').glob('*.json'))
     assert json.loads(run('stop').stdout)['server'] == 'not running'
 
 print(f'PASS: Claude hook wake/first-prompt once/end; office reuse; React served by Vapor; '
       f'WS origin/auth/scope guards; live task event ({latency:.2f}s with Redis); CAS conflict; '
-      f'Redis outage keeps MongoDB writes; Redis state honest and resubscribed; om stop')
+      f'Redis outage keeps MongoDB writes; Redis state honest and resubscribed; one server per project; om stop --all')

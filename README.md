@@ -36,9 +36,9 @@ Auto-save records only verifiable state: a checkpoint when a session ends (hook 
 `om` is a short alias of `omnimem`. Bare `om` prints status and never starts a server.
 
 ```sh
-om office            # start or reuse ONE loopback Vapor server, open the React UI
+om office            # start or reuse this project's loopback server (next free port from 8787), open the UI
 om serve --port 8787 # same server in the foreground
-om stop              # stops only the OmniMemo server, never MongoDB/Redis
+om stop              # stops this project's server (--all: every project's), never MongoDB/Redis
 om recall "query"    # search memory
 om agents            # observed sessions; stale presence shows as unknown
 om tasks add "Review hook" --priority P1 ; om tasks move <id> doing --revision 1 --owner codex
@@ -63,7 +63,7 @@ om --agent claude context --first-prompt --session <id>
 - **Server:** loopback only; per-install token in `<data-dir>/server-token` (0600); `om office` opens the browser with a single-use sign-in link (valid 60 s; plain URLs, old links and the token itself do not sign in), which sets an HttpOnly `SameSite=Strict` cookie holding a random session, never the token; Host allowlist, Origin checks for writes and WebSockets, CSP. API: `/api/v1/health|agents|tasks|memory/search|events`, WebSocket `/ws/v1/live`. Task updates require `If-Match: <revision>` and return 409 on a stale revision.
 - **Data:** sessions, tasks, approvals and events live in MongoDB; events are committed before broadcast. Redis is optional: `om redis enable [--url redis://127.0.0.1:6379]` checks PING and stores the credential-free URL in the data directory (`om redis status`, `om redis disable`); `OMNIMEM_REDIS_URL` overrides it and is the place for credentials. OmniMemo only PUBLISHes/SUBSCRIBEs on `omnimemo:v1:<project>:events` so the UI updates immediately; it never writes keys, flushes or changes Redis configuration. Without Redis the server polls MongoDB every second.
 - **Frontend development:** `cd frontend && npm run dev`, with `om serve --dev-origin http://127.0.0.1:5173`. Release builds copy `frontend/dist` next to the binary; no Node runtime is needed.
-- **Not built yet (PRD P2):** REA/Reach/OmniBias review flows in the UI, multi-project server, LAN access, reconnect history beyond 1000 events.
+- **Not built yet (PRD P2):** REA/Reach/OmniBias review flows in the UI, one UI across projects (each project has its own server and port), LAN access, reconnect history beyond 1000 events.
 
 ## REA integration
 

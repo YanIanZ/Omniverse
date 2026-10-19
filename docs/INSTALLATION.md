@@ -144,8 +144,11 @@ first; uninstall removes only the OmniMemo entries and refuses edited ones. Rest
 after installation. An `--home` fixture run never touches the real Claude Code plugin list. The hook resolves the Git root of the session's `cwd`; outside Git, or when
 storage is unavailable, it does nothing and exits 0.
 
-`om office` starts one loopback Vapor server per data directory (`server.json`, `server.log`,
-`server-token` live there) and reuses it on later calls; `om stop` stops it. Set
+`om office` starts one loopback Vapor server per project, on the first free port from 8787
+(`servers/<project-id>.json`, `server.log` and the shared `server-token` live in the data
+directory), and reuses it on later calls from that project; `om stop` stops this project's server,
+`om stop --all` every project's. Each server's browser cookie is named after its port, so signing
+in to one project never signs you out of another. Set
 `om redis enable` (or `OMNIMEM_REDIS_URL`) only if a Redis server is already available; OmniMemo
 never configures, flushes or stops Redis or MongoDB. Set `OMNIMEM_DEBUG=1` to print the
 underlying database error of a failed command to stderr (never in MCP or HTTP responses).

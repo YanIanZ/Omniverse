@@ -97,7 +97,9 @@ public enum HumanPresence {
 }
 
 public enum OmniServer {
-  public static let cookie = "omnimemo_session"
+  /// Browsers share cookies across ports of a host, and each project's server has its own port and
+  /// sessions: the name carries the port so signing in to one project does not sign out another.
+  public static func cookie(_ port: Int) -> String { "omnimemo_session_\(port)" }
 
   /// Registers middleware and routes. Returns the hub so callers can stop polling on shutdown.
   @discardableResult
@@ -125,7 +127,7 @@ public enum OmniServer {
         return req.redirect(to: "/")
       }
       let response = req.redirect(to: "/")
-      response.cookies[cookie] = HTTPCookies.Value(
+      response.cookies[cookie(config.port)] = HTTPCookies.Value(
         string: sessions.mint(), path: "/", isSecure: false, isHTTPOnly: true, sameSite: .strict)
       return response
     }
@@ -360,7 +362,7 @@ struct AuthMiddleware: AsyncMiddleware {
   var requireOrigin = false
   func respond(to req: Request, chainingTo next: AsyncResponder) async throws -> Response {
     let bearer = req.headers.bearerAuthorization?.token
-    let cookie = req.cookies[OmniServer.cookie]?.string
+    let cookie = req.cookies[OmniServer.cookie(config.port)]?.string
     if let bearer {
       guard OmniServer.matches(bearer, config.token) else { throw Abort(.unauthorized) }
     } else {
