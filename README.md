@@ -4,6 +4,16 @@ Local memory and handoff for coding agents, built with **Swift + MongoDB**, with
 
 One executable provides a CLI and MCP stdio server. MongoDB stores records; local directories hold storage pointers and disposable caches. Agents working on the same project share its database. OmniMemo does not read private agent histories or require an LLM/API key.
 
+## Quickstart
+
+1. Install, set up this project and connect your agents (Claude Code gets the `omniverse-bridge` plugin, Codex and Gemini get hooks, OpenCode its plugin, every host gets MCP):
+   `./install.sh --setup --global --with-hooks --start-mongo --project "$PWD"`
+   (no MongoDB? use `--backend sqlite` instead of `--start-mongo`). The command is `om`; `omnimem` is the same program.
+2. Check it: `om status` (and `om doctor` if something looks wrong).
+3. Restart your agents. In Claude Code, `/plugin` should list `omniverse-bridge` as enabled.
+4. Open Mission Control: `om office` (it signs the browser in with a one-time link).
+5. Before a piece of work: `om context "what you are about to do"`; after it: `om checkpoint --done "…" --next "…"`.
+
 ## Storage profiles and auto-save
 
 Each data directory picks one profile at `om init` (PRD §100); there is no automatic fallback between them:
@@ -45,12 +55,12 @@ om --agent claude context --first-prompt --session <id>
   | Claude Code | `omniverse-bridge` plugin: `session.start/end`, `prompt.submit`, `tool.call`, `turn.complete` (no settings hooks) | prompt context, once per change |
   | Codex | `~/.codex/hooks.json` `SessionStart`, `UserPromptSubmit`, `Stop` (Codex asks you to trust new hooks) | plain text, once per change |
   | Gemini CLI | `SessionStart`, `BeforeAgent`, `AfterAgent`, `SessionEnd` | `hookSpecificOutput.additionalContext` |
-  | OpenCode 2.x | MCP connection (`initialize` client name, tool use, exit) | via MCP tools |
+  | OpenCode 2.x | OmniMemo OpenCode plugin (tool and session hooks, event stream) plus MCP | via MCP tools |
   | Any MCP host | MCP connection | via MCP tools |
 
-  Hooks fail open and never block a prompt; unchanged capsules and empty projects inject nothing. OpenCode 2.0.31 stalls sessions whenever a plugin subscribes to events, so no OpenCode plugin is installed for 2.x (a 1.x event plugin is). No IDE-open event is assumed for any host.
-- **Approvals:** agents request with `om approvals request`; only the Mission Control browser session (cookie + Origin) can approve or deny, bearer tokens are refused, and a decision never runs the action or authorizes a Git push.
-- **Server:** loopback only; per-install token in `<data-dir>/server-token` (0600); browser login sets an HttpOnly `SameSite=Strict` cookie; Host allowlist, Origin checks for writes and WebSockets, CSP. API: `/api/v1/health|agents|tasks|memory/search|events`, WebSocket `/ws/v1/live`. Task updates require `If-Match: <revision>` and return 409 on a stale revision.
+  Hooks and plugins fail open and never block a prompt; unchanged capsules and empty projects inject nothing. OpenCode 2.x gets a plugin built on tool/session hooks and a detached event stream (a callback-style event subscription stalled sessions in 2.0.31). No IDE-open event is assumed for any host.
+- **Approvals:** agents request with `om approvals request`; only the Mission Control browser session (cookie + Origin) can approve or deny, bearer tokens are refused, and approving also needs Touch ID or your password at this Mac (denying does not). A decision never runs the action or authorizes a Git push.
+- **Server:** loopback only; per-install token in `<data-dir>/server-token` (0600); `om office` opens the browser with a single-use sign-in link (valid 60 s; plain URLs, old links and the token itself do not sign in), which sets an HttpOnly `SameSite=Strict` cookie holding a random session, never the token; Host allowlist, Origin checks for writes and WebSockets, CSP. API: `/api/v1/health|agents|tasks|memory/search|events`, WebSocket `/ws/v1/live`. Task updates require `If-Match: <revision>` and return 409 on a stale revision.
 - **Data:** sessions, tasks, approvals and events live in MongoDB; events are committed before broadcast. Redis is optional: `om redis enable [--url redis://127.0.0.1:6379]` checks PING and stores the credential-free URL in the data directory (`om redis status`, `om redis disable`); `OMNIMEM_REDIS_URL` overrides it and is the place for credentials. OmniMemo only PUBLISHes/SUBSCRIBEs on `omnimemo:v1:<project>:events` so the UI updates immediately; it never writes keys, flushes or changes Redis configuration. Without Redis the server polls MongoDB every second.
 - **Frontend development:** `cd frontend && npm run dev`, with `om serve --dev-origin http://127.0.0.1:5173`. Release builds copy `frontend/dist` next to the binary; no Node runtime is needed.
 - **Not built yet (PRD P2):** REA/Reach/OmniBias review flows in the UI, multi-project server, LAN access, reconnect history beyond 1000 events.
@@ -231,7 +241,7 @@ om codex run --task <task> --prompt "…"  # OmniMemo-managed Codex thread via c
 om rollover preview                      # bounded handoff capsule for a fresh session
 ```
 
-Claude Code context usage comes from the opt-in status line (`install-global.py --with-statusline`, added only when no status line exists). `om codex run --rollover` is the only automatic fresh-session rollover; everything else is manual handoff. Contract and limits: [docs/RUNTIME_EVENTS.md](docs/RUNTIME_EVENTS.md).
+Claude Code context usage comes from the `omniverse-bridge` plugin after each turn (or the opt-in status line, `install-global.py --with-statusline`, added only when no status line exists). `om codex run --rollover` is the only automatic fresh-session rollover; everything else is manual handoff. Contract and limits: [docs/RUNTIME_EVENTS.md](docs/RUNTIME_EVENTS.md).
 
 ## Context limits
 
@@ -263,7 +273,7 @@ Real MongoDB tests cover multiple writer connections, persistence, isolation, de
 
 `active` means a source file still matches its hash; it does not prove a semantic interpretation or a test claim. Memory is untrusted data. Agent provenance is a label, not authentication. Project filtering enforces the MCP contract; local processes with direct MongoDB/filesystem access remain subject to database and OS permissions. The instance script binds only to loopback; configure MongoDB authentication and OS permissions for your environment. Secret detection is heuristic and cannot guarantee recognition of every secret format.
 
-Not implemented: transactional MongoDB migration/relocation, physical drive-disconnection recovery, automatic conflict resolution/revision ledgers, graphs, automatic capture hooks, HTTP, complete adapters for all four hosts, embeddings, cloud sync, or ROI benchmarks. Do not move a WiredTiger dbPath while its server is running. Use appropriate MongoDB backup/restore procedures; the cache directory is not a database backup.
+Not implemented: transactional MongoDB migration/relocation, physical drive-disconnection recovery, automatic conflict resolution/revision ledgers, graphs, LAN (non-loopback) HTTP, embeddings, cloud sync, or ROI benchmarks. Do not move a WiredTiger dbPath while its server is running. Use appropriate MongoDB backup/restore procedures; the cache directory is not a database backup.
 
 The supplied requirement documents are kept in `docs/` as references (their file names carry the supplier's document numbers, not OmniMemo releases), together with technical specs for the REA Bridge, Omni Reach, OmniBias Guard, hybrid MongoDB+Redis storage and Swift/Vapor/React, with example configs and on-demand skills in `skills/`. Mission Control, hooks, approvals and the storage profiles above are implemented in 0.3.0; Omni Agent delegation, REA Bridge, Omni Reach, OmniBias Guard and the P1/P2 Mission Control views remain proposed. Your Swift + MongoDB amendments remain authoritative.
 

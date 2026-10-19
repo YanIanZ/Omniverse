@@ -6,7 +6,7 @@ description: Prepare a verified bounded checkpoint for a clean new agent session
 # Omni Context Rollover Skill
 
 Implemented (suggest/manual mode):
-- Claude Code reports context usage through `om statusline claude` (opt-in status line). `om runtime sessions` and Mission Control show it as `context`, separate from task progress; no recent sample means `unknown`.
+- Claude Code reports context usage through the `omniverse-bridge` plugin after each turn (or the opt-in `om statusline claude`). `om runtime sessions` and Mission Control show it as `context`, separate from task progress; no recent sample means `unknown`.
 - `om rollover preview` prints a bounded capsule (tasks, unverified milestones, git branch/commit, changed files). `om rollover prepare` saves it as a checkpoint first, then prints it with a handoff id.
 - Managed Codex only (opt-in): `om codex run --rollover` starts an empty app-server thread after a completed turn at the threshold, delivers the capsule once, requires `ACK <digest>`, then moves the task; without the acknowledgement the parent keeps it.
 

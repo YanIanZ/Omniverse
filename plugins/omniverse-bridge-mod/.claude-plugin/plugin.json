@@ -10,26 +10,26 @@
     "rollover": {
       "type": "string",
       "title": "Context rollover",
-      "description": "suggest tells you when context is high and /om-rollover hands off; auto replaces the conversation with the verified OmniMemo capsule at the threshold; off reports usage only.",
+      "description": "suggest: tells you when context is high, and /om-rollover hands off. auto: at the threshold, runs /clear and continues this work in a fresh conversation from the saved OmniMemo handoff. off: reports usage only.",
       "default": "suggest",
       "options": ["suggest", "auto", "off"]
     },
     "rolloverAt": {
       "type": "number",
       "title": "Rollover at (percent)",
-      "description": "Reported context usage that triggers the handoff (spec default 80).",
+      "description": "Context usage (percent) at which to hand off; default 80.",
       "default": 80
     },
     "prepareAt": {
       "type": "number",
       "title": "Prepare checkpoint at (percent)",
-      "description": "Reported context usage that saves a checkpoint ahead of the handoff (spec default 70).",
+      "description": "Context usage (percent) at which a checkpoint is saved ahead of the handoff; default 70.",
       "default": 70
     },
     "omPath": {
       "type": "string",
-      "title": "om command",
-      "description": "OmniMemo CLI the mod runs (no shell).",
+      "title": "Path to om",
+      "description": "The om command the plugin runs directly (not through a shell); the installer sets it to the installed binary.",
       "default": "om"
     }
   }

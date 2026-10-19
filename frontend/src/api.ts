@@ -6,6 +6,8 @@ export type Health = {
   storage: string
   redis: 'disabled' | 'connected' | 'unavailable'
   project_id: string
+  /** The project folder's name, for people; project_id is the identity. */
+  project_name?: string
   records: string
   revision: string
 }

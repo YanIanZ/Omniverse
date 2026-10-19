@@ -168,7 +168,7 @@ See `docs/OmniMemo_PRD_v1.8_MongoDB_Redis.md` §§100–111 and `docs/OmniMemo_H
 
 ## 13. Runtime Integration First (MUST)
 
-1. Before new visual work, the office must reflect **real runtime activity** from adapters: Claude hooks, OpenCode plugin, Gemini hooks and OmniMemo-managed Codex app-server sessions. Demo data appears only in an explicit, visible demo mode.
+1. Before new visual work, the office must reflect **real runtime activity** from adapters: the Claude Code `omniverse-bridge` plugin, OpenCode plugin, Codex and Gemini hooks, and OmniMemo-managed Codex app-server sessions. Demo data appears only in an explicit, visible demo mode.
 2. Adapters emit normalized runtime events (`session.*`, `prompt.received`, `tool.*`, `turn.*`, `model.changed`, `task.*`, `milestone.verified`, `approval.requested`, `heartbeat`) with `source_confidence` observed/reported/inferred. Ingest validates, deduplicates, persists to the durable store first, then broadcasts.
 3. Telemetry never stores full prompts, transcripts, source text, tool arguments, secrets or API keys; tool activity is reduced to a category. Short task titles only with user consent.
 4. Status semantics: Working needs a positive in-progress event; Waiting needs an idle/turn-completed event; Blocked needs an approval/denial event; Offline needs an observed end; silence becomes Stale with Last seen, never Offline or Done. Passive hook sessions get no invented heartbeat; managed sessions heartbeat and go stale after a short threshold.

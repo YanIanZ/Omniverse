@@ -88,7 +88,7 @@ func withStore<T>(_ options: Options, _ body: (MemoryStore) async throws -> T) a
 extension OmniMemo {
   struct Wake: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-      abstract: "Idempotent session signal from a supported hook; never starts a server.")
+      abstract: "(internal, used by host adapters) Mark a session present; never starts a server.")
     @OptionGroup var options: Options
     @Option(help: "Host session identifier; --agent names the provider (e.g. claude).")
     var session: String
@@ -102,10 +102,10 @@ extension OmniMemo {
   }
 
   struct Recall: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Search project memory.")
+    static let configuration = CommandConfiguration(abstract: "Search project memory (same as om memory search).")
     @OptionGroup var options: Options
     @Argument var query: String
-    @Option var limit: Int = 8
+    @Option(help: "Most results to show.") var limit: Int = 8
     func run() async throws {
       try await withStore(options) { try output(await $0.search(query, limit: limit)) }
     }
@@ -113,7 +113,7 @@ extension OmniMemo {
 
   struct Agents: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-      abstract: "Observed agent sessions; stale presence is reported as unknown.")
+      abstract: "Agent sessions OmniMemo has seen; ones with no recent signal are marked stale.")
     @OptionGroup var options: Options
     func run() async throws {
       try await withStore(options) { try output(await $0.agents()) }
@@ -122,7 +122,7 @@ extension OmniMemo {
 
   struct Tasks: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-      abstract: "Project tasks with revision-checked updates.",
+      abstract: "Shared project tasks; every change names the revision you last read, so two agents cannot overwrite each other.",
       subcommands: [List.self, Add.self, Move.self, Milestones.self], defaultSubcommand: List.self)
     struct List: AsyncParsableCommand {
       @OptionGroup var options: Options
@@ -148,7 +148,7 @@ extension OmniMemo {
       @OptionGroup var options: Options
       @Argument var id: String
       @Argument(help: "todo, doing, review, done or blocked.") var status: String
-      @Option(help: "Revision you last read; stale revisions are rejected.") var revision: Int
+      @Option(help: "Revision you last read (see om tasks list); stale revisions are rejected.") var revision: Int
       @Option var owner: String?
       func run() async throws {
         try await withStore(options) {
@@ -199,7 +199,7 @@ extension OmniMemo {
       subcommands: [Ingest.self, Sessions.self, Doctor.self])
     struct Ingest: AsyncParsableCommand {
       static let configuration = CommandConfiguration(
-        abstract: "Ingest one JSON event or JSONL events from stdin; prints one result per event.")
+        abstract: "(internal, used by host adapters) Ingest JSON or JSONL runtime events from stdin.")
       @OptionGroup var options: Options
       func run() async throws {
         let input = FileHandle.standardInput.readData(ofLength: 1 << 20 + 1)
@@ -231,7 +231,7 @@ extension OmniMemo {
       }
     }
     struct Sessions: AsyncParsableCommand {
-      static let configuration = CommandConfiguration(abstract: "Agent cards with derived stale status.")
+      static let configuration = CommandConfiguration(abstract: "Agent cards as Mission Control shows them (same data as om agents).")
       @OptionGroup var options: Options
       func run() async throws {
         try await withStore(options) { try output(await $0.runtimeAgents()) }
@@ -276,8 +276,8 @@ extension OmniMemo {
     static let configuration = CommandConfiguration(
       abstract: "Run the Vapor HTTP/WebSocket server in the foreground (loopback only).")
     @OptionGroup var options: Options
-    @Option var host = "127.0.0.1"
-    @Option var port = 8787
+    @Option(help: "Loopback address to listen on (127.0.0.1 or localhost).") var host = "127.0.0.1"
+    @Option(help: "Port to listen on.") var port = 8787
     @Option(help: "Built React dist directory; defaults to the packaged frontend.") var dist:
       String?
     @Option(name: .customLong("dev-origin"), help: "Allowed Vite dev origin, e.g. http://127.0.0.1:5173.")
@@ -325,8 +325,8 @@ extension OmniMemo {
     static let configuration = CommandConfiguration(
       abstract: "Start or reuse the one OmniMemo server, then open Mission Control.")
     @OptionGroup var options: Options
-    @Option var port = 8787
-    @Flag(help: "Do not open a browser.") var noOpen = false
+    @Option(help: "Port for a new server; a running one is reused wherever it listens.") var port = 8787
+    @Flag(help: "Do not open a browser; print a single-use sign-in link instead.") var noOpen = false
     func run() async throws {
       let token = try ServerState.token(dataDir: options.dataDir)
       let binding = try ProjectBinding(path: options.project)
@@ -343,7 +343,7 @@ extension OmniMemo {
         else { throw ValidationError("server pid \(running.pid) is not responding; run om stop") }
         guard health.projectID == binding.id else {
           throw ValidationError(
-            "OmniMemo server for another project runs on port \(running.port); run om stop there first")
+            "Mission Control is already serving another project on port \(running.port). Run om stop, then om office here.")
         }
       } else {
         reused = false
@@ -359,17 +359,24 @@ extension OmniMemo {
         }
       }
       let base = "http://127.0.0.1:\(state!.port)/"
+      // The plain URL does not sign in: a browser needs this single-use link.
+      guard let code = await ServerState.loginCode(port: state!.port, token: token) else {
+        throw ValidationError("server did not issue a sign-in code; see server.log in the data directory")
+      }
+      let signIn = base + "auth?code=" + code
       if !noOpen {
         let open = Process()
         open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        guard let code = await ServerState.loginCode(port: state!.port, token: token) else {
-          throw ValidationError("server did not issue a sign-in code; see server.log in the data directory")
-        }
-        open.arguments = [base + "auth?code=" + code]
+        open.arguments = [signIn]
         try open.run()
         open.waitUntilExit()
       }
-      try output(["url": base, "pid": String(state!.pid), "reused": String(reused)])
+      var result = ["url": base, "pid": String(state!.pid), "reused": String(reused)]
+      if noOpen {
+        result["sign_in"] = signIn
+        result["note"] = "sign_in works once, within 60 s, in a browser on this Mac"
+      }
+      try output(result)
     }
     /// New session (setsid) so the server survives the terminal; output goes to server.log.
     func spawnServer() throws {
@@ -526,7 +533,7 @@ extension OmniMemo {
   /// Claude Code `statusLine` command: prints one line and records the reported context usage.
   struct Statusline: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-      abstract: "Status line adapter (stdin JSON). Records reported context usage; never blocks the host.")
+      abstract: "(internal, used by the Claude Code status line) Record reported context usage; never blocks the host.")
     @OptionGroup var options: Options
     @Argument(help: "Only claude reports context usage through a status line.") var host: String
 
@@ -589,7 +596,7 @@ extension OmniMemo {
   /// Manual fresh-session handoff near context capacity. Nothing is launched (suggest mode).
   struct Rollover: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-      abstract: "Prepare a bounded handoff for a fresh session; never launches or controls one.",
+      abstract: "Hand work to a fresh agent session near the context limit: a short summary (capsule) saved as a checkpoint.",
       subcommands: [Preview.self, Prepare.self, Begin.self, Link.self, Report.self])
     struct Target: ParsableArguments {
       @Option(help: "Host session id whose reported context usage to include.") var session: String?
@@ -622,9 +629,9 @@ extension OmniMemo {
     // only child of the parent, link records the new session, report settles it on the ACK.
     struct Begin: AsyncParsableCommand {
       static let configuration = CommandConfiguration(
-        abstract: "Reserve the only child of a parent session; exits 1 when one was already reserved.")
+        abstract: "(internal, used by the Claude Code plugin) Reserve the one fresh session a parent may hand off to.")
       @OptionGroup var options: Options
-      @Option var session: String
+      @Option(help: "The parent session id (the one handing off).") var session: String
       @Option var provider = "claude"
       func run() async throws {
         let reserved = try await withStore(options) { try await $0.beginRollover(agent: provider, parent: session) }
@@ -632,9 +639,9 @@ extension OmniMemo {
       }
     }
     struct Link: AsyncParsableCommand {
-      static let configuration = CommandConfiguration(abstract: "Record the fresh child session of a reserved rollover.")
+      static let configuration = CommandConfiguration(abstract: "(internal, used by the Claude Code plugin) Record the fresh session of a reserved handoff.")
       @OptionGroup var options: Options
-      @Option var session: String
+      @Option(help: "The parent session id (the one handing off).") var session: String
       @Option var child: String
       @Option var provider = "claude"
       func run() async throws {
@@ -650,9 +657,9 @@ extension OmniMemo {
     }
     struct Report: AsyncParsableCommand {
       static let configuration = CommandConfiguration(
-        abstract: "Record a rollover outcome: with --child the task moves on ACK; without, a same-session reset.")
+        abstract: "(internal, used by the Claude Code plugin) Record whether the fresh session acknowledged the handoff.")
       @OptionGroup var options: Options
-      @Option var session: String
+      @Option(help: "The parent session id (the one handing off).") var session: String
       @Option(help: "Fresh child session; omit for a same-session reset.") var child: String?
       @Option var provider = "claude"
       @Option(help: "Digest printed by prepare.") var digest: String
@@ -706,7 +713,7 @@ extension OmniMemo {
 
   struct Hook: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-      abstract: "Host hook entrypoint (stdin JSON). Fail open: never blocks the host.")
+      abstract: "(internal, used by host adapters) Lifecycle event from a hook or plugin (stdin JSON); never blocks the host.")
     @OptionGroup var options: Options
     @Argument(help: "claude, codex, gemini or opencode.") var host: String
     @Option var maxTokens = 600

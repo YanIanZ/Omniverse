@@ -56,7 +56,7 @@ with tempfile.TemporaryDirectory(prefix='office space ', dir=workspace) as folde
     run('init', '--mongo-uri', mongo)
     # Bare `om` is status only and never starts a server.
     status = json.loads(run().stdout)
-    assert status['office'] == 'not running' and not (data / 'server.json').exists()
+    assert status['office'].startswith('not running') and not (data / 'server.json').exists()
 
     # Claude hook flow (stdin JSON as Claude Code sends it); fail-open on garbage.
     def hook(event, session='sess-1', **kw):

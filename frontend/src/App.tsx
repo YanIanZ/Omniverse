@@ -126,8 +126,8 @@ export function App() {
         <Logo size={48} />
         <h1>OmniMemo is locked</h1>
         <p>
-          This browser has no session. Run <kbd>om office</kbd> in your project; it opens Mission Control already
-          signed in.
+          This browser isn't signed in, or its sign-in link was already used. Run <kbd>om office</kbd> in your
+          project's terminal: it opens Mission Control with a fresh one-time sign-in link.
         </p>
       </main>
     )
@@ -173,8 +173,10 @@ export function App() {
         </ul>
         <dl className="rail-meta">
           <dt>Project</dt>
-          <dd className="mono">{health ? health.project_id.slice(0, 12) : '…'}</dd>
-          <dt>Revision</dt>
+          <dd className="mono" title={health?.project_id}>
+            {health ? health.project_name ?? health.project_id.slice(0, 12) : '…'}
+          </dd>
+          <dt>Events recorded</dt>
           <dd className="mono">{health?.revision ?? '…'}</dd>
           <dt>Live</dt>
           <dd className={'live live-' + connection}>{connection === 'live' ? 'Connected' : liveLabel}</dd>

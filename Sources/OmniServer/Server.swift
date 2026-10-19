@@ -119,8 +119,10 @@ public enum OmniServer {
 
     let sessions = BrowserSessions()
     app.get("auth") { req async throws -> Response in
+      // A used or expired link (back button, history, another browser) lands on the locked
+      // screen, which says how to get a fresh one, instead of a raw 401.
       guard let code = req.query[String.self, at: "code"], sessions.redeem(code) else {
-        throw Abort(.unauthorized)
+        return req.redirect(to: "/")
       }
       let response = req.redirect(to: "/")
       response.cookies[cookie] = HTTPCookies.Value(
@@ -132,7 +134,8 @@ public enum OmniServer {
     api.get("health") { _ async throws -> Response in
       let status = try await store.status()
       return try json([
-        "status": "ok", "storage": "mongodb", "project_id": status.projectID,
+        "status": "ok", "storage": status.backend.lowercased(), "project_id": status.projectID,
+        "project_name": store.binding.root.lastPathComponent,
         "records": String(status.records), "revision": String(await hub.revision),
         "redis": await hub.redisState, "pid": String(getpid()),
       ])
@@ -186,13 +189,16 @@ public enum OmniServer {
       // Denying is always safe; approving needs the person at this Mac.
       if body.decision == "approved" {
         guard let pending = try await store.listApprovals().first(where: { $0.id == id && $0.status == "pending" })
-        else { throw MemoError.conflict }
+        else { throw Abort(.conflict, reason: "this request was already decided") }
         let action = String(pending.action.split(whereSeparator: \.isNewline).first ?? "").prefix(120)
         guard await config.confirmPresence("approve \"\(action)\" requested by \(pending.requestedBy)") else {
           throw Abort(.forbidden, reason: "approval was not confirmed at this Mac")
         }
       }
-      let record = try await store.decideApproval(id: id, decision: body.decision)
+      let record: ApprovalRecord
+      do { record = try await store.decideApproval(id: id, decision: body.decision) } catch MemoError.conflict {
+        throw Abort(.conflict, reason: "this request was already decided")
+      }
       await hub.poll()
       return try json(record)
     }

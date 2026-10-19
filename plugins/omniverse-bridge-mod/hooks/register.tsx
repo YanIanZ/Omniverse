@@ -151,11 +151,11 @@ async function refresh($: EngineInterface, context?: number) {
     const quiet = all.filter(a => a.status === 'stale').length
     const hidden = quiet ? ` · ${quiet} with no recent signal hidden` : ''
     await update($, report, () => (live.length ? `${live.length} agent(s) present${hidden}` : `No agents present${hidden}`))
-    $.ui.status(`OmniMemo · ${live.length} agents · ${count('working')} working · ${count('blocked')} blocked${ctx}`)
+    $.ui.status(`OmniMemo · ${live.length} ${live.length === 1 ? 'agent' : 'agents'} · ${count('working')} working · ${count('blocked')} blocked${ctx}`)
   } catch {
     await update($, agents, () => [])
     await update($, report, () => 'Bridge unavailable')
-    $.ui.status('OmniMemo unavailable' + ctx)
+    $.ui.status('OmniMemo unavailable · run om doctor' + ctx)
   }
 }
 
@@ -260,9 +260,9 @@ export const register: Register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     void lifecycle($, 'SessionStart')
-    await $.command.register({ name: 'om-agents', description: 'Show live OmniMemo agent cards' })
-    await $.command.register({ name: 'om-agent', description: 'Open another agent session from OmniMemo: /om-agent codex' })
-    await $.command.register({ name: 'om-rollover', description: 'Hand off to a fresh context from a verified OmniMemo capsule' })
+    await $.command.register({ name: 'om-agents', description: 'Show the other agents OmniMemo sees (Codex, OpenCode, other Claude sessions)' })
+    await $.command.register({ name: 'om-agent', description: "Show another agent's OmniMemo card and saved records (not its chat): /om-agent codex" })
+    await $.command.register({ name: 'om-rollover', description: 'Save a checkpoint and continue this work in a fresh, empty conversation' })
     $.clock.after(300, () => void refresh($))
     $.clock.every(15_000, () => void refresh($))
     return next(e)
@@ -277,8 +277,13 @@ export const register: Register = (on, options) => {
   on('command.run', { command: 'om-agent' }, async ($, e) => {
     const want = e.args.trim()
     const list = others(await read($, agents), await read($, self))
-    const card = list.find(a => a.session_id === want || a.client === want || agentLabel(a).startsWith(want)) ?? list[0]
-    if (!card) return { text: 'No other agent is present in OmniMemo right now.' }
+    const card = want
+      ? list.find(a => a.session_id === want || a.client === want || agentLabel(a).startsWith(want))
+      : list[0]
+    if (!card) {
+      if (!list.length) return { text: 'No other agent is present in OmniMemo right now.' }
+      return { text: `No present agent matches "${want}". Present: ${list.map(agentLabel).join(', ')}.` }
+    }
     await openAgent($, card)
     return { text: `Opened ${agentLabel(card)} from OmniMemo.` }
   })

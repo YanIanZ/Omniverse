@@ -9,7 +9,7 @@ public enum MemoError: Error, LocalizedError {
     switch self {
     case .invalid(let message): return "invalid_request: \(message)"
     case .storageUnavailable:
-      return "storage_unavailable: initialize explicitly or reconnect the configured volume"
+      return "storage_unavailable: no OmniMemo store here; run om init (--mongo-uri or --backend sqlite), or reconnect the drive that holds the data directory"
     case .database(let message): return "database_error: \(message)"
     case .denied: return "scope_denied: request is outside the authorized project"
     case .notFound: return "not_found"

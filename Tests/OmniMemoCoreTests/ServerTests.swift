@@ -62,11 +62,15 @@ final class ServerTests: XCTestCase {
       body: ByteBuffer(string: #"{"title":"x"}"#)
     ) { XCTAssertEqual($0.status, .forbidden) }
     try await app.test(.GET, "auth?code=wrong", headers: headers(auth: false)) {
-      XCTAssertEqual($0.status, .unauthorized)
+      // Refused: back to the locked screen, with no session cookie.
+      XCTAssertEqual($0.status, .seeOther)
+      XCTAssertNil($0.headers.first(name: .setCookie))
     }
     // The token itself is no longer a sign-in URL; only a single-use code from the CLI is.
     try await app.test(.GET, "auth?token=\(token)", headers: headers(auth: false)) {
-      XCTAssertEqual($0.status, .unauthorized)
+      // Refused: back to the locked screen, with no session cookie.
+      XCTAssertEqual($0.status, .seeOther)
+      XCTAssertNil($0.headers.first(name: .setCookie))
     }
     let signIn = try await code(app)
     try await app.test(.GET, "auth?code=\(signIn)", headers: headers(auth: false)) {
@@ -76,7 +80,8 @@ final class ServerTests: XCTestCase {
       XCTAssertFalse(cookie.contains(token), "the cookie never carries the server token")
     }
     try await app.test(.GET, "auth?code=\(signIn)", headers: headers(auth: false)) {
-      XCTAssertEqual($0.status, .unauthorized, "a sign-in code works once")
+      XCTAssertEqual($0.status, .seeOther)
+      XCTAssertNil($0.headers.first(name: .setCookie), "a sign-in code works once")
     }
     try await app.test(.GET, "api/v1/health", headers: headers()) { res in
       XCTAssertEqual(res.status, .ok)
@@ -194,6 +199,7 @@ final class ServerTests: XCTestCase {
     }
     try await app.test(.POST, path, headers: browser, body: body) {
       XCTAssertEqual($0.status, .conflict, "a request is decided once")
+      XCTAssertTrue($0.body.string.contains("already decided"))
     }
     let events = try await store.events(after: 0).map(\.type)
     XCTAssertEqual(events, ["approval.requested", "approval.decided"])
