@@ -138,10 +138,27 @@ with tempfile.TemporaryDirectory(prefix='office space ', dir=workspace) as folde
     # Redis gone: durable writes and server still work (degraded to MongoDB polling).
     run('tasks', 'add', 'Works without Redis')
     assert len(json.loads(run('tasks').stdout)) == 2
+
+    # The reported Redis state follows the real connection, and a restarted Redis is resubscribed.
+    bearer = (data / 'server-token').read_text()
+    def redis_state():
+        req = urllib.request.Request(f'http://127.0.0.1:{PORT}/api/v1/health', headers={'Authorization': 'Bearer ' + bearer})
+        return json.loads(urllib.request.urlopen(req, timeout=5).read())['redis']
+    def wait_for(state, seconds):
+        end = time.time() + seconds
+        while time.time() < end and redis_state() != state: time.sleep(0.5)
+        return redis_state()
+    assert wait_for('unavailable', 5) == 'unavailable', 'a dropped Redis must not be reported as connected'
+    redis = subprocess.Popen(['redis-server', '--port', str(REDIS_PORT), '--bind', '127.0.0.1', '--save', '',
+                              '--appendonly', 'no'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        assert wait_for('connected', 20) == 'connected', 'a restarted Redis must be resubscribed'
+    finally:
+        redis.terminate(); redis.wait(timeout=10)
     stop = json.loads(run('stop').stdout)
     assert stop['server'] == 'stopped' and not (data / 'server.json').exists()
     assert json.loads(run('stop').stdout)['server'] == 'not running'
 
 print(f'PASS: Claude hook wake/first-prompt once/end; office reuse; React served by Vapor; '
       f'WS origin/auth/scope guards; live task event ({latency:.2f}s with Redis); CAS conflict; '
-      f'Redis outage keeps MongoDB writes; om stop')
+      f'Redis outage keeps MongoDB writes; Redis state honest and resubscribed; om stop')

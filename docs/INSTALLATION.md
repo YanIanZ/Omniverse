@@ -132,7 +132,9 @@ point, each ending in `<binary> --data-dir <data> hook <host>`. Claude Code gets
 the installer adds the install directory as the `omnimemo` plugin marketplace and installs the
 `omniverse-bridge` plugin for the user (`claude plugin install omniverse-bridge@omnimemo`), which
 reports session, prompt, tool and turn events from the plugin's own engine events and attaches the
-context capsule to the prompt; uninstall removes it. Hooks are written for Codex
+context capsule to the prompt; uninstall removes it. When `$CODEX_HOME` points somewhere other
+than `~/.codex`, the Codex desktop app (which always reads `~/.codex`) is its own host,
+`codex-app`, with the same MCP entries and Codex hooks. Hooks are written for Codex
 `$CODEX_HOME/hooks.json` `SessionStart`, `UserPromptSubmit`, `Stop` (trust them when Codex asks);
 Gemini CLI `~/.gemini/settings.json` `SessionStart`, `BeforeAgent`, `AfterAgent`, `SessionEnd`
 (the same file as its MCP entry; both are merged in one write). OpenCode 1.x receives

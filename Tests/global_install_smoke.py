@@ -143,4 +143,13 @@ with tempfile.TemporaryDirectory(prefix='global fixture ',dir=workspace) as fold
     statusline_run('--apply')
     statusline_run('--uninstall','--apply')
     assert 'statusLine' not in json.loads(settings.read_text())
-print('PASS: global config schemas, hooks and status-line opt-in; preview; quoting; backups; repeat apply; preserve existing/edited status lines; owned uninstall')
+# The Codex desktop app (~/.codex) is its own host only when the CLI's CODEX_HOME is elsewhere.
+import importlib.util
+spec=importlib.util.spec_from_file_location('installer',script);installer=importlib.util.module_from_spec(spec);spec.loader.exec_module(installer)
+with tempfile.TemporaryDirectory(dir=workspace) as folder:
+    h=pathlib.Path(folder);(h/'.codex').mkdir();(h/'cli').mkdir()
+    os.environ['CODEX_HOME']=str(h/'cli');assert installer.codex_app_home(h,False)==h/'.codex'
+    assert 'codex-app' in installer.locations(h,False,'v2')
+    os.environ['CODEX_HOME']=str(h/'.codex');assert installer.codex_app_home(h,False) is None
+    assert installer.codex_app_home(h,True) is None, 'fixture homes never add the app host'
+print('PASS: global config schemas, hooks and status-line opt-in; preview; quoting; backups; repeat apply; preserve existing/edited status lines; owned uninstall; Codex app home as its own host')
