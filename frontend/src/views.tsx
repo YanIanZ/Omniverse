@@ -887,15 +887,20 @@ export function MemoryView({ store }: { store: Store }) {
   const [shown, setShown] = useState('')
   const [results, setResults] = useState<Memory[]>()
   const [searching, setSearching] = useState(false)
+  const latest = useRef(0)
   const run = async (q: string) => {
+    // A slow earlier search must not replace the results of a later one.
+    const n = ++latest.current
     setSearching(true)
     try {
-      setResults(await api.search(q))
+      const found = await api.search(q)
+      if (n !== latest.current) return
+      setResults(found)
       setShown(q)
     } catch (err) {
-      store.report(err)
+      if (n === latest.current) store.report(err)
     } finally {
-      setSearching(false)
+      if (n === latest.current) setSearching(false)
     }
   }
   useEffect(() => {

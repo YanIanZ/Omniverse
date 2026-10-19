@@ -123,7 +123,8 @@ final class RuntimeIngestTests: XCTestCase {
         firstSeen: format.string(from: Date().addingTimeInterval(-1000)),
         lastSeen: format.string(from: Date().addingTimeInterval(-age)))
       session.observability = mode
-      try await store.backend.save(session: session, project: store.binding.id)
+      let saved = try await store.backend.save(session: session, project: store.binding.id)
+      XCTAssertTrue(saved)
     }
     let cards = try await store.runtimeAgents()
     let states = Dictionary(uniqueKeysWithValues: cards.map { ($0.sessionID, $0.status) })
@@ -207,5 +208,43 @@ final class RuntimeIngestTests: XCTestCase {
     let valid = try await store.ingest(input)
     XCTAssertTrue(valid.accepted)
     XCTAssertFalse(valid.duplicate)
+    // An adapter clock far ahead would freeze the card: rejected.
+    var ahead = event()
+    ahead.occurredAt = ISO8601DateFormatter().string(from: Date().addingTimeInterval(3600))
+    do {
+      _ = try await store.ingest(ahead)
+      XCTFail("future occurred_at accepted")
+    } catch MemoError.invalid {}
+  }
+
+  func testSQLiteSessionSavesCompareRevision() async throws { try await sessionRevision(mongo: false) }
+  func testMongoSessionSavesCompareRevision() async throws { try await sessionRevision(mongo: true) }
+
+  /// Two writers that read the same session: the second save loses instead of overwriting.
+  private func sessionRevision(mongo: Bool) async throws {
+    let store = try await fixture(mongo: mongo)
+    _ = try await store.ingest(event("session.started"))
+    let read = { try await store.backend.session(project: store.binding.id, agent: "codex", session: "session1")! }
+    var first = try await read()
+    var second = try await read()
+    first.status = "blocked"
+    second.status = "working"
+    let won = try await store.backend.save(session: first, project: store.binding.id)
+    let lost = try await store.backend.save(session: second, project: store.binding.id)
+    XCTAssertTrue(won)
+    XCTAssertFalse(lost, "a stale copy overwrote a newer save")
+    // A lifecycle wake counts as a write too.
+    var stale = try await read()
+    _ = try await store.wake(agent: "codex", session: "session1", status: "waiting", source: "test_adapter")
+    stale.status = "working"
+    let afterWake = try await store.backend.save(session: stale, project: store.binding.id)
+    XCTAssertFalse(afterWake)
+    // Through ingest, concurrent events all land.
+    try await withThrowingTaskGroup(of: Void.self) { group in
+      for _ in 0..<8 { group.addTask { _ = try await store.ingest(self.event("tool.started")) } }
+      try await group.waitForAll()
+    }
+    let counted = try await read().eventCount
+    XCTAssertEqual(counted, 9)
   }
 }

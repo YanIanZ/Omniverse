@@ -70,11 +70,16 @@ final class MongoTests: XCTestCase {
   func testSecretRejectedWithoutPersisting() async throws {
     let (_, store) = try await fixture()
     let before = try await store.status().records
-    do {
-      _ = try await store.save(
-        SaveInput(title: "Sensitive", content: "password=synthetic-do-not-store"))
-      XCTFail("secret accepted")
-    } catch { XCTAssertTrue(error.localizedDescription.contains("secret_detected")) }
+    // Quoted forms too: JSON encoding escapes the quotes, so fields are checked raw.
+    for content in [
+      "password=synthetic-do-not-store", #"password = "synthetic-do-not-store""#,
+      #"{"password": "synthetic-do-not-store"}"#,
+    ] {
+      do {
+        _ = try await store.save(SaveInput(title: "Sensitive", content: content))
+        XCTFail("secret accepted: \(content)")
+      } catch { XCTAssertTrue(error.localizedDescription.contains("secret_detected")) }
+    }
     let after = try await store.status().records
     XCTAssertEqual(before, after)
   }

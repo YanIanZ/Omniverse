@@ -113,17 +113,20 @@ if [[ -e "$TARGET" || -e "$LAUNCHER" ]]; then
   fi
 fi
 export OMNIMEM_BUILD_CACHE="${OMNIMEM_BUILD_CACHE:-$CACHE/swift}"
-# Do not accidentally bundle a runtime pointer from the development-machine default.
-export OMNIMEM_REA_RUNTIME="$CACHE/integrations/rea-runtime.json"
+# Do not accidentally bundle a runtime pointer from the development-machine default, nor a
+# pointer an earlier --with-rea run left in the cache: empty means no REA runtime.
+if ((WITH_REA)); then export OMNIMEM_REA_RUNTIME="$CACHE/integrations/rea-runtime.json"; else export OMNIMEM_REA_RUNTIME=''; fi
 if ((WITH_REA)); then python3 "$ROOT/scripts/prepare-rea.py" --base "$CACHE"; fi
 mkdir -p "$PREFIX/bin" "$PREFIX/lib"
 LOCK="$PREFIX/lib/.omnimemo-install.lock"
 mkdir "$LOCK" 2>/dev/null || fail 'Another installation is active (or its lock needs review).'
-STAGE=""; OLD=""
+STAGE=""; OLD=""; COMMITTED=0
 cleanup() {
   [[ -z "$STAGE" ]] || rm -rf -- "$STAGE"
   if [[ -n "$OLD" && -d "$OLD" ]]; then
-    if [[ ! -e "$TARGET" ]]; then mv -- "$OLD" "$TARGET"; else rm -rf -- "$OLD"; fi
+    # The previous install is dropped only once the new launcher has answered.
+    if ((COMMITTED)); then rm -rf -- "$OLD"
+    else [[ ! -e "$TARGET" ]] || rm -rf -- "$TARGET"; mv -- "$OLD" "$TARGET"; fi
   fi
   rmdir "$LOCK"
 }
@@ -147,6 +150,7 @@ else
   printf 'Skipped %s: an unrelated file exists; use omnimem instead.\n' "$OM_LAUNCHER"
 fi
 "$LAUNCHER" --version
+COMMITTED=1
 if ((START_MONGO)); then
   OMNIMEM_MONGO_ROOT="${OMNIMEM_MONGO_ROOT:-$CACHE/mongodb}" OMNIMEM_MONGO_PORT=27018 "$ROOT/scripts/mongodb.sh" start
 fi

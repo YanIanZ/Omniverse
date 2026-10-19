@@ -22,6 +22,7 @@ public struct AgentSession: Codable, Sendable {
     case parentSessionID = "parent_session_id"
     case childSessionID = "child_session_id"
     case rolloverState = "rollover_state"
+    case revision
   }
   public var agent: String
   public var sessionID: String
@@ -51,6 +52,8 @@ public struct AgentSession: Codable, Sendable {
   public var parentSessionID: String? = nil
   public var childSessionID: String? = nil
   public var rolloverState: String? = nil
+  /// Write counter for compare-and-set saves; nil on sessions stored before it existed.
+  public var revision: Int? = nil
 }
 
 public struct TaskRecord: Codable, Sendable, Equatable {
@@ -137,7 +140,31 @@ extension MemoryStore {
     guard (1...128).contains(value.utf8.count),
       value.range(of: "^[A-Za-z0-9._:-]+$", options: .regularExpression) != nil
     else { throw MemoError.invalid("invalid \(name)") }
+    // MongoDB keys sessions as project:agent:session; a colon in the agent would let
+    // agent "a:b" + session "c" and agent "a" + session "b:c" share one document.
+    if name == "agent", value.contains(":") { throw MemoError.invalid("invalid agent") }
     return value
+  }
+
+  /// Revision-checked read-modify-write of one session, retried when another writer (a hook in
+  /// another process, the status line, a heartbeat) saved in between. `change` receives the stored
+  /// session or nil and returns the state to save; it must not have side effects.
+  @discardableResult
+  func updateSession(
+    agent: String, session: String, _ change: (AgentSession?) throws -> AgentSession
+  ) async throws -> AgentSession {
+    for attempt in 0..<12 {
+      // Random backoff spreads writers that collided, so each retry has a fair chance to win.
+      if attempt > 0 { try await Task.sleep(nanoseconds: UInt64.random(in: 1...20) * 1_000_000) }
+      let current = try await backend.session(project: binding.id, agent: agent, session: session)
+      var next = try change(current)
+      next.revision = current?.revision
+      if try await backend.save(session: next, project: binding.id) {
+        next.revision = (current?.revision ?? 0) + 1
+        return next
+      }
+    }
+    throw MemoError.revisionConflict
   }
 
   // MARK: Events
@@ -185,9 +212,18 @@ extension MemoryStore {
       let (previous, firstSeen) = try await backend.upsertSession(
         project: binding.id, agent: agent, session: session, status: status, source: source, now: now)
       if previous != status {
-        try await emit(
-          "agent.status.changed", entity: agent + ":" + session,
-          data: ["agent": agent, "status": status, "source": source])
+        do {
+          try await emit(
+            "agent.status.changed", entity: agent + ":" + session,
+            data: ["agent": agent, "status": status, "source": source])
+        } catch {
+          // Otherwise the change is stored unannounced and the next wake sees nothing to report.
+          if let previous {
+            _ = try? await backend.upsertSession(
+              project: binding.id, agent: agent, session: session, status: previous, source: source, now: now)
+          }
+          throw error
+        }
       }
       return AgentSession(
         agent: agent, sessionID: session, status: status, source: source,

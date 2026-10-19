@@ -22,6 +22,15 @@ final class ServerTests: XCTestCase {
     return h
   }
 
+  /// Signs in like the browser does and returns the minted session cookie value.
+  func session(_ app: Application) async throws -> String {
+    var value = ""
+    try await app.test(.GET, "auth?token=\(token)", headers: headers(auth: false)) {
+      value = $0.headers.setCookie?[OmniServer.cookie]?.string ?? ""
+    }
+    return value
+  }
+
   func testAuthHostAndOriginGuards() async throws {
     let (app, store) = try await app()
     try await app.test(.GET, "api/v1/health", headers: headers(auth: false)) {
@@ -34,10 +43,11 @@ final class ServerTests: XCTestCase {
       .GET, "api/v1/tasks", headers: headers([("Origin", "http://evil.test")])
     ) { XCTAssertEqual($0.status, .forbidden) }
     // Cookie-authenticated writes without an Origin are refused (CSRF defence).
+    let cookie = try await session(app)
     try await app.test(
       .POST, "api/v1/tasks",
       headers: headers(
-        [("Cookie", "omnimemo_session=\(token)"), ("Content-Type", "application/json")],
+        [("Cookie", "omnimemo_session=\(cookie)"), ("Content-Type", "application/json")],
         auth: false),
       body: ByteBuffer(string: #"{"title":"x"}"#)
     ) { XCTAssertEqual($0.status, .forbidden) }
@@ -48,6 +58,7 @@ final class ServerTests: XCTestCase {
       XCTAssertEqual($0.status, .seeOther)
       let cookie = $0.headers.first(name: .setCookie) ?? ""
       XCTAssertTrue(cookie.contains("HttpOnly") && cookie.contains("SameSite=Strict"))
+      XCTAssertFalse(cookie.contains(token), "the cookie never carries the server token")
     }
     try await app.test(.GET, "api/v1/health", headers: headers()) { res in
       XCTAssertEqual(res.status, .ok)
@@ -102,8 +113,9 @@ final class ServerTests: XCTestCase {
       body: ByteBuffer(data: try JSONEncoder().encode(foreign))) {
       XCTAssertEqual($0.status, .forbidden)
     }
+    let cookie = try await session(app)
     try await app.test(.POST, "api/runtime/events",
-      headers: headers([("Cookie", "omnimemo_session=\(token)"), ("Content-Type", "application/json")], auth: false),
+      headers: headers([("Cookie", "omnimemo_session=\(cookie)"), ("Content-Type", "application/json")], auth: false),
       body: body) {
       XCTAssertEqual($0.status, .forbidden, "cookie writes require an Origin")
     }
@@ -151,7 +163,13 @@ final class ServerTests: XCTestCase {
     try await app.test(.POST, path, headers: headers([json, origin]), body: body) {
       XCTAssertEqual($0.status, .forbidden)
     }
-    let browser = headers([json, origin, ("Cookie", "omnimemo_session=\(token)")], auth: false)
+    // The server token itself is not a browser session, even when sent as the cookie.
+    let forged = headers([json, origin, ("Cookie", "omnimemo_session=\(token)")], auth: false)
+    try await app.test(.POST, path, headers: forged, body: body) {
+      XCTAssertEqual($0.status, .unauthorized)
+    }
+    let signedIn = try await session(app)
+    let browser = headers([json, origin, ("Cookie", "omnimemo_session=\(signedIn)")], auth: false)
     try await app.test(.POST, path, headers: browser, body: body) { res in
       XCTAssertEqual(res.status, .ok)
       XCTAssertEqual(try res.content.decode(ApprovalRecord.self).status, "approved")

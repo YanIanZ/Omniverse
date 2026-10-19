@@ -118,7 +118,9 @@ final class MongoBackend: StoreBackend, @unchecked Sendable {
   }
 
   func recent(project: String, limit: Int) async throws -> [MemoryRecord] {
-    try await records.find(["project_id": project]).sort(["created_at": -1]).limit(limit)
+    // created_at has one-second precision; the ObjectId breaks ties in insertion order
+    // (exact within one process, like SQLite's rowid).
+    try await records.find(["project_id": project]).sort(["created_at": -1, "_id": -1]).limit(limit)
       .decode(MemoryRecord.self).drain()
   }
 
@@ -191,7 +193,10 @@ final class MongoBackend: StoreBackend, @unchecked Sendable {
       entityID: entity, revision: seq, timestamp: nowISO(), data: data)
     var doc = try BSONEncoder().encode(event)
     doc["_id"] = event.eventID
-    _ = try await events.insert(doc)
+    // MongoKitten reports a rejected insert (e.g. duplicate key) as writeErrors with ok:1.
+    guard (try await events.insert(doc).writeErrors ?? []).isEmpty else {
+      throw MemoError.database("event insert rejected")
+    }
     _ = try? await events.deleteAll(where: ["project_id": project, "revision": ["$lte": seq - keep]])
     return event
   }
@@ -217,6 +222,8 @@ final class MongoBackend: StoreBackend, @unchecked Sendable {
           "source": source, "last_seen": now,
         ] as Document,
         "$setOnInsert": ["first_seen": now] as Document,
+        // Bumps the revision so a concurrent compare-and-set save notices this write.
+        "$inc": ["revision": 1] as Document,
       ], returnValue: .original
     ).execute()
     return (reply.value?["status"] as? String, reply.value?["first_seen"] as? String)
@@ -241,9 +248,12 @@ final class MongoBackend: StoreBackend, @unchecked Sendable {
     try await sessions.findOne(["_id": project + ":" + agent + ":" + session], as: AgentSession.self)
   }
 
-  func save(session: AgentSession, project: String) async throws {
+  func save(session: AgentSession, project: String) async throws -> Bool {
+    let id = project + ":" + session.agent + ":" + session.sessionID
+    let expected = session.revision ?? 0
     var doc = try BSONEncoder().encode(session)
     doc["project_id"] = project
+    doc["revision"] = expected + 1
     let firstSeen = doc["first_seen"]
     doc.removeValue(forKey: "first_seen")
     // $set keeps fields owned by other writers (context_digest); first_seen is set once.
@@ -256,14 +266,30 @@ final class MongoBackend: StoreBackend, @unchecked Sendable {
       cleared[key] = ""
     }
     if !cleared.isEmpty { update["$unset"] = cleared }
-    _ = try await sessions.findOneAndUpsert(
-      where: ["_id": project + ":" + session.agent + ":" + session.sessionID], replacement: update
-    ).execute()
+    let current: Document =
+      expected == 0
+      ? ["$or": [["revision": ["$exists": false] as Document], ["revision": 0]] as Document]
+      : ["revision": expected]
+    var filter: Document = ["_id": id]
+    for (key, value) in current { filter[key] = value }
+    // A stale revision misses the filter; the upsert then collides on _id and nothing is written.
+    let reply = try? await sessions.findOneAndUpsert(where: filter, replacement: update, returnValue: .modified)
+      .execute()
+    if let reply, reply.ok == 1, reply.value != nil { return true }
+    let stored = try await sessions.findOne(["_id": id])
+    guard let stored else { throw MemoError.database("session write failed") }
+    let revision = stored["revision"] as? Int ?? (stored["revision"] as? Int32).map(Int.init) ?? 0
+    if revision != expected { return false }
+    throw MemoError.database("session write failed")
   }
 
   func claimRuntimeEvent(project: String, key: String, at: String) async throws -> Bool {
     let result = try await db["omnimem_runtime_seen"].insert(["_id": project + "|" + key, "at": Date()])
     return (result.writeErrors ?? []).isEmpty
+  }
+
+  func releaseRuntimeEvent(project: String, key: String) async throws {
+    _ = try await db["omnimem_runtime_seen"].deleteOne(where: ["_id": project + "|" + key])
   }
 
   func tasks(project: String, limit: Int) async throws -> [TaskRecord] {
@@ -307,7 +333,7 @@ final class MongoBackend: StoreBackend, @unchecked Sendable {
   func insert(approval: ApprovalRecord, project: String) async throws {
     var doc = try BSONEncoder().encode(approval)
     doc["project_id"] = project
-    _ = try await approvals.insert(doc)
+    guard (try await approvals.insert(doc).writeErrors ?? []).isEmpty else { throw MemoError.conflict }
   }
 
   func approval(project: String, id: String) async throws -> ApprovalRecord? {

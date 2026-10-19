@@ -5,8 +5,9 @@ import OmniMemoCore
 struct Options: ParsableArguments {
   @Option(name: .long, help: "Local metadata/cache root. Only init creates it.") var dataDir:
     String = defaultDataDirectory()
-  @Option(name: .long, help: "Authorized project root, fixed for this process.") var project:
-    String = FileManager.default.currentDirectoryPath
+  @Option(name: .customLong("project"), help: "Authorized project root, fixed for this process (default: working directory).")
+  var explicitProject: String?
+  var project: String { explicitProject ?? FileManager.default.currentDirectoryPath }
   @Option(name: .long, help: "Provenance label; not an authentication identity.") var agent:
     String = "cli"
   func open() async throws -> MemoryStore {
@@ -51,8 +52,8 @@ struct OmniMemo: AsyncParsableCommand {
     @Option(help: "MongoDB URI without credentials; OMNIMEM_MONGO_URI, if set, takes precedence.")
     var mongoUri: String?
     @Option(help: "Disposable cache quota in MiB.") var cacheMib: Int = 32
-    @Option(help: "Storage profile: mongodb (MongoDB, optional Redis) or sqlite (embedded db/memory.sqlite).")
-    var backend = "mongodb"
+    @Option(help: "Storage profile: mongodb (default; MongoDB, optional Redis) or sqlite (embedded db/memory.sqlite).")
+    var backend: String?
     @Flag(help: "Make this data directory the default via a small user-level pointer.")
     var setDefault = false
     func run() async throws {
@@ -355,6 +356,10 @@ struct OmniMemo: AsyncParsableCommand {
       @Flag(help: "Serve MCP using standard input/output.") var stdio = false
       func run() async throws {
         guard stdio else { throw ValidationError("only --stdio transport is supported") }
+        // Hosts may start MCP servers from any directory: the project is never inferred (SPEC V21).
+        guard options.explicitProject != nil else {
+          throw ValidationError("mcp serve needs --project; use scripts/global-mcp.sh for hosts")
+        }
         let store = try await options.open()
         try await MCPService.serve(store: store, agent: options.agent)
       }

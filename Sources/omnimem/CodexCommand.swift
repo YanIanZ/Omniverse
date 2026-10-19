@@ -51,6 +51,11 @@ final class AppServerConnection: @unchecked Sendable {
     return nil
   }
 
+  /// Ends an app-server that ignores interrupts; pending reads then see the closed output.
+  func kill() {
+    if process.isRunning { process.terminate() }
+  }
+
   func close() {
     try? input.fileHandleForWriting.close()
     if process.isRunning { process.terminate() }
@@ -121,9 +126,22 @@ final class ManagedCodexRun: @unchecked Sendable {
   let model: String?
   let task: String?
   let timeout: Int
+  /// Seconds an interrupted turn gets to stop, and a setup call gets to answer.
+  static let killGrace: UInt64 = 30
+  static let callTimeout: UInt64 = 120
   private var reportedModel: String?
-  private var current: String?
-  private var turnID: String?
+  // Read by the heartbeat and timeout tasks while the run writes them: locked.
+  private let state = NSLock()
+  private var currentValue: String?
+  private var turnValue: String?
+  private var current: String? {
+    get { state.withLock { currentValue } }
+    set { state.withLock { currentValue = newValue } }
+  }
+  private var turnID: String? {
+    get { state.withLock { turnValue } }
+    set { state.withLock { turnValue = newValue } }
+  }
 
   init(store: MemoryStore, connection: AppServerConnection, sandbox: String, model: String?, task: String?, timeout: Int) {
     self.store = store
@@ -188,7 +206,7 @@ final class ManagedCodexRun: @unchecked Sendable {
       try await store.linkRolloverChild(agent: "codex", parent: parent, child: child)
       let outcome = try await runTurn(
         child,
-        capsule.text + "\nFirst line of your reply must be exactly `\(token)`; then continue the work above.")
+        capsule.text + "\nFirst line of your reply must be exactly `\(token)`; then resume your own task from the records above, verifying them against the repository.")
       let acknowledged = outcome.messages.first?.split(whereSeparator: \.isNewline).first
         .map { $0.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "`")) == token }
         ?? false
@@ -217,6 +235,15 @@ final class ManagedCodexRun: @unchecked Sendable {
     guard record.owner == nil || record.owner == "codex" else {
       throw MemoError.invalid("task is owned by \(record.owner!)")
     }
+    guard ["todo", "doing", "review"].contains(record.status) else {
+      throw MemoError.invalid("task is \(record.status)")
+    }
+    // Ownership is per provider, so another live Codex session on the task is checked by session.
+    let assigned = Set(try await store.agents().filter { $0.agent == "codex" && $0.taskID == id }.map(\.sessionID))
+    let busy = try await store.runtimeAgents().contains {
+      $0.client == "codex" && assigned.contains($0.sessionID) && !["stale", "offline"].contains($0.status)
+    }
+    guard !busy else { throw MemoError.invalid("another Codex session is working on this task") }
     if record.status == "todo" || record.owner == nil {
       _ = try await store.updateTask(
         id: id, expectedRevision: record.revision, status: record.status == "todo" ? "doing" : nil,
@@ -247,6 +274,9 @@ final class ManagedCodexRun: @unchecked Sendable {
     let timer = Task { [self] in
       try await Task.sleep(nanoseconds: UInt64(timeout) * 1_000_000_000)
       if let turn = turnID { connection.request("turn/interrupt", ["threadId": thread, "turnId": turn]) }
+      // No turn id yet, or the interrupt was ignored: the limit still holds.
+      try await Task.sleep(nanoseconds: Self.killGrace * 1_000_000_000)
+      connection.kill()
     }
     defer { timer.cancel() }
     var outcome = Outcome(status: "failed")
@@ -307,6 +337,12 @@ final class ManagedCodexRun: @unchecked Sendable {
 
   private func call(_ method: String, _ params: [String: Any]) async throws -> [String: Any] {
     let id = connection.request(method, params)
+    // Setup calls answer quickly; a hung app-server must not block the run forever.
+    let watchdog = Task { [connection] in
+      try await Task.sleep(nanoseconds: Self.callTimeout * 1_000_000_000)
+      connection.kill()
+    }
+    defer { watchdog.cancel() }
     while let message = try await connection.next() {
       guard message["id"] as? Int == id, message["method"] == nil else { continue }
       if let error = message["error"] as? [String: Any] {

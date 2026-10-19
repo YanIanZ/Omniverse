@@ -6,7 +6,8 @@ PORT="${OMNIMEM_MONGO_PORT:-27018}"
 case "${1:-status}" in
   start)
     mkdir -p "$BASE/db"
-    if [ -f "$BASE/mongod.pid" ] && kill -0 "$(cat "$BASE/mongod.pid")" 2>/dev/null; then
+    # A reused pid of an unrelated process is not this MongoDB.
+    if [ -f "$BASE/mongod.pid" ] && ps -p "$(cat "$BASE/mongod.pid")" -o command= 2>/dev/null | grep -F -- "--dbpath $BASE/db" >/dev/null; then
       echo "OmniMemo MongoDB is already running."
       exit 0
     fi

@@ -104,7 +104,8 @@ public struct ProjectBinding: Sendable {
     // Only components inside the project; the project's own ancestors are not sensitive.
     let parts = target.pathComponents.dropFirst(root.pathComponents.count)
     guard
-      !parts.contains(where: {
+      // Lowercased: APFS is case-insensitive by default, so `.ENV` opens `.env`.
+      !parts.map { $0.lowercased() }.contains(where: {
         $0.hasPrefix(".env") || [".ssh", ".aws", ".gnupg", "credentials"].contains($0)
       })
     else { throw MemoError.denied }

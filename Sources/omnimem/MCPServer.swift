@@ -13,7 +13,8 @@ struct ContextInput: Codable {
   var maxTokens: Int?
 }
 
-/// MCP first use is a verified presence signal: the client named itself in `initialize`.
+/// MCP first use is a presence signal. The provider comes from the name the client reported in
+/// `initialize`; it is self-reported, so it labels provenance and never authenticates.
 actor MCPPresence {
   let store: MemoryStore
   let session = "mcp-" + UUID().uuidString.lowercased().prefix(12)
@@ -45,6 +46,10 @@ enum MCPService {
       name: "OmniMemo", version: "0.3.0", capabilities: .init(tools: .init(listChanged: false)))
     await server.withMethodHandler(ListTools.self) { _ in .init(tools: tools) }
     await server.withMethodHandler(CallTool.self) { params in
+      // MCP: an unknown tool is a protocol error (-32602), not a tool result.
+      guard tools.contains(where: { $0.name == params.name }) else {
+        throw MCPError.invalidParams("unknown tool")
+      }
       await presence.used()
       do {
         let arguments = params.arguments ?? [:]

@@ -4,6 +4,8 @@ set -euo pipefail
 fail() { printf 'OmniMemo push guard: %s\n' "$*" >&2; exit 1; }
 remote_name="${1:-}"
 actual_url="${2:-}"
+# Git lists the refs being pushed on stdin; read them before any child process can consume them.
+updates="$(cat)"
 [[ "$remote_name" == 'origin' ]] || fail 'Only origin is allowed.'
 # Strict SSH-only policy in this reference hook. HTTPS requires a separately verified adapter.
 if [[ "$actual_url" =~ ^git@github[.]com:YanIanZ/[A-Za-z0-9_.-]+([.]git)?$ ]]; then :
@@ -18,18 +20,20 @@ expected_email="$(git config --local --get omnimem.guard.email || true)"
 [[ "$(git config --local --get user.name || true)" == 'YanIanZ' ]] || fail 'user.name != YanIanZ.'
 [[ "$(git config --local --get user.email || true)" == "$expected_email" ]] || fail 'user.email != approved email.'
 # SSH -T GitHub commonly returns status 1 on successful authentication (no shell).
-ssh_output="$(ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes git@github.com 2>&1 || true)"
+ssh_output="$(ssh -n -T -o BatchMode=yes -o StrictHostKeyChecking=yes git@github.com 2>&1 </dev/null || true)"
 [[ "$ssh_output" == *'Hi YanIanZ!'* ]] || fail 'SSH authenticated GitHub account is not verified as YanIanZ.'
 # SSH identity is decisive for this SSH-only hook. GH CLI account is advisory but must not contradict it.
 if command -v gh >/dev/null 2>&1; then
-  cli_user="$(gh api user --jq .login 2>/dev/null || true)"
+  cli_user="$(gh api user --jq .login 2>/dev/null </dev/null || true)"
   [[ -z "$cli_user" || "$cli_user" == 'YanIanZ' ]] || fail "gh CLI active account differs: $cli_user"
 fi
 # SHA-1 and SHA-256 repositories can use different all-zero object IDs.
 zero_pattern='^0+$'
 while read -r local_ref local_oid remote_ref remote_oid; do
   [[ -n "${local_ref:-}" ]] || continue
-  [[ "$local_ref" == refs/heads/* ]] || fail 'Tag/non-branch push is blocked by default.'
+  # The destination decides what is created on the remote (main:refs/tags/x is a tag push).
+  [[ "$remote_ref" == refs/heads/* ]] || fail 'Tag/non-branch push is blocked by default.'
+  [[ "$local_ref" == refs/heads/* || "$local_ref" == HEAD ]] || fail 'Tag/non-branch push is blocked by default.'
   [[ ! "$local_oid" =~ $zero_pattern ]] || fail 'Ref deletion not permitted.'
   # Requires an up-to-date view of the remote; fail-closed when unavailable.
   if [[ ! "$remote_oid" =~ $zero_pattern ]]; then
@@ -50,4 +54,4 @@ while read -r local_ref local_oid remote_ref remote_oid; do
       fail "Commit $sha has an attribution trailer requiring review."
     fi
   done <<< "$commits"
-done
+done <<< "$updates"

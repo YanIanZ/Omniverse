@@ -33,10 +33,13 @@ protocol StoreBackend: Sendable {
     async throws -> Bool
   func sessions(project: String, limit: Int) async throws -> [AgentSession]
   func session(project: String, agent: String, session: String) async throws -> AgentSession?
-  /// Upserts the whole session state (runtime fields included).
-  func save(session: AgentSession, project: String) async throws
+  /// Upserts the whole session state (runtime fields included) if its stored revision still
+  /// equals `session.revision` (nil = 0), storing revision + 1. False when another writer won.
+  func save(session: AgentSession, project: String) async throws -> Bool
   /// Claims a runtime event key once; false for a duplicate within the retention window.
   func claimRuntimeEvent(project: String, key: String, at: String) async throws -> Bool
+  /// Forgets a claim whose event could not be applied, so a retry is not a duplicate.
+  func releaseRuntimeEvent(project: String, key: String) async throws
   func tasks(project: String, limit: Int) async throws -> [TaskRecord]
   /// Returns false when the task id already exists in the project.
   func insert(task: TaskRecord, project: String) async throws -> Bool

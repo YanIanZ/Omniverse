@@ -63,14 +63,21 @@ public actor MemoryStore {
   /// Explicit, one-time choice of storage profile; there is no automatic fallback between them.
   public static func initialize(
     dataDir: String, project: String, uri: String? = nil, cacheMaxBytes: Int = 32 * 1024 * 1024,
-    backend profile: String = "mongodb"
+    backend requested: String? = nil
   ) async throws -> MemoryStore {
     let root = canonical(dataDir)
     let binding = try ProjectBinding(path: project)
     let file = root.appendingPathComponent("meta.json")
     if FileManager.default.fileExists(atPath: file.path) {
-      return try await open(dataDir: dataDir, project: project)
+      let store = try await open(dataDir: dataDir, project: project)
+      // Re-running init is fine; asking for another profile is not a silent no-op.
+      if let requested, requested != (store.config.backend ?? "mongodb") {
+        await store.close()
+        throw MemoError.invalid("data directory already uses \(store.config.backend ?? "mongodb"); profiles never switch")
+      }
+      return store
     }
+    let profile = requested ?? "mongodb"
     guard (0...2048 * 1024 * 1024).contains(cacheMaxBytes) else {
       throw MemoError.invalid("cache quota out of range")
     }
@@ -83,7 +90,10 @@ public actor MemoryStore {
       let config = StoreConfig(
         schemaVersion: 1, storeID: storeID, mongoURI: nil, cacheMaxBytes: cacheMaxBytes,
         cacheTTLSeconds: 86400, backend: "sqlite")
-      try protectedWrite(try encodeJSON(config, pretty: true), to: file)
+      do { try protectedWrite(try encodeJSON(config, pretty: true), to: file) } catch {
+        await backend.close()
+        throw error
+      }
       return MemoryStore(binding: binding, root: root, config: config, backend: backend)
     }
     // Same precedence as open(): the environment wins, so init and later reads use one database.
@@ -91,8 +101,9 @@ public actor MemoryStore {
       ProcessInfo.processInfo.environment["OMNIMEM_MONGO_URI"] ?? uri
       ?? "mongodb://127.0.0.1:27017/omnimemo"
     // Credentials only come from the process environment, never the on-disk pointer.
+    // Any userinfo counts, for mongodb+srv:// and user-only (token) URIs as well.
     let credentialed =
-      address.range(of: "mongodb://[^/@]+:[^/@]+@", options: .regularExpression) != nil
+      address.range(of: "^mongodb(\\+srv)?://[^/@]+@", options: .regularExpression) != nil
     if credentialed && ProcessInfo.processInfo.environment["OMNIMEM_MONGO_URI"] != address {
       throw MemoError.invalid("supply credentialed URI via OMNIMEM_MONGO_URI")
     }
@@ -101,7 +112,7 @@ public actor MemoryStore {
       let storedURI =
         credentialed
         ? address.replacingOccurrences(
-          of: "(?<=mongodb://)[^/@]*@", with: "", options: .regularExpression) : address
+          of: "(?<=://)[^/@]*@", with: "", options: .regularExpression) : address
       let config = StoreConfig(
         schemaVersion: 1, storeID: storeID, mongoURI: storedURI, cacheMaxBytes: cacheMaxBytes,
         cacheTTLSeconds: 86400, backend: nil)
@@ -164,7 +175,10 @@ public actor MemoryStore {
     for tag in input.tags ?? [] {
       guard tag.utf8.count <= 128 else { throw MemoError.invalid("tag too long") }
     }
-    try SecretFilter.check(String(decoding: try encodeJSON(input), as: UTF8.self))
+    // Raw fields, not their JSON: encoding escapes quotes, which the patterns would stop at.
+    let fields = [input.kind, input.title, input.content, input.idempotencyKey, input.subject, input.predicate]
+      .compactMap { $0 } + (input.sources ?? []) + (input.tags ?? [])
+    for field in fields { try SecretFilter.check(field) }
     try SecretFilter.check(agent)
     let evidence = try (input.sources ?? []).map { try binding.evidence($0) }
     let branch = binding.branch
@@ -270,8 +284,9 @@ public actor MemoryStore {
       guard try await backend.deleteRecord(project: binding.id, id: id) else {
         throw MemoError.notFound
       }
-      try cache.clear()
     } catch { throw Self.safeError(error) }
+    // The record is gone; a cache file another process removed meanwhile is not a failure.
+    try? cache.clear()
   }
 
   public func exportRecords() async throws -> [MemoryRecord] {

@@ -22,7 +22,8 @@ cp -R frontend/dist "$DEST/frontend"
 ln -sf omnimem "$DEST/om"
 cp Package.resolved "$DEST/Package.resolved"
 cp LICENSE "$DEST/LICENSE"
-REA_RUNTIME="${OMNIMEM_REA_RUNTIME:-/Volumes/Ext/DevCache/OmniMemo/integrations/rea-runtime.json}"
-if [ -f "$REA_RUNTIME" ]; then cp "$REA_RUNTIME" "$DEST/rea-runtime.json"; fi
+# Unset: the development default. Set but empty: package without an REA runtime.
+REA_RUNTIME="${OMNIMEM_REA_RUNTIME-/Volumes/Ext/DevCache/OmniMemo/integrations/rea-runtime.json}"
+if [ -n "$REA_RUNTIME" ] && [ -f "$REA_RUNTIME" ]; then cp "$REA_RUNTIME" "$DEST/rea-runtime.json"; fi
 "$DEST/omnimem" --version
 printf 'Packaged at %s\n' "$DEST"

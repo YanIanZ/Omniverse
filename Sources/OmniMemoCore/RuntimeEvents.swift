@@ -139,6 +139,12 @@ public struct Progress: Codable, Sendable, Equatable {
 
 public enum RuntimeMapping {
   /// Reduces a host tool name to a category; arguments are never inspected.
+  /// Every value `toolCategory` can return: the only tool detail a session ever stores.
+  public static let toolCategories: Set<String> = [
+    "mcp", "file_edit", "file_read", "search", "shell", "web", "subagent", "question", "skill",
+    "planning", "other", "unknown",
+  ]
+
   public static func toolCategory(_ name: String?) -> String {
     let n = (name ?? "").lowercased()
     if n.hasPrefix("mcp__") || n.hasPrefix("mcp.") { return "mcp" }

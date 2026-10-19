@@ -45,6 +45,9 @@ extension MemoryStore {
     return f
   }()
 
+  /// How far ahead of this machine's clock an adapter's `occurred_at` may be.
+  static let clockSkew: TimeInterval = 300
+
   static func date(_ text: String) -> Date? { iso.date(from: text) ?? isoFraction.date(from: text) }
 
   /// Validates, deduplicates, applies and broadcasts one adapter event. The durable store is
@@ -61,7 +64,8 @@ extension MemoryStore {
     let source = try Self.label(e.source, "source")
     let external = try Self.label(e.externalSessionID, "external_session_id")
     if let workspace = e.workspaceID, workspace != binding.id, workspace != "local" { throw MemoError.denied }
-    guard let occurred = Self.date(e.occurredAt), occurred < Date().addingTimeInterval(86400) else {
+    // A future time would rank every later real event as older and freeze the card.
+    guard let occurred = Self.date(e.occurredAt), occurred < Date().addingTimeInterval(Self.clockSkew) else {
       throw MemoError.invalid("occurred_at")
     }
     if let task = e.taskID { _ = try Self.label(task, "task_id") }
@@ -78,53 +82,62 @@ extension MemoryStore {
       if let text = value.text { metadata[key] = String(text.prefix(120)) }
     }
     guard metadata.count <= 12 else { throw MemoError.invalid("metadata size") }
+    // Categories only: a raw tool name or argument text is reduced to its category.
+    if let category = metadata["tool_category"], !RuntimeMapping.toolCategories.contains(category) {
+      metadata["tool_category"] = RuntimeMapping.toolCategory(category)
+    }
     try SecretFilter.check(metadata.values.joined(separator: "\n") + (e.modelID ?? ""))
 
+    let now = nowISO()
+    let key = e.provider + "|" + external + "|" + e.eventID.lowercased()
     do {
-      let now = nowISO()
-      guard
-        try await backend.claimRuntimeEvent(
-          project: binding.id, key: e.provider + "|" + external + "|" + e.eventID.lowercased(), at: now)
+      guard try await backend.claimRuntimeEvent(project: binding.id, key: key, at: now)
       else { return IngestResult(accepted: false, duplicate: true, cursor: nil, status: nil) }
-
-      var session =
-        try await backend.session(project: binding.id, agent: e.provider, session: external)
-        ?? AgentSession(
-          agent: e.provider, sessionID: external, status: "waiting", source: source, firstSeen: now,
-          lastSeen: now)
-      let before = session.status
-      session.runtimeID = session.runtimeID ?? UUID().uuidString.lowercased()
-      session.lastSeen = now
-      session.source = source
-      session.eventCount = (session.eventCount ?? 0) + 1
-      if let mode = metadata["observability"], ["managed", "passive"].contains(mode) {
-        session.observability = mode
-      } else if session.observability == nil {
-        session.observability = "passive"
-      }
-      // Older or reordered events are recorded but never move the state backwards.
-      let older =
-        (e.sequence != nil && session.lastSequence != nil && e.sequence! < session.lastSequence!)
-        || (session.lastEventAt.flatMap(Self.date).map { occurred < $0 } ?? false)
-      if !older {
-        if let model = e.modelID { session.model = model }
-        if let status = RuntimeMapping.status(for: e.eventType) { session.status = status }
-        session.lastEvent = e.eventType
-        session.lastEventAt = Self.iso.string(from: occurred)
-        if let sequence = e.sequence { session.lastSequence = sequence }
-        switch e.eventType {
-        case "tool.started", "tool.succeeded", "tool.failed":
-          session.toolCategory = metadata["tool_category"] ?? "unknown"
-        case "turn.completed", "turn.failed", "session.started", "session.resumed", "session.ended":
-          session.toolCategory = nil
-        default: break
+    } catch { throw Self.safeError(error) }
+    var saved = false
+    do {
+      var before = "waiting"
+      let session = try await updateSession(agent: e.provider, session: external) { stored in
+        var session =
+          stored
+          ?? AgentSession(
+            agent: e.provider, sessionID: external, status: "waiting", source: source, firstSeen: now,
+            lastSeen: now)
+        before = session.status
+        session.runtimeID = session.runtimeID ?? UUID().uuidString.lowercased()
+        session.lastSeen = now
+        session.source = source
+        session.eventCount = (session.eventCount ?? 0) + 1
+        if let mode = metadata["observability"], ["managed", "passive"].contains(mode) {
+          session.observability = mode
+        } else if session.observability == nil {
+          session.observability = "passive"
         }
-        if e.eventType == "task.assigned", let task = e.taskID { session.taskID = task }
-        if let title = metadata["title"], autoSave.titles {
-          session.title = String(title.split(whereSeparator: \.isNewline).first ?? "").prefix(80).description
+        // Older or reordered events are recorded but never move the state backwards.
+        let older =
+          (e.sequence != nil && session.lastSequence != nil && e.sequence! < session.lastSequence!)
+          || (session.lastEventAt.flatMap(Self.date).map { occurred < $0 } ?? false)
+        if !older {
+          if let model = e.modelID { session.model = model }
+          if let status = RuntimeMapping.status(for: e.eventType) { session.status = status }
+          session.lastEvent = e.eventType
+          session.lastEventAt = Self.iso.string(from: occurred)
+          if let sequence = e.sequence { session.lastSequence = sequence }
+          switch e.eventType {
+          case "tool.started", "tool.succeeded", "tool.failed":
+            session.toolCategory = metadata["tool_category"] ?? "unknown"
+          case "turn.completed", "turn.failed", "session.started", "session.resumed", "session.ended":
+            session.toolCategory = nil
+          default: break
+          }
+          if e.eventType == "task.assigned", let task = e.taskID { session.taskID = task }
+          if let title = metadata["title"], autoSave.titles {
+            session.title = String(title.split(whereSeparator: \.isNewline).first ?? "").prefix(80).description
+          }
         }
+        return session
       }
-      try await backend.save(session: session, project: binding.id)
+      saved = true
 
       if e.eventType == "milestone.verified", let task = e.taskID, let milestone = e.milestoneID {
         _ = try? await setMilestone(
@@ -140,7 +153,11 @@ extension MemoryStore {
           "source": source, "confidence": e.sourceConfidence,
         ])
       return IngestResult(accepted: true, duplicate: false, cursor: event.revision, status: session.status)
-    } catch { throw Self.safeError(error) }
+    } catch {
+      // Not applied, so not seen: the adapter's retry must not be dropped as a duplicate.
+      if !saved { try? await backend.releaseRuntimeEvent(project: binding.id, key: key) }
+      throw Self.safeError(error)
+    }
   }
 
   /// Agent cards: stale silence derived here, labels only from reported models.

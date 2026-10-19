@@ -88,7 +88,10 @@ export function ago(iso: string | undefined, now: number) {
 }
 
 /** A handoff in flight: the parent's checkpoint saved, then the fresh child awaiting its ACK. */
-type Pending = { parent: string; child?: string; digest: string; capsule: string; lastRequest?: string }
+type Pending = { parent: string; child?: string; digest: string; capsule: string; lastRequest?: string; startedAt: number }
+
+/** A child that never finishes its first turn must not block every later rollover. */
+const pendingLimitMs = 15 * 60_000
 
 // Options are read in register on each load; the rest starts over on a reload.
 const config = { om: 'om', mode: 'suggest', rolloverAt: 80, prepareAt: 70 }
@@ -141,6 +144,7 @@ async function refresh($: EngineInterface, context?: number) {
 
 /** Checkpoint, reserve the only child, /clear into a fresh session, deliver the capsule once. */
 async function rollOver($: EngineInterface, parent: string, why: string) {
+  await expirePending($)
   if (pending) return 'A rollover is already in progress.'
   const prepared = await run($, ['--agent', 'claude', 'rollover', 'prepare', '--session', parent, '--provider', 'claude'])
   const parsed = prepared.exitCode === 0 ? parsePrepared(prepared.stdout) : undefined
@@ -148,7 +152,7 @@ async function rollOver($: EngineInterface, parent: string, why: string) {
   const reserved = await run($, ['rollover', 'begin', '--session', parent, '--provider', 'claude'])
   if (reserved.exitCode !== 0) return 'Rollover not started: this session already handed off once (one child per session).'
   const lastUser = (await $.session.messages()).filter(m => m.role === 'user' && m.text.trim()).at(-1)
-  pending = { parent, ...parsed, lastRequest: lastUser?.text.slice(0, 1200) }
+  pending = { parent, ...parsed, lastRequest: lastUser?.text.slice(0, 1200), startedAt: Date.now() }
   const fail = async (reason: string) => {
     await run($, ['rollover', 'report', '--session', parent, '--digest', parsed.digest, '--outcome', 'failed', '--reason', reason])
     pending = undefined
@@ -159,20 +163,30 @@ async function rollOver($: EngineInterface, parent: string, why: string) {
   if (!cleared) return fail('/clear did not run')
   const child = await $.session.id()
   if (child === parent) return fail('no new session after /clear')
-  await run($, ['rollover', 'link', '--session', parent, '--child', child, '--provider', 'claude'])
+  const linked = await run($, ['rollover', 'link', '--session', parent, '--child', child, '--provider', 'claude'])
+  if (linked.exitCode !== 0) return fail('the fresh session could not be linked')
   pending = { ...pending, child }
   rollovers.push(Date.now())
   const request = pending.lastRequest
     ? `\nLast request from the person (verbatim, cut to 1200 characters):\n${pending.lastRequest}\n`
     : ''
   void $.prompt.submit({
-    text: `${parsed.capsule}${request}\nOmniMemo rollover (${why}) from session ${parent}. First line of your reply must be exactly \`ACK ${parsed.digest}\`; then continue the work above.`,
+    text: `${parsed.capsule}${request}\nOmniMemo rollover (${why}) from session ${parent}. First line of your reply must be exactly \`ACK ${parsed.digest}\`; then resume your own task from the records above, verifying them against the repository.`,
   })
   return `Fresh session ${child} started from the verified capsule (digest ${parsed.digest}); waiting for the acknowledgement.`
 }
 
+/** Records an unanswered handoff as failed once it is older than the limit. */
+async function expirePending($: EngineInterface) {
+  if (!pending || Date.now() - pending.startedAt < pendingLimitMs) return
+  const child = pending.child ? ['--child', pending.child] : []
+  await run($, ['rollover', 'report', '--session', pending.parent, ...child, '--digest', pending.digest, '--outcome', 'failed', '--reason', 'no acknowledgement in time'])
+  pending = undefined
+}
+
 /** After a main turn: settle an ACK, report usage, then prepare or hand off on a rising level. */
 async function afterTurn($: EngineInterface, answer: string) {
+  await expirePending($)
   const session = await $.session.id()
   if (pending?.child && pending.child === session) {
     const ok = acknowledged(answer, pending.digest)

@@ -43,9 +43,12 @@ def locations(home, custom_home, layout):
     legacy = home/'.gemini/antigravity/mcp_config.json'
     if legacy.exists() and not antigravity.exists(): antigravity = legacy
     xcode = home/'Library/Developer/Xcode/CodingAssistant'
+    # With CLAUDE_CONFIG_DIR set, Claude Code keeps .claude.json in that directory, beside the
+    # settings.json that receives hooks and the status line.
+    claude=home/'.claude.json' if custom_home or 'CLAUDE_CONFIG_DIR' not in os.environ else pathlib.Path(os.environ['CLAUDE_CONFIG_DIR'])/'.claude.json'
     return {
         'codex':(codex/'config.toml','toml',()),
-        'claude':(home/'.claude.json','json',('mcpServers',)),
+        'claude':(claude,'json',('mcpServers',)),
         'gemini':(home/'.gemini/settings.json','json',('mcpServers',)),
         'opencode':(config/'opencode/opencode.json','json',('mcp','servers') if layout=='v2' else ('mcp',)),
         'vscode':(home/'Library/Application Support/Code/User/mcp.json','json',('servers',)),
@@ -237,6 +240,23 @@ def plan_entry(path, kind, keys, expected, uninstall, original=...):
     if original is not None and json.loads(text)==obj:return path, original, original
     return path, original, encoded(obj)
 
+def preexisting(path, kind, keys, servers):
+    """True when the file already holds these exact servers outside a managed block: the
+    user's own entries, which uninstall must leave in place."""
+    if kind not in ('json','toml'):return False
+    original=read(path)
+    if original is None:return False
+    text=original.decode()
+    if kind=='toml':
+        if BEGIN in text:return False
+        current=tomllib.loads(text).get('mcp_servers',{})
+    else:
+        current=json.loads(text or '{}')
+        for key in keys:current=current.get(key,{}) if isinstance(current,dict) else {}
+    return isinstance(current,dict) and all(current.get(n)==e for n,e in servers.items())
+
+def bare(entry):return {k:v for k,v in entry.items() if k!='preexisting'}
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--binary',type=pathlib.Path)
@@ -260,7 +280,8 @@ def main():
     launcher=state/'launch-mcp.sh'
     if args.uninstall:
         if not manifest:raise ValueError('No managed global installation manifest.')
-        entries=manifest['entries']
+        # Entries the user already had before installation are not ours to remove.
+        entries=[e for e in manifest['entries'] if not e.get('preexisting')]
     else:
         if not args.binary or not args.data_dir:raise ValueError('--binary and --data-dir are required.')
         binary=args.binary.absolute();data=args.data_dir.absolute()
@@ -303,7 +324,12 @@ def main():
             if 'statusLine' not in settings or (manifest and entry in manifest['entries']):
                 entries.append(entry)
             else:statusline_instruction(path,expected)
-        if manifest and any(previous not in json.loads(json.dumps(entries)) for previous in manifest['entries']):
+        entries=json.loads(json.dumps(entries))
+        for e in entries:
+            prior=next((x for x in (manifest or {}).get('entries',[]) if bare(x)==e),None)
+            if (prior or {}).get('preexisting') or (prior is None and preexisting(pathlib.Path(e['path']),e['kind'],e['keys'],e['servers'])):
+                e['preexisting']=True
+        if manifest and any(bare(previous) not in [bare(e) for e in entries] for previous in manifest['entries']):
             raise ValueError('Global installation profile changed; uninstall the previous profile first.')
     # Entries sharing one file (e.g. Gemini MCP + hooks) are planned as a chain on that file.
     chained={}
@@ -338,7 +364,15 @@ def main():
             else:atomic(path,new)
             changed.append((path,old,new))
         if args.uninstall:
+            # Xcode skill links are made after the manifest; remove only links into the canonical skills.
+            xcode=home/'Library/Developer/Xcode/CodingAssistant';canonical=home/'.agents/skills'
+            for host,folder in [('xcode-codex','codex'),('xcode-claude','ClaudeAgentConfig')]:
+                if not any(e['host']==host for e in entries):continue
+                for name in ['omnimem-recall','omnimem-handoff','reverse-engineer-anything']:
+                    link=xcode/folder/'skills'/name
+                    if link.is_symlink() and link.resolve()==(canonical/name).resolve():link.unlink()
             manifest_path.unlink()
+            print('Skills installed through npx stay in '+str(canonical)+'; remove them by hand if no longer wanted.')
         else:
             atomic(manifest_path,encoded({'schema_version':1,'entries':entries}))
             portable=servers('claude',args.binary.absolute(),args.data_dir.absolute(),launcher,args.with_rea)

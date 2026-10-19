@@ -2,7 +2,7 @@
 """Mission Control vertical slice against the packaged release: Claude hook -> MongoDB -> Vapor
 WebSocket -> React bundle, plus office reuse, WebSocket guards and Redis on/off.
 Uses its own temporary Redis server; never touches a user-managed Redis or MongoDB."""
-import base64, json, os, pathlib, shutil, socket, subprocess, sys, tempfile, time, urllib.request
+import base64, json, os, pathlib, shutil, socket, subprocess, sys, tempfile, time, urllib.error, urllib.request
 
 binary = os.path.abspath(sys.argv[1])
 om = os.path.join(os.path.dirname(binary), 'om')
@@ -98,8 +98,18 @@ with tempfile.TemporaryDirectory(prefix='office space ', dir=workspace) as folde
         bundle = ''.join(a.read_text() for a in assets)
         assert assets and token not in bundle and 'mongodb://' not in bundle and 'redis://' not in bundle
 
-        # WebSocket guards: bad origin, missing auth, out-of-scope project.
+        # Sign in like the browser: /auth mints a session cookie that is not the server token.
+        class Keep(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, *a, **k): return None
+        try: urllib.request.build_opener(Keep).open(f'http://127.0.0.1:{PORT}/auth?token={token}', timeout=5)
+        except urllib.error.HTTPError as e: signin = e.headers.get('Set-Cookie', '')
+        session = signin.split('omnimemo_session=', 1)[1].split(';', 1)[0]
+        assert session and session != token, 'the browser cookie must not carry the server token'
+
+        # WebSocket guards: bad origin, missing auth, the raw token as cookie, out-of-scope project.
         origin = f'http://127.0.0.1:{PORT}'
+        _, code = ws_open('/ws/v1/live', origin, token); assert code == 401, code
+        token = session
         _, code = ws_open('/ws/v1/live', 'http://evil.test', token); assert code == 403, code
         _, code = ws_open('/ws/v1/live', origin); assert code == 401, code
         _, code = ws_open('/ws/v1/live', None, token); assert code == 403, code

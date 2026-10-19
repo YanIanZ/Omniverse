@@ -13,7 +13,10 @@ def prepare(base,node,vendor=False):
     env=dict(os.environ,HUSKY='0',DO_NOT_TRACK='1',TURBO_TELEMETRY_DISABLED='1',npm_config_cache=str(base/'npm'))
     if not source.exists():
         subprocess.run(['git','clone','--no-checkout',REPO,str(source)],check=True)
-        subprocess.run(['git','-C',str(source),'checkout','--detach',REV],check=True)
+        try:subprocess.run(['git','-C',str(source),'checkout','--detach',REV],check=True)
+        except subprocess.CalledProcessError:
+            # A clone without the pinned revision would block every later run; it is ours to remove.
+            shutil.rmtree(source);raise
     actual=subprocess.check_output(['git','-C',str(source),'rev-parse','HEAD'],text=True).strip()
     if actual!=REV:raise SystemExit('REA checkout revision mismatch; preserve it and review before replacing.')
     if subprocess.check_output(['git','-C',str(source),'status','--porcelain','--untracked-files=no'],text=True).strip():raise SystemExit('REA checkout has tracked edits; refusing to build modified source.')

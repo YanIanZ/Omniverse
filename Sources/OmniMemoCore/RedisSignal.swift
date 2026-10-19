@@ -64,10 +64,45 @@ public enum RedisSignal {
     }
   }
 
+  /// A hint only, so it is bounded: a Redis that accepts but never answers must not hold up the
+  /// durable write that already happened (live clients also poll the store every second).
   public static func publish(projectID: String, url: String?) async {
-    guard let url, let connection = try? await connect(url) else { return }
-    _ = try? await connection.publish("1", to: channel(projectID)).get()
-    _ = try? await connection.close().get()
+    guard let url else { return }
+    let done = Once()
+    await withCheckedContinuation { (resume: CheckedContinuation<Void, Never>) in
+      done.set { resume.resume() }
+      Task {
+        if let connection = try? await connect(url) {
+          _ = try? await connection.publish("1", to: channel(projectID)).get()
+          _ = try? await connection.close().get()
+        }
+        done.fire()
+      }
+      Task {
+        try? await Task.sleep(nanoseconds: publishTimeout)
+        done.fire()
+      }
+    }
+  }
+
+  static let publishTimeout: UInt64 = 500_000_000
+
+  /// Runs its action the first time it fires.
+  private final class Once: @unchecked Sendable {
+    private let lock = NSLock()
+    private var action: (() -> Void)?
+    func set(_ action: @escaping () -> Void) {
+      lock.lock()
+      self.action = action
+      lock.unlock()
+    }
+    func fire() {
+      lock.lock()
+      let run = action
+      action = nil
+      lock.unlock()
+      run?()
+    }
   }
 
   /// Calls `onSignal` for each hint until the connection drops; returns the open connection.

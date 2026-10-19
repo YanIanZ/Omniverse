@@ -10,7 +10,8 @@ let package = Package(
   ],
   dependencies: [
     .package(url: "https://github.com/orlandos-nl/MongoKitten.git", from: "7.9.0"),
-    .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", from: "0.11.0"),
+    // 0.x minors may break the API: stay on the resolved minor until upgraded on purpose.
+    .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", .upToNextMinor(from: "0.12.1")),
     .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),
     .package(url: "https://github.com/vapor/vapor.git", from: "4.122.0"),
     .package(url: "https://github.com/swift-server/RediStack.git", from: "1.6.0"),

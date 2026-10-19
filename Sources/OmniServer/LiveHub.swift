@@ -72,15 +72,32 @@ public actor LiveHub {
 
   private func remove(_ id: ObjectIdentifier) { clients[id] = nil }
 
+  /// A missing revision is waited for this long: its writer may still be inserting it.
+  static let gapGrace: TimeInterval = 5
+  private var gapSince: Date?
+  private var polling = false
+
   /// Reads committed events after the last broadcast revision and sends them in order.
+  /// Revisions are numbered before insert, so a later one can land first: the cursor stops at
+  /// a gap until the grace expires instead of skipping the slower writer's event for good.
   func poll() async {
+    // Actor reentrancy: overlapping polls could broadcast revisions out of order.
+    guard !polling else { return }
+    polling = true
+    defer { polling = false }
     guard let events = try? await store.events(after: revision), !events.isEmpty else { return }
-    for event in events {
-      guard event.revision > revision else { continue }
+    for event in events where event.revision > revision {
+      if event.revision != revision + 1 {
+        let since = gapSince ?? Date()
+        gapSince = since
+        guard Date().timeIntervalSince(since) >= Self.gapGrace else { return }
+      }
+      gapSince = nil
       revision = event.revision
       guard let data = try? encodeJSON(event) else { continue }
       let text = String(decoding: data, as: UTF8.self)
-      for ws in clients.values { try? await ws.send(text) }
+      // Queued on each channel without waiting: one stalled client cannot hold the hub.
+      for ws in clients.values { ws.send(text, promise: nil) }
     }
   }
 }

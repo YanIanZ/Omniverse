@@ -26,6 +26,27 @@ public struct ServerConfig: Sendable {
   }
 }
 
+/// Random browser sessions minted by `/auth`. The cookie never carries the server token,
+/// so cookies sent to other localhost ports do not leak it.
+final class BrowserSessions: @unchecked Sendable {
+  private let lock = NSLock()
+  private var values: [String] = []
+
+  func mint() -> String {
+    let value = [UInt8].random(count: 32).map { String(format: "%02x", $0) }.joined()
+    lock.lock()
+    defer { lock.unlock() }
+    values = Array((values + [value]).suffix(16))
+    return value
+  }
+
+  func contains(_ supplied: String) -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return values.contains { OmniServer.matches(supplied, $0) }
+  }
+}
+
 public enum OmniServer {
   public static let cookie = "omnimemo_session"
 
@@ -47,17 +68,18 @@ public enum OmniServer {
     hub.start()
     app.lifecycle.use(HubLifecycle(hub: hub))
 
+    let sessions = BrowserSessions()
     app.get("auth") { req async throws -> Response in
       guard let token = req.query[String.self, at: "token"], matches(token, config.token) else {
         throw Abort(.unauthorized)
       }
       let response = req.redirect(to: "/")
       response.cookies[cookie] = HTTPCookies.Value(
-        string: config.token, path: "/", isSecure: false, isHTTPOnly: true, sameSite: .strict)
+        string: sessions.mint(), path: "/", isSecure: false, isHTTPOnly: true, sameSite: .strict)
       return response
     }
 
-    let api = app.grouped("api", "v1").grouped(AuthMiddleware(config: config))
+    let api = app.grouped("api", "v1").grouped(AuthMiddleware(config: config, sessions: sessions))
     api.get("health") { _ async throws -> Response in
       let status = try await store.status()
       return try json([
@@ -129,7 +151,7 @@ public enum OmniServer {
 
     // Runtime bridge (docs/RUNTIME_EVENTS.md). Adapters post with a bearer token; a browser
     // session must also send an allowed Origin (AuthMiddleware enforces both).
-    let runtime = app.grouped("api", "runtime").grouped(AuthMiddleware(config: config))
+    let runtime = app.grouped("api", "runtime").grouped(AuthMiddleware(config: config, sessions: sessions))
     let workspace: @Sendable (Request) throws -> Void = { req in
       if let scope = req.query[String.self, at: "workspace_id"], scope != store.binding.id, scope != "local" {
         throw Abort(.forbidden)
@@ -172,7 +194,7 @@ public enum OmniServer {
 
     // `/ws/office` is the v2.3 name for the same committed-event stream.
     for path in [["ws", "v1", "live"], ["ws", "office"]] {
-      app.grouped(AuthMiddleware(config: config, requireOrigin: true))
+      app.grouped(AuthMiddleware(config: config, sessions: sessions, requireOrigin: true))
         .webSocket(path.map { PathComponent(stringLiteral: $0) }, maxFrameSize: .init(integerLiteral: 1 << 14)) {
           req, ws async in
           let scope = req.query[String.self, at: "project_id"] ?? req.query[String.self, at: "workspace_id"]
@@ -241,7 +263,8 @@ struct GuardMiddleware: AsyncMiddleware {
     } catch let error as AbortError {
       response = try OmniServer.json(["error": error.reason], status: error.status)
     } catch {
-      response = try OmniServer.json(["error": "request failed"], status: .badRequest)
+      // Not a client mistake we recognised: report a server failure, not a 400.
+      response = try OmniServer.json(["error": "request failed"], status: .internalServerError)
     }
     response.headers.replaceOrAdd(
       name: "Content-Security-Policy",
@@ -264,12 +287,15 @@ struct GuardMiddleware: AsyncMiddleware {
 /// Session cookie or bearer token; browser Origin must be allowed for writes and WebSockets.
 struct AuthMiddleware: AsyncMiddleware {
   let config: ServerConfig
+  let sessions: BrowserSessions
   var requireOrigin = false
   func respond(to req: Request, chainingTo next: AsyncResponder) async throws -> Response {
     let bearer = req.headers.bearerAuthorization?.token
     let cookie = req.cookies[OmniServer.cookie]?.string
-    guard let token = bearer ?? cookie, OmniServer.matches(token, config.token) else {
-      throw Abort(.unauthorized)
+    if let bearer {
+      guard OmniServer.matches(bearer, config.token) else { throw Abort(.unauthorized) }
+    } else {
+      guard let cookie, sessions.contains(cookie) else { throw Abort(.unauthorized) }
     }
     let origin = req.headers.first(name: .origin)
     if let origin, !config.allowedOrigins.contains(origin) { throw Abort(.forbidden) }

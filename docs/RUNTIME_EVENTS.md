@@ -102,8 +102,9 @@ and `total` milestone counts. Tool counts, time and tokens are never progress.
 | `GET /api/runtime/health` | Storage health, workspace ID, event revision and Redis state. |
 
 Use `Authorization: Bearer <configured server token>` for adapters. Browser session
-cookies also authenticate; cookie-authenticated writes require an allowed
-`Origin`. Any supplied Origin must be allowed, including bearer requests. Host
+cookies also authenticate; `/auth` mints a random session value for the cookie, never
+the server token itself, so the token sent as a cookie is refused. Cookie-authenticated
+writes require an allowed `Origin`. Any supplied Origin must be allowed, including bearer requests. Host
 validation and the server's configured request limits also apply. Never include
 tokens in event JSON. Missing/invalid authentication returns `401`; rejected scope
 or Origin returns `403`; malformed/invalid events return `400`; detected secrets

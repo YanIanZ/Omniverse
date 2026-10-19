@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   type Agent,
   ApiError,
@@ -59,13 +59,25 @@ export function App() {
     else setError(e instanceof Error ? e.message : String(e))
   }, [])
 
+  // Events can trigger overlapping reads of one list; only the newest request may apply,
+  // so a slower, older response never overwrites a newer snapshot.
+  const latest = useRef({ agents: 0, tasks: 0, approvals: 0 })
+  const load = useCallback(
+    <T,>(key: keyof typeof latest.current, read: () => Promise<T>, apply: (value: T) => void) => {
+      const n = ++latest.current[key]
+      void read().then((value) => n === latest.current[key] && apply(value), report)
+    },
+    [report],
+  )
+
   const refresh = useCallback(async () => {
     try {
+      const n = { agents: ++latest.current.agents, tasks: ++latest.current.tasks, approvals: ++latest.current.approvals }
       const [h, a, t, p] = await Promise.all([api.health(), api.agents(), api.tasks(), api.approvals()])
       setHealth(h)
-      setAgents(a)
-      setTasks(t)
-      setApprovals(p)
+      if (n.agents === latest.current.agents) setAgents(a)
+      if (n.tasks === latest.current.tasks) setTasks(t)
+      if (n.approvals === latest.current.approvals) setApprovals(p)
       setUnauthorized(false)
       const revision = Number(h.revision)
       const recent = await api.events(Math.max(0, revision - 60))
@@ -80,25 +92,25 @@ export function App() {
   useEffect(() => {
     void refresh()
     // Presence ages without new events: re-read sessions slowly, and tick relative times.
-    const slow = window.setInterval(() => void api.agents().then(setAgents, report), 30_000)
+    const slow = window.setInterval(() => load('agents', api.agents, setAgents), 30_000)
     const tick = window.setInterval(() => setNow(Date.now()), 15_000)
     return () => {
       window.clearInterval(slow)
       window.clearInterval(tick)
     }
-  }, [refresh, report])
+  }, [refresh, load])
 
   const onEvent = useCallback(
     (event: LiveEvent) => {
       setNow(Date.now())
       setEvents((list) => (list.some((e) => e.event_id === event.event_id) ? list : [event, ...list].slice(0, 200)))
       setHealth((h) => (h ? { ...h, revision: String(event.revision) } : h))
-      if (event.type === 'task.updated') void api.tasks().then(setTasks, report)
+      if (event.type === 'task.updated') load('tasks', api.tasks, setTasks)
       if (event.type === 'agent.status.changed' || event.type === 'runtime.activity' || event.type === 'context.usage.updated')
-        void api.agents().then(setAgents, report)
-      if (event.type.startsWith('approval.')) void api.approvals().then(setApprovals, report)
+        load('agents', api.agents, setAgents)
+      if (event.type.startsWith('approval.')) load('approvals', api.approvals, setApprovals)
     },
-    [report],
+    [load],
   )
   const connection = useLive(health?.project_id, onEvent, refresh)
   const store: Store = { health, agents, tasks, approvals, events, now, loaded, live: connection === 'live', report, refresh }
