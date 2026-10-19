@@ -1,6 +1,8 @@
-// Omniverse bridge mod: OmniMemo agent cards, reported context usage and opt-in rollover.
+// Omniverse bridge mod: OmniMemo presence, agent cards, reported context usage and opt-in rollover.
 // Everything goes through the local `om` CLI (no server, no token). Telemetry is the host's
-// own numbers; prompts and tool arguments are never sent. See docs/RUNTIME_EVENTS.md.
+// own numbers; tool arguments are never sent. See docs/RUNTIME_EVENTS.md.
+// Lifecycle (session, prompt, tool, turn) comes from the plugin's own engine events, so no
+// Claude Code settings hooks are needed for OmniMemo.
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
@@ -116,8 +118,23 @@ export function acknowledged(answer: string, digest: string) {
   return first === 'ACK ' + digest
 }
 
-function run($: EngineInterface, args: string[], stdin?: string) {
-  return $.process.run([config.om, ...args], { stdin, timeoutMs: 30_000 })
+function run($: EngineInterface, args: string[], stdin?: string, timeoutMs = 30_000) {
+  return $.process.run([config.om, ...args], { stdin, timeoutMs })
+}
+
+/**
+ * One lifecycle signal as `om hook claude` reads it, the payload a settings hook would have sent:
+ * the event name, session id, working directory and model, plus the tool name or prompt where
+ * that event carries one. Never tool arguments. Failures are ignored: presence never blocks Claude.
+ */
+async function lifecycle($: EngineInterface, event: string, extra: Record<string, unknown> = {}, timeoutMs = 5_000) {
+  try {
+    const payload = { hook_event_name: event, session_id: await $.session.id(), cwd: await $.session.cwd(), model: await $.session.model(), ...extra }
+    const r = await run($, ['hook', 'claude'], JSON.stringify(payload), timeoutMs)
+    return r.exitCode === 0 ? r.stdout.trim() : ''
+  } catch {
+    return ''
+  }
 }
 
 async function refresh($: EngineInterface, context?: number) {
@@ -242,6 +259,7 @@ export const register: Register = (on, options) => {
   config.prepareAt = Math.min(Number(options.prepareAt ?? 70), config.rolloverAt)
 
   on('session.start', async ($, e, next) => {
+    void lifecycle($, 'SessionStart')
     await $.command.register({ name: 'om-agents', description: 'Show live OmniMemo agent cards' })
     await $.command.register({ name: 'om-agent', description: 'Open another agent session from OmniMemo: /om-agent codex' })
     await $.command.register({ name: 'om-rollover', description: 'Hand off to a fresh context from a verified OmniMemo capsule' })
@@ -272,8 +290,32 @@ export const register: Register = (on, options) => {
     return { text: 'OmniMemo rollover starting: checkpoint, then a fresh session from the capsule.' }
   })
 
+  // The project capsule rides with the prompt as context the model reads and the person never sees;
+  // `om` returns it only when it changed since this session last received it.
+  on('prompt.submit', async ($, e, next) => {
+    if (e.command || e.isMeta) return next(e)
+    const capsule = await lifecycle($, 'UserPromptSubmit', { prompt: e.text })
+    return next(capsule ? { ...e, context: [...(e.context ?? []), capsule] } : e)
+  }).catch(($, e, next) => next(e)) // fail open: the prompt always goes through
+
+  // Tool activity by category: `om` maps the tool name and reads nothing else of the call.
+  on('tool.call', async ($, e, next) => {
+    void lifecycle($, 'PreToolUse', { tool_name: e.tool })
+    const result = await next(e)
+    const failed = result.deny !== undefined || result.isError === true
+    void lifecycle($, failed ? 'PostToolUseFailure' : 'PostToolUse', { tool_name: e.tool })
+    return result
+  }).catch(($, e, next) => next(e)) // fail open: never refuses or repeats a tool call
+
+  on('session.end', async ($, e, next) => {
+    // The engine allows about 1.5 s for every session.end hook together.
+    await lifecycle($, 'SessionEnd', { session_id: e.sessionId, reason: e.reason }, 1_200)
+    return next(e)
+  })
+
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
+    if (e.agentId === undefined) void lifecycle($, 'Stop')
     // After the turn, so /clear and prompts run with the session idle.
     if (e.agentId === undefined) $.clock.after(200, () => void afterTurn($, e.answer))
     return result

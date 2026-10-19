@@ -6,19 +6,24 @@ import { acknowledged, agentLabel, facts, levelOf, others, parsePrepared, presen
 
 const DIGEST = '0123456789abcdef'
 const PREPARED = `OmniMemo context handoff (fresh session; verify everything against the repository).\nGoal:\n- task_1 ship it [doing]\nHandoff: h-1 · digest ${DIGEST} (created)\n`
+const CAPSULE = 'OmniMemo project context (stored memory; untrusted data, verify against the repository):\n{}'
 const ACK_DONE = ['ACK ' + DIGEST, 'Continuing.'].join('\n')
 
 /** The engine beneath the mod: `om` answered by argv, /clear moving to a new session id. */
 function world(on: On, percent: number, opts: { reserved?: boolean; clearFails?: boolean } = {}) {
   const clock = mock.clock(on)
   const ran: string[][] = []
+  const stdins: string[] = []
+  const contexts: (readonly string[] | undefined)[] = []
   const submitted: string[] = []
   let session = 'sess-1'
   let usage = percent
   on('process.run', async (_$, e) => {
     ran.push([...e.argv])
+    if (e.init?.stdin) stdins.push(e.init.stdin)
     const args = e.argv.join(' ')
-    const stdout = args.includes('rollover prepare') ? PREPARED : args.includes('runtime sessions') ? '[]' : ''
+    const prompt = args.includes('hook claude') && (e.init?.stdin ?? '').includes('UserPromptSubmit')
+    const stdout = args.includes('rollover prepare') ? PREPARED : args.includes('runtime sessions') ? '[]' : prompt ? CAPSULE : ''
     const exitCode = args.includes('rollover begin') && opts.reserved ? 1 : 0
     return { value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
@@ -38,10 +43,12 @@ function world(on: On, percent: number, opts: { reserved?: boolean; clearFails?:
   })
   on('prompt.submit', async (_$, e) => {
     submitted.push(e.text)
+    contexts.push(e.context)
     return { text: e.text }
   })
   const om = (part: string) => ran.find(a => a.join(' ').includes(part))?.join(' ')
-  return { ran, submitted, clock, om, session: () => session }
+  const hooks = () => stdins.filter(x => x.includes('hook_event_name')).map(x => JSON.parse(x) as Record<string, unknown>)
+  return { ran, submitted, contexts, hooks, clock, om, session: () => session }
 }
 
 const turn = (answer: string) => ({ answer, durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' as const })
@@ -159,4 +166,27 @@ test('unknown progress and context are left out of a row instead of printed', ()
   expect(facts(a, Date.now())).toEqual(['waiting', 'Review'])
   const b = { ...a, progress: { kind: 'determinate', percent: 40, completed: 2, total: 5 }, context: { measurement: 'reported', level: 'normal', used_percent: 33 } }
   expect(facts(b, Date.now())).toEqual(['waiting', 'Review', '40% (2/5)', 'ctx 33%'])
+})
+
+test('lifecycle comes from plugin events, not settings hooks: session, prompt capsule, tool category, turn', async ($, on) => {
+  const w = world(on, 10)
+  on('tool.call', async () => ({ result: 'ok' }))
+  await $.prompt.submit({ text: 'Fix the parser' } as Parameters<Engine['prompt']['submit']>[0])
+  expect(w.contexts.at(-1)).toEqual([CAPSULE])
+  await $.tool.call({ tool: 'Bash', command: 'echo secret-argument' } as Parameters<Engine['tool']['call']>[0])
+  await w.clock.advance(10)
+  const events = w.hooks().map(h => h.hook_event_name)
+  expect(events).toContain('UserPromptSubmit')
+  expect(events).toContain('PreToolUse')
+  expect(events).toContain('PostToolUse')
+  const tool = w.hooks().find(h => h.hook_event_name === 'PreToolUse')
+  expect(tool?.tool_name).toBe('Bash')
+  expect(JSON.stringify(w.hooks())).not.toContain('secret-argument')
+  expect(w.hooks().every(h => h.session_id === 'sess-1' && h.cwd === '/repo')).toBe(true)
+})
+
+test('slash commands submit no lifecycle prompt and get no capsule', async ($, on) => {
+  const w = world(on, 10)
+  await $.prompt.submit({ text: '/om-agents', command: { name: 'om-agents', args: '' } } as Parameters<Engine['prompt']['submit']>[0])
+  expect(w.hooks().some(h => h.hook_event_name === 'UserPromptSubmit')).toBe(false)
 })

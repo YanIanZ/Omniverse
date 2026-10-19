@@ -38,11 +38,11 @@ om --agent claude context --first-prompt --session <id>
 ```
 
 - **Agent Office:** a pixel-art office (original sprites; design canvas "OmniMemo Pixel Office") where each agent stands in the room its verified state belongs to: Briefing (session ready), Workspace (task doing or prompt active), Review, Approvals (waiting for you), Handoffs (checkpoint saved), Lounge (no signal for 10 min, shown as unknown). Disconnected sessions leave the map. Views: Office, Tasks (Kanban with priority and owner), Agents, Approvals, Memory, Events.
-- **Host signals (opt-in hooks: `bash install.sh --global --with-hooks`):**
+- **Host signals (opt-in: `bash install.sh --global --with-hooks`; each host's own extension point):**
 
   | Host | Signal | Context capsule |
   |---|---|---|
-  | Claude Code | `SessionStart`, `UserPromptSubmit`, `Stop`, `SessionEnd` hooks | plain text, once per change |
+  | Claude Code | `omniverse-bridge` plugin: `session.start/end`, `prompt.submit`, `tool.call`, `turn.complete` (no settings hooks) | prompt context, once per change |
   | Codex | `~/.codex/hooks.json` `SessionStart`, `UserPromptSubmit`, `Stop` (Codex asks you to trust new hooks) | plain text, once per change |
   | Gemini CLI | `SessionStart`, `BeforeAgent`, `AfterAgent`, `SessionEnd` | `hookSpecificOutput.additionalContext` |
   | OpenCode 2.x | MCP connection (`initialize` client name, tool use, exit) | via MCP tools |

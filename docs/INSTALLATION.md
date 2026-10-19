@@ -127,16 +127,19 @@ provider sessions.
 
 ## Agent hooks and Mission Control
 
-`--with-hooks` (only with `--global`) merges hook entries for detected hosts, each running
-`<binary> --data-dir <data> hook <host>`: Claude Code `~/.claude/settings.json` (or
-`$CLAUDE_CONFIG_DIR`) `SessionStart`, `UserPromptSubmit`, `Stop`, `SessionEnd`; Codex
+`--with-hooks` (only with `--global`) wires lifecycle presence through each host's own extension
+point, each ending in `<binary> --data-dir <data> hook <host>`. Claude Code gets no settings hooks:
+the installer adds the install directory as the `omnimemo` plugin marketplace and installs the
+`omniverse-bridge` plugin for the user (`claude plugin install omniverse-bridge@omnimemo`), which
+reports session, prompt, tool and turn events from the plugin's own engine events and attaches the
+context capsule to the prompt; uninstall removes it. Hooks are written for Codex
 `$CODEX_HOME/hooks.json` `SessionStart`, `UserPromptSubmit`, `Stop` (trust them when Codex asks);
 Gemini CLI `~/.gemini/settings.json` `SessionStart`, `BeforeAgent`, `AfterAgent`, `SessionEnd`
 (the same file as its MCP entry; both are merged in one write). OpenCode 1.x receives
 `plugins/omnimemo.js`; OpenCode 2.x receives no plugin because a plugin subscribing to events
 stalled sessions in 2.0.31, so its presence comes from the MCP connection. Existing hooks are kept; a preview runs
 first; uninstall removes only the OmniMemo entries and refuses edited ones. Restart Claude Code
-after installation. The hook resolves the Git root of the session's `cwd`; outside Git, or when
+after installation. An `--home` fixture run never touches the real Claude Code plugin list. The hook resolves the Git root of the session's `cwd`; outside Git, or when
 storage is unavailable, it does nothing and exits 0.
 
 `om office` starts one loopback Vapor server per data directory (`server.json`, `server.log`,

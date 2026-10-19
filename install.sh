@@ -22,7 +22,7 @@ Usage: bash install.sh [options]
   --setup             Initialize memory and apply project Codex/Claude adapters
   --global            Register MCP + npx skills for detected user-level hosts
                       (Python 3.11+ and Node/npm required; preview with --dry-run)
-  --with-hooks        With --global, add Claude Code session/prompt hooks (opt-in)
+  --with-hooks        With --global, add lifecycle presence: Claude Code plugin, Codex/Gemini hooks (opt-in)
   --agents LIST       Project adapters: codex,claude (default: both)
   --backend NAME      Storage profile for --setup: mongodb (default) or sqlite (no server needed)
   --mongo-uri URI     Existing mongodb:// server; OMNIMEM_MONGO_URI overrides it (use it for secrets)

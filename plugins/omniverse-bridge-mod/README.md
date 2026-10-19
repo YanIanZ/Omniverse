@@ -25,7 +25,7 @@ A Claude Code mod (function hooks, Claude Code 2.1.302+) for OmniMemo. It runs t
 
 ## Load it
 
-For every session: add the folder to `CLAUDE_CODE_PLUGIN_DIRS` in the `env` block of `~/.claude/settings.json` and restart Claude Code. For one session: `claude --plugin-dir plugins/omniverse-bridge-mod`. Set options in `/config`, or in settings under `pluginConfigs["omniverse-bridge"].options` (for example `{ "rollover": "auto" }`).
+Installed: `bash install.sh --global --with-hooks` packages the plugin beside the binary and runs `claude plugin install omniverse-bridge@omnimemo` (user scope); it replaces the OmniMemo settings hooks, so do not also keep this folder in `CLAUDE_CODE_PLUGIN_DIRS` (that loads it twice). While developing, one session: `claude --plugin-dir plugins/omniverse-bridge-mod`. Set options in `/config`, or in settings under `pluginConfigs["omniverse-bridge"].options` (for example `{ "rollover": "auto" }`).
 
 The mod runs with your permissions (it calls `om` through `$.process`); review it before loading. Checks:
 

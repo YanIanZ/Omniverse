@@ -21,6 +21,21 @@ rm -rf "$DEST/frontend"
 cp -R frontend/dist "$DEST/frontend"
 ln -sf omnimem "$DEST/om"
 cp Package.resolved "$DEST/Package.resolved"
+# Claude Code plugin (its official replacement for settings hooks), as a local marketplace
+# `claude plugin marketplace add <install dir>` reads; engine-written types and tests stay out.
+rm -rf "$DEST/claude-plugins" "$DEST/.claude-plugin"
+mkdir -p "$DEST/claude-plugins/omniverse-bridge/hooks" "$DEST/.claude-plugin"
+cp plugins/omniverse-bridge-mod/hooks/hooks.json plugins/omniverse-bridge-mod/hooks/register.tsx "$DEST/claude-plugins/omniverse-bridge/hooks/"
+cp -R plugins/omniverse-bridge-mod/.claude-plugin "$DEST/claude-plugins/omniverse-bridge/"
+rm -rf "$DEST/claude-plugins/omniverse-bridge/.claude-plugin/types"
+cp -R plugins/omniverse-bridge-mod/types plugins/omniverse-bridge-mod/README.md "$DEST/claude-plugins/omniverse-bridge/"
+cat > "$DEST/.claude-plugin/marketplace.json" <<'JSON'
+{
+  "name": "omnimemo",
+  "owner": { "name": "YanIanZ" },
+  "plugins": [{ "name": "omniverse-bridge", "source": "./claude-plugins/omniverse-bridge" }]
+}
+JSON
 cp LICENSE "$DEST/LICENSE"
 # Unset: the development default. Set but empty: package without an REA runtime.
 REA_RUNTIME="${OMNIMEM_REA_RUNTIME-/Volumes/Ext/DevCache/OmniMemo/integrations/rea-runtime.json}"
