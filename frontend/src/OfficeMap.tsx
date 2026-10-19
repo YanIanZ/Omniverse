@@ -314,25 +314,30 @@ export function OfficeMap({ placed, overflow, health, selected, now, live, onSel
         <text className="sheet-head" y={10}>
           LEGEND
         </text>
-        <circle className="key-working" cx={5} cy={30} r={4.5} />
-        <text x={16} y={34}>
-          working
+        {/* Every plan state, grouped by the mark it is drawn with (see PLAN_STATES in views.tsx). */}
+        <circle className="key-working" cx={5} cy={28} r={4.5} />
+        <text x={16} y={32}>
+          doing, working
         </text>
-        <circle className="key-attention" cx={92} cy={30} r={4.5} />
-        <text x={103} y={34}>
-          asks you
+        <circle className="key-attention" cx={122} cy={28} r={4.5} />
+        <text x={133} y={32}>
+          asks you, blocked
         </text>
-        <circle className="key-flight" cx={176} cy={30} r={3.6} />
-        <text x={187} y={34}>
+        <circle className="key-flight" cx={256} cy={28} r={3.6} />
+        <text x={267} y={32}>
           reviewing, handing off
         </text>
-        <circle className="key-fault" cx={340} cy={30} r={4.5} />
-        <text x={351} y={34}>
-          fault
+        <circle className="key-neutral" cx={5} cy={46} r={4.5} />
+        <text x={16} y={50}>
+          waiting
         </text>
-        <rect className="key-unknown" x={400} y={25} width={10} height={10} />
-        <text x={416} y={34}>
-          stale, unknown
+        <rect className="key-unknown" x={117} y={41} width={10} height={10} />
+        <text x={133} y={50}>
+          stale (no recent signal)
+        </text>
+        <circle className="key-fault" cx={300} cy={46} r={4.5} />
+        <text x={311} y={50}>
+          fault (server rack)
         </text>
         {[
           [1, '1m'],
@@ -342,13 +347,13 @@ export function OfficeMap({ placed, overflow, health, selected, now, live, onSel
           const w = dimension(m as number)
           const x = [0, 52, 132][i]
           return (
-            <g key={label} className="dimension" transform={`translate(${x + w / 2} 60)`}>
+            <g key={label} className="dimension" transform={`translate(${x + w / 2} 70)`}>
               <path d={`M${-w / 2} -3v6M${w / 2} -3v6M${-w / 2} 0H-12M12 0H${w / 2}`} />
               <text y={3.5}>{label}</text>
             </g>
           )
         })}
-        <text x={238} y={64}>
+        <text x={238} y={74}>
           minutes since the last verified signal
         </text>
       </g>
@@ -359,7 +364,7 @@ export function OfficeMap({ placed, overflow, health, selected, now, live, onSel
           PROJECT
         </text>
         <text className="tb-mono" x={10} y={35}>
-          {health ? health.project_id.slice(0, 12) : 'unknown'}
+          {health ? (health.project_name ?? health.project_id.slice(0, 12)).slice(0, 18) : 'unknown'}
         </text>
         <text className="tb-key" x={160} y={16}>
           DRAWING

@@ -10,12 +10,65 @@ struct Options: ParsableArguments {
   var project: String { explicitProject ?? FileManager.default.currentDirectoryPath }
   @Option(name: .long, help: "Provenance label; not an authentication identity.") var agent:
     String = "cli"
+  @Flag(name: .long, help: "Print JSON even in a terminal (piped output is always JSON).") var json = false
   func open() async throws -> MemoryStore {
     try await MemoryStore.open(dataDir: dataDir, project: project)
   }
 }
+/// JSON for agents, plugins and scripts (anything that pipes us); a readable layout only when a
+/// person runs the command in a terminal and did not ask for --json.
 func output<T: Encodable>(_ value: T) throws {
-  print(String(decoding: try encodeJSON(value, pretty: true), as: UTF8.self))
+  let data = try encodeJSON(value, pretty: true)
+  guard isatty(STDOUT_FILENO) == 1, !CommandLine.arguments.contains("--json"),
+    let object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+  else { return print(String(decoding: data, as: UTF8.self)) }
+  print(Readable.render(object))
+}
+
+enum Readable {
+  /// Columns shown for lists, in this order, when the rows have them.
+  static let columns = [
+    "id", "agent", "client", "kind", "status", "priority", "owner", "model", "title", "action",
+    "requested_by", "last_seen", "created_at", "session_id",
+  ]
+
+  static func render(_ object: Any) -> String {
+    if let rows = object as? [[String: Any]] { return table(rows) }
+    if let list = object as? [Any] { return list.isEmpty ? "(none)" : list.map(cell).joined(separator: "\n") }
+    if let fields = object as? [String: Any] {
+      let width = fields.keys.map(\.count).max() ?? 0
+      return fields.keys.sorted().map { key in
+        key.padding(toLength: width, withPad: " ", startingAt: 0) + "  " + cell(fields[key]!)
+      }.joined(separator: "\n")
+    }
+    return cell(object)
+  }
+
+  static func table(_ rows: [[String: Any]]) -> String {
+    guard !rows.isEmpty else { return "(none)" }
+    let keys = columns.filter { key in rows.contains { $0[key] != nil && !($0[key] is [Any]) && !($0[key] is [String: Any]) } }
+      .prefix(6)
+    let cells = rows.map { row in keys.map { row[$0].map { String(cell($0).prefix(40)) } ?? "" } }
+    let widths = keys.enumerated().map { i, key in max(key.count, cells.map { $0[i].count }.max() ?? 0) }
+    let line = { (values: [String]) in
+      zip(values, widths).map { $0.padding(toLength: $1, withPad: " ", startingAt: 0) }.joined(separator: "  ")
+        .trimmingCharacters(in: .whitespaces)
+    }
+    return ([line(keys.map { $0.uppercased() })] + cells.map(line)).joined(separator: "\n")
+      + "\n(\(rows.count) \(rows.count == 1 ? "row" : "rows"); --json for every field)"
+  }
+
+  static func cell(_ value: Any) -> String {
+    switch value {
+    case let text as String: return text
+    case let number as NSNumber:
+      return CFGetTypeID(number) == CFBooleanGetTypeID() ? (number.boolValue ? "yes" : "no") : number.stringValue
+    case is NSNull: return "-"
+    default:
+      let data = (try? JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed])) ?? Data()
+      return String(decoding: data, as: UTF8.self)
+    }
+  }
 }
 @main
 struct OmniMemo: AsyncParsableCommand {

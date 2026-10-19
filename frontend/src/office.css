@@ -297,6 +297,9 @@
   stroke: var(--attention);
   stroke-width: 1.8;
 }
+.plan .key-neutral {
+  fill: var(--muted);
+}
 .plan .key-fault {
   fill: var(--fault);
 }
