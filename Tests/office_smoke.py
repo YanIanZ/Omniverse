@@ -75,9 +75,13 @@ with tempfile.TemporaryDirectory(prefix='office space ', dir=workspace) as folde
     agents = json.loads(run('agents').stdout)
     assert [(a['agent'], a['status'], a['source']) for a in agents] == [('claude', 'working', 'claude_hook')]
     # A subagent is its own session, linked to the one that spawned it; its end is no session handoff.
+    # Its task label is kept only where titles are opted in.
+    run('autosave', 'enable', '--titles', '--no-checkpoints', '--no-transitions', '--no-prompts')
     hook('SubagentStart', session='agent-1', spawned_by='sess-1', agent_type='Explore agent', title='Find the parser')
+    run('autosave', 'disable')
     sub = [a for a in json.loads(run('agents').stdout) if a['session_id'] == 'agent-1']
     assert sub and sub[0]['spawned_by'] == 'sess-1' and sub[0]['agent_type'] == 'Explore-agent', sub
+    assert sub[0]['title'] == 'Find the parser', sub
     # A subagent on another model: its window is unknown, so tokens only and no percent.
     hook('context.usage', session='agent-1', context_window={'used_tokens': 45000})
     sub = [a for a in json.loads(run('agents').stdout) if a['session_id'] == 'agent-1'][0]
