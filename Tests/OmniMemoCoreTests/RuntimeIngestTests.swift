@@ -254,4 +254,18 @@ final class RuntimeIngestTests: XCTestCase {
     let counted = try await read().eventCount
     XCTAssertEqual(counted, 9)
   }
+  /// One CLI = hook session + its MCP server's presence session: shown once.
+  func testMCPPresenceHiddenBehindHookSession() {
+    func s(_ agent: String, _ id: String, _ source: String, _ first: String, _ last: String) -> AgentSession {
+      AgentSession(agent: agent, sessionID: id, status: "waiting", source: source,
+        firstSeen: "2026-10-20T" + first + "Z", lastSeen: "2026-10-20T" + last + "Z")
+    }
+    let kept = MemoryStore.withoutMCPShadows([
+      s("claude", "hook", "claude_hook", "10:00:00", "11:00:00"),
+      s("claude", "mcp-a", "mcp", "10:00:01", "11:00:00"),  // same CLI
+      s("claude", "mcp-b", "mcp", "13:00:00", "13:05:00"),  // later, no hook session
+      s("opencode", "mcp-c", "mcp", "10:30:00", "10:40:00"),  // other client (IDE)
+    ]).map(\.sessionID)
+    XCTAssertEqual(kept, ["hook", "mcp-b", "mcp-c"])
+  }
 }

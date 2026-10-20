@@ -254,7 +254,7 @@ extension MemoryStore {
     let passive = format.string(from: Date().addingTimeInterval(-Self.presenceTimeout))
     let managed = format.string(from: Date().addingTimeInterval(-Self.managedStaleAfter))
     do {
-      return try await backend.sessions(project: binding.id, limit: limit).map {
+      return Self.withoutMCPShadows(try await backend.sessions(project: binding.id, limit: limit)).map {
         var s = $0
         s.status = RuntimeMapping.legacy(s.status)
         // Silence never becomes offline or done: it is stale, shown with its last-seen time.
@@ -263,6 +263,23 @@ extension MemoryStore {
         return s
       }
     } catch { throw Self.safeError(error) }
+  }
+
+  /// A CLI with lifecycle hooks also starts the MCP server, which records its own presence
+  /// session. Both are the same agent, so the MCP one is hidden while a hook-reported session of
+  /// that client overlaps it in time; MCP-only hosts (IDEs) keep their card.
+  static func withoutMCPShadows(_ sessions: [AgentSession]) -> [AgentSession] {
+    let format = ISO8601DateFormatter()
+    let slack: TimeInterval = 120
+    func span(_ s: AgentSession) -> (Date, Date)? {
+      guard let first = format.date(from: s.firstSeen), let last = format.date(from: s.lastSeen) else { return nil }
+      return (first.addingTimeInterval(-slack), last.addingTimeInterval(slack))
+    }
+    let hooked = sessions.filter { $0.source != "mcp" }.compactMap { s in span(s).map { (s.agent, $0) } }
+    return sessions.filter { s in
+      guard s.source == "mcp", let (first, last) = span(s) else { return true }
+      return !hooked.contains { $0.0 == s.agent && $0.1.0 <= last && first <= $0.1.1 }
+    }
   }
 
   // MARK: Tasks
