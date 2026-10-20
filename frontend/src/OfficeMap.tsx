@@ -88,6 +88,7 @@ type Props = {
   onSelect: (key: string) => void
 }
 
+const shortType = (type = 'subagent') => type.split(':').pop()!.split('-')[0] || 'subagent'
 const plate = (name: string) => (name.length > 11 ? name.slice(0, 10) + '…' : name)
 
 export function OfficeMap({ placed, overflow, health, selected, now, live, onSelect }: Props) {
@@ -290,14 +291,14 @@ export function OfficeMap({ placed, overflow, health, selected, now, live, onSel
             <circle className="pip" cx={11} cy={-24} r={3.6} />
             {p.helpers > 0 && (
               <g className="helpers" aria-hidden="true">
-                <rect x={-34} y={-36} width={22} height={14} rx={7} />
-                <text x={-23} y={-25.5}>+{p.helpers}</text>
+                <rect x={40} y={5} width={26} height={18} rx={9} />
+                <text x={53} y={18}>+{p.helpers}</text>
               </g>
             )}
             <rect className="plate" x={-38} y={5} width={76} height={18} />
             <text className="plate-name" y={18}>
-              {/* A subagent's plate names its type; the figure already shows its client. */}
-              {plate(p.agent.spawned_by ? '› ' + (p.agent.agent_type ?? 'subagent') : p.agent.agent)}
+              {/* A subagent's plate names its type in short (`general`, `codex`); the figure shows its client. */}
+              {plate(p.agent.spawned_by ? '› ' + shortType(p.agent.agent_type) : p.agent.agent)}
             </text>
             {/* Stale figures carry no per-agent line: the room tag already says there is no recent signal. */}
             {p.tone !== 'unknown' && (

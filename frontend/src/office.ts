@@ -108,7 +108,7 @@ export type Placement = {
   fresh: boolean
   task?: Task
   approval?: Approval
-  /** Subagents and delegated runs working for this session: they sit with it, not at desks of their own. */
+  /** Subagents and delegated runs of this session that found no free desk, counted on its figure. */
   helpers: number
 }
 
@@ -152,19 +152,19 @@ export function place(
   const used: Partial<Record<RoomId, number>> = {}
   const overflow: Partial<Record<RoomId, number>> = {}
   const placed: Placement[] = []
-  // A subagent or delegated run sits with the session that spawned it (counted on its figure),
-  // so a busy session's helpers do not fill the rooms.
+  // Sessions take desks first; their subagents and delegated runs fill what is left, and one that
+  // finds no free desk is counted on the figure of the session that spawned it, not as a full room.
   const here = new Set(present.map((a) => a.session_id))
   const helped = (a: Agent) => a.spawned_by !== undefined && here.has(a.spawned_by)
   const byId = new Map(present.map((a) => [a.session_id, a]))
   const helpers = new Map<string, number>()
-  for (const a of present.filter(helped)) {
+  const rootOf = (a: Agent) => {
     let root = a
     for (let depth = 0; depth < 8 && helped(root); depth++) root = byId.get(root.spawned_by!)!
-    helpers.set(root.session_id, (helpers.get(root.session_id) ?? 0) + 1)
+    return root.session_id
   }
 
-  for (const agent of present.filter((a) => !helped(a))) {
+  for (const agent of [...present.filter((a) => !helped(a)), ...present.filter(helped)]) {
     const primary = latest.get(agent.agent) === agent
     const approval = primary
       ? approvals.find((p) => p.status === 'pending' && p.requested_by === agent.agent)
@@ -238,7 +238,8 @@ export function place(
     const index = used[room] ?? 0
     used[room] = index + 1
     if (index >= slots.length) {
-      overflow[room] = (overflow[room] ?? 0) + 1
+      if (helped(agent)) helpers.set(rootOf(agent), (helpers.get(rootOf(agent)) ?? 0) + 1)
+      else overflow[room] = (overflow[room] ?? 0) + 1
       continue
     }
     const [x, y] = slots[index]
@@ -254,9 +255,10 @@ export function place(
       fresh: seenSeconds < 60 && (room === 'workspace' || room === 'review'),
       task,
       approval,
-      helpers: helpers.get(agent.session_id) ?? 0,
+      helpers: 0,
     })
   }
+  for (const p of placed) p.helpers = helpers.get(p.agent.session_id) ?? 0
 
   return { placed, overflow }
 }
