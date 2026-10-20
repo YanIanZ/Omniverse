@@ -23,6 +23,8 @@ export type Agent = {
   last_seen: string
   /** Reported by the host adapter; absent means the model is unknown. */
   model?: string
+  /** A few-word task label, stored only where session titles are opted in. */
+  title?: string
   tool_category?: string
   /** Active context occupancy reported by the host; absence means unknown. */
   context_used_percent?: number
@@ -35,8 +37,14 @@ export type Agent = {
   agent_type?: string
 }
 
-/** `claude` for a session, `claude › Explore` for a subagent. */
-export const agentName = (a: Agent) => (a.spawned_by ? `${a.agent} › ${a.agent_type ?? 'subagent'}` : a.agent)
+/** `claude` for a session, `claude › Explore · haiku` for a subagent. */
+export const agentName = (a: Agent) =>
+  a.spawned_by ? `${a.agent} › ${a.agent_type ?? 'subagent'}${family(a.model)}` : a.agent
+/** ` · opus` from `claude-opus-5-5`: tells apart subagents of one type running different models. */
+const family = (model?: string) => {
+  const name = model?.match(/^claude-([a-z]+)/)?.[1]
+  return name ? ` · ${name}` : ''
+}
 
 // Records written before the runtime bridge still carry the old status names.
 const LEGACY: Record<string, AgentStatus> = {

@@ -1,7 +1,12 @@
 // Scoped REST client. Auth is the HttpOnly session cookie set by /auth; the
 // browser never sees database credentials or the raw server token.
-/** `claude` for a session, `claude › Explore` for a subagent. */
-export const agentName = (a) => (a.spawned_by ? `${a.agent} › ${a.agent_type ?? 'subagent'}` : a.agent);
+/** `claude` for a session, `claude › Explore · haiku` for a subagent. */
+export const agentName = (a) => a.spawned_by ? `${a.agent} › ${a.agent_type ?? 'subagent'}${family(a.model)}` : a.agent;
+/** ` · opus` from `claude-opus-5-5`: tells apart subagents of one type running different models. */
+const family = (model) => {
+    const name = model?.match(/^claude-([a-z]+)/)?.[1];
+    return name ? ` · ${name}` : '';
+};
 // Records written before the runtime bridge still carry the old status names.
 const LEGACY = {
     ready: 'waiting',

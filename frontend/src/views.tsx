@@ -691,7 +691,10 @@ export function AgentsView({ store, office }: { store: Store; office: Office }) 
                   <th scope="row">
                     <span className="cell-agent">
                       <AgentMark agent={a.agent} size={20} unknown={a.status === 'stale'} />
-                      {agentName(a)}
+                      <span>
+                        {agentName(a)}
+                        {a.title && <span className="muted small" style={{ display: 'block' }}>{a.title}</span>}
+                      </span>
                     </span>
                   </th>
                   <td>

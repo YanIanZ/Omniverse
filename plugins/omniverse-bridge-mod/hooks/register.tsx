@@ -276,7 +276,7 @@ async function subagentContext($: EngineInterface, agentId: string, usage: TurnU
     if (Math.abs((sampled.get(agentId) ?? -Infinity) - tokens) < (window ? window / 100 : 5_000)) return
     sampled.set(agentId, tokens)
     const sample = window
-      ? { used_percentage: Math.min(100, Math.round((tokens / window) * 1000) / 10), context_window_size: window }
+      ? { used_percentage: Math.min(100, Math.round((tokens / window) * 100)), context_window_size: window }
       : { used_tokens: tokens }
     await run($, ['hook', 'claude'], JSON.stringify({
       hook_event_name: 'context.usage', session_id: agentId, cwd: await $.session.cwd(), model: usage.model,
@@ -347,6 +347,8 @@ export const register: Register = (on, options) => {
       parents.set(result.agentId, parent)
       void lifecycle($, ended.has(result.agentId) ? 'SubagentStop' : 'SubagentStart', {
         session_id: result.agentId, model: result.model, spawned_by: parent, agent_type: e.subagentType,
+        // The call's few-word task label; `om` keeps it only where session titles are opted in.
+        title: e.description,
       })
     }
     return result

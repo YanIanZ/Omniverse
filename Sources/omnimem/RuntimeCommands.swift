@@ -493,11 +493,13 @@ extension OmniMemo {
       var transitions = true
       @Flag(inversion: .prefixedNo, help: "Store a short, secret-checked summary of each prompt (never the full text).")
       var prompts = true
+      @Flag(inversion: .prefixedNo, help: "Show a short task label on agent cards (a subagent's few-word task). Off unless asked.")
+      var titles = false
       func run() async throws {
         let root = canonical(options.dataDir)
         guard FileManager.default.fileExists(atPath: root.appendingPathComponent("meta.json").path)
         else { throw MemoError.storageUnavailable }
-        let value = AutoSave(checkpoints: checkpoints, transitions: transitions, prompts: prompts)
+        let value = AutoSave(checkpoints: checkpoints, transitions: transitions, prompts: prompts, titles: titles)
         try value.write(root)
         try output(value)
       }
@@ -822,6 +824,11 @@ extension OmniMemo {
       if let mode = object["permission_mode"] as? String { metadata["permission_mode"] = .string(mode) }
       let parent = object["spawned_by"] as? String
       if let parent { metadata["spawned_by"] = .string(parent) }
+      // A subagent's few-word task label (kept only where titles are opted in); one that looks
+      // like a secret is dropped so it cannot cost the event.
+      if parent != nil, let title = object["title"] as? String, (try? SecretFilter.check(title)) != nil {
+        metadata["title"] = .string(title)
+      }
       if let type = object["agent_type"] as? String {
         let label = type.prefix(64).replacingOccurrences(of: "[^A-Za-z0-9._:-]", with: "-", options: .regularExpression)
         if !label.isEmpty { metadata["agent_type"] = .string(label) }
