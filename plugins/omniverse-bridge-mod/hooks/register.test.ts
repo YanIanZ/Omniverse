@@ -208,3 +208,19 @@ test('a subagent is its own session: started, its tool calls, its end, linked to
   const list = [card('me', 'working', 'claude'), { ...card('agent-7', 'working', 'claude'), spawned_by: 'me' }, card('c1', 'working', 'codex')]
   expect(others(list, 'me').map(a => a.session_id)).toEqual(['c1'])
 })
+
+test('a subagent is linked by its first event, even when its spawn settles after it ended', async ($, on) => {
+  const w = world(on, 10)
+  on('tool.call', async () => ({ result: 'ok' }))
+  on('agent.spawn', async () => {
+    await $.tool.call({ tool: 'Grep', pattern: 'x', agentId: 'agent-8' } as unknown as Parameters<Engine['tool']['call']>[0])
+    await $.turn.complete({ ...turn('done'), agentId: 'agent-8' } as Parameters<Engine['turn']['complete']>[0])
+    return { model: 'claude-haiku-test', agentId: 'agent-8' }
+  })
+  await $.agent.spawn({ prompt: 'Look', subagentType: 'Explore' } as Parameters<Engine['agent']['spawn']>[0])
+  await w.clock.advance(10)
+  const sub = w.hooks().filter(h => h.session_id === 'agent-8')
+  expect(sub.map(h => h.hook_event_name)).toEqual(['PreToolUse', 'PostToolUse', 'SubagentStop', 'SubagentStop'])
+  expect(sub.every(h => h.spawned_by === 'sess-1')).toBe(true)
+  expect(sub[3]).toMatchObject({ agent_type: 'Explore' })
+})

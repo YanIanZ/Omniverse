@@ -253,6 +253,15 @@ async function openAgent($: EngineInterface, card: AgentCard) {
   await $.ui.open({ id: SESSION_PANE, title: agentLabel(card), focus: true })
 }
 
+/** Subagents seen in this session: who spawned each, and which have ended. */
+const parents = new Map<string, string>()
+const ended = new Set<string>()
+
+/** A subagent's event names it and its parent, so it is linked whichever event arrives first. */
+async function subagent($: EngineInterface, agentId: string) {
+  return { session_id: agentId, model: undefined, spawned_by: parents.get(agentId) ?? (await $.session.id()) }
+}
+
 export const register: Register = (on, options) => {
   config.om = String(options.omPath || 'om')
   config.mode = String(options.rollover || 'suggest')
@@ -305,20 +314,23 @@ export const register: Register = (on, options) => {
   }).catch(($, e, next) => next(e)) // fail open: the prompt always goes through
 
   // A subagent is its own OmniMemo session (its loop's agentId), linked to the loop that spawned it.
+  // Its spawn can settle after its tool calls, or after it ended: then it only fills in the type.
   on('agent.spawn', async ($, e, next) => {
     const result = await next(e)
-    if (result.agentId)
-      void lifecycle($, 'SubagentStart', {
-        session_id: result.agentId, model: result.model,
-        spawned_by: e.parentAgentId ?? (await $.session.id()), agent_type: e.subagentType,
+    if (result.agentId) {
+      const parent = e.parentAgentId ?? (await $.session.id())
+      parents.set(result.agentId, parent)
+      void lifecycle($, ended.has(result.agentId) ? 'SubagentStop' : 'SubagentStart', {
+        session_id: result.agentId, model: result.model, spawned_by: parent, agent_type: e.subagentType,
       })
+    }
     return result
   }).catch(($, e, next) => next(e)) // fail open: never refuses a spawn
 
   // Tool activity by category: `om` maps the tool name and reads nothing else of the call.
   // A subagent's call counts for the subagent, not for the main session.
   on('tool.call', async ($, e, next) => {
-    const who = e.agentId ? { session_id: e.agentId, model: undefined } : {}
+    const who = e.agentId ? await subagent($, e.agentId) : {}
     void lifecycle($, 'PreToolUse', { tool_name: e.tool, ...who })
     const result = await next(e)
     const failed = result.deny !== undefined || result.isError === true
@@ -335,7 +347,10 @@ export const register: Register = (on, options) => {
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
     if (e.agentId === undefined) void lifecycle($, 'Stop')
-    else void lifecycle($, 'SubagentStop', { session_id: e.agentId, model: undefined })
+    else {
+      ended.add(e.agentId)
+      void lifecycle($, 'SubagentStop', await subagent($, e.agentId))
+    }
     // After the turn, so /clear and prompts run with the session idle.
     if (e.agentId === undefined) $.clock.after(200, () => void afterTurn($, e.answer))
     return result
