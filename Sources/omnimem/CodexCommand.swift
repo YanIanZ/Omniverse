@@ -15,7 +15,8 @@ final class AppServerConnection: @unchecked Sendable {
 
   init(cwd: URL) throws {
     process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    process.arguments = ["codex", "app-server", "--listen", "stdio://"]
+    // This adapter reports the thread itself; the user's Codex hooks would report it a second time.
+    process.arguments = ["codex", "app-server", "--disable", "hooks", "--listen", "stdio://"]
     process.currentDirectoryURL = cwd
     process.standardInput = input
     process.standardOutput = output
