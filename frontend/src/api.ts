@@ -27,6 +27,8 @@ export type Agent = {
   /** Active context occupancy reported by the host; absence means unknown. */
   context_used_percent?: number
   context_window_tokens?: number
+  /** Tokens in use when the window is unknown (a subagent on another model): no percent. */
+  context_used_tokens?: number
   context_observed_at?: string
   /** Set on a subagent: the session that spawned it, and its type. */
   spawned_by?: string

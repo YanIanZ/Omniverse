@@ -53,6 +53,13 @@ function ContextIndicator({ agent, now }: { agent: Agent; now: number }) {
   const percent = agent.context_used_percent
   if (typeof percent !== 'number' || !Number.isFinite(percent) || percent < 0 || percent > 100 ||
       agent.status === 'stale' || agent.status === 'offline') {
+    const used = agent.context_used_tokens
+    if (typeof used === 'number' && Number.isInteger(used) && used >= 0 && agent.status !== 'stale' && agent.status !== 'offline') {
+      const text = used >= 1000 ? `${Math.round(used / 1000)}k tokens` : `${used} tokens`
+      const when = agent.context_observed_at ? `, reported ${ago(agent.context_observed_at, now)}` : ''
+      const description = `${used.toLocaleString()} tokens in use${when}; this model's window is unknown, so no percent`
+      return <span className="mono" title={description} aria-label={description}>{text}</span>
+    }
     return <span className="muted" title="Context unknown: no current reported sample">unknown</span>
   }
   const level = percent >= 90 ? 'critical' : percent >= 80 ? 'handoff' : percent >= 70 ? 'prepare' : 'normal'

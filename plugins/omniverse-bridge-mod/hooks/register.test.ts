@@ -225,7 +225,7 @@ test('a subagent is linked by its first event, even when its spawn settles after
   expect(sub[3]).toMatchObject({ agent_type: 'Explore' })
 })
 
-test("a subagent's context is its last request over the session window, only on the session's model", async ($, on) => {
+test("a subagent's context: a percent of the session window on its model, else tokens only", async ($, on) => {
   const w = world(on, 10)
   const usage = (model: string, input: number) => ({
     model, input_tokens: input, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, output_tokens: 0,
@@ -242,10 +242,11 @@ test("a subagent's context is its last request over the session window, only on 
   await step('agent-9')
   next = usage('claude-test', 50_500) // under a point more: not sent again
   await step('agent-9')
-  next = usage('claude-haiku-other', 90_000) // another model: its window is unknown
+  next = usage('claude-haiku-other', 90_000) // another model: its window is unknown, tokens only
   await step('agent-9')
   await step() // the main session's steps are not sampled here
   const sent = w.hooks().filter(h => h.hook_event_name === 'context.usage')
-  expect(sent.length).toBe(1)
+  expect(sent.length).toBe(2)
   expect(sent[0]).toMatchObject({ session_id: 'agent-9', context_window: { used_percentage: 25, context_window_size: 200_000 } })
+  expect(sent[1]?.context_window).toEqual({ used_tokens: 90_000 })
 })

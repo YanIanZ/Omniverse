@@ -808,6 +808,9 @@ extension OmniMemo {
           _ = try? await store.recordContext(
             agent: host, session: session, model: model.map { String($0.prefix(80)) }, usedPercent: percent,
             windowTokens: (window?["context_window_size"] as? NSNumber)?.intValue)
+        } else if let tokens = (window?["used_tokens"] as? NSNumber)?.intValue {
+          _ = try? await store.recordContextTokens(
+            agent: host, session: session, model: model.map { String($0.prefix(80)) }, usedTokens: tokens)
         }
         return await store.close()
       }

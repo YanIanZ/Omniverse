@@ -262,23 +262,25 @@ async function subagent($: EngineInterface, agentId: string) {
   return { session_id: agentId, model: undefined, spawned_by: parents.get(agentId) ?? (await $.session.id()) }
 }
 
-/** Last context sample sent per subagent, so a step that barely moved it spawns no `om`. */
+/** Last context sample (tokens) sent per subagent, so a step that barely moved it spawns no `om`. */
 const sampled = new Map<string, number>()
 
-/** A subagent's context: its last request's tokens over the session's window. The window is known
- * only when the subagent runs the session's model; any other model's stays unknown. */
+/** A subagent's context: its last request's tokens. Over the session's window when it runs the
+ * session's model; on any other model the window is unknown, so tokens only, never a guessed percent. */
 async function subagentContext($: EngineInterface, agentId: string, usage: TurnUsage) {
   try {
     const { context } = await $.session.usage()
     const base = (m: string) => m.replace(/\[.*\]$/, '')
-    if (!context.window || base(usage.model) !== base(await $.session.model())) return
+    const window = context.window && base(usage.model) === base(await $.session.model()) ? context.window : undefined
     const tokens = usage.input_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens + usage.output_tokens
-    const percent = Math.min(100, Math.round((tokens / context.window) * 1000) / 10)
-    if (Math.abs((sampled.get(agentId) ?? -1) - percent) < 1) return
-    sampled.set(agentId, percent)
+    if (Math.abs((sampled.get(agentId) ?? -Infinity) - tokens) < (window ? window / 100 : 5_000)) return
+    sampled.set(agentId, tokens)
+    const sample = window
+      ? { used_percentage: Math.min(100, Math.round((tokens / window) * 1000) / 10), context_window_size: window }
+      : { used_tokens: tokens }
     await run($, ['hook', 'claude'], JSON.stringify({
       hook_event_name: 'context.usage', session_id: agentId, cwd: await $.session.cwd(), model: usage.model,
-      context_window: { used_percentage: percent, context_window_size: context.window },
+      context_window: sample,
     }))
   } catch {
     // Context is best effort: a failed sample leaves the card's context unknown.

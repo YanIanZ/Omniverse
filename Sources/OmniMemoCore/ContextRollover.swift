@@ -118,6 +118,7 @@ extension MemoryStore {
           }
           s.contextUsedPercent = (usedPercent * 10).rounded() / 10
           s.contextWindowTokens = windowTokens
+          s.contextUsedTokens = nil
           s.contextObservedAt = now
           s.lastSeen = now
           if let model { s.model = model }
@@ -132,6 +133,32 @@ extension MemoryStore {
         ])
       return ContextUsage.of(s)
     } catch { throw Self.safeError(error) }
+  }
+
+  /// A sample whose window the host could not say: tokens only, so no percent and no level.
+  /// Returns false when the session was never announced by a lifecycle hook.
+  @discardableResult
+  public func recordContextTokens(agent: String, session: String, model: String?, usedTokens: Int) async throws -> Bool {
+    try validate()
+    let agent = try Self.label(agent, "agent")
+    let session = try Self.label(session, "session")
+    guard (0...10_000_000).contains(usedTokens) else { throw MemoError.invalid("used tokens") }
+    if let model {
+      guard (1...80).contains(model.utf8.count) else { throw MemoError.invalid("model_id") }
+      try SecretFilter.check(model)
+    }
+    do {
+      try await updateSession(agent: agent, session: session) { stored in
+        guard var s = stored else { throw SampleSkipped() }
+        s.contextUsedTokens = usedTokens
+        s.contextUsedPercent = nil
+        s.contextWindowTokens = nil
+        s.contextObservedAt = nowISO()
+        if let model { s.model = model }
+        return s
+      }
+      return true
+    } catch is SampleSkipped { return false } catch { throw Self.safeError(error) }
   }
 
   /// Capsule for a manual fresh-session handoff. Git state is passed in by the caller.

@@ -18,6 +18,7 @@ public struct AgentSession: Codable, Sendable {
     case taskID = "task_id"
     case contextUsedPercent = "context_used_percent"
     case contextWindowTokens = "context_window_tokens"
+    case contextUsedTokens = "context_used_tokens"
     case contextObservedAt = "context_observed_at"
     case parentSessionID = "parent_session_id"
     case childSessionID = "child_session_id"
@@ -49,6 +50,8 @@ public struct AgentSession: Codable, Sendable {
   /// Active context-window occupancy as the host reported it (never lifetime tokens).
   public var contextUsedPercent: Double? = nil
   public var contextWindowTokens: Int? = nil
+  /// Tokens in use when the host could not say the window (a subagent on another model).
+  public var contextUsedTokens: Int? = nil
   public var contextObservedAt: String? = nil
   /// Fresh-session lineage; `rolloverState` follows the v2.4 state machine on the parent.
   public var parentSessionID: String? = nil

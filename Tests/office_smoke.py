@@ -78,6 +78,10 @@ with tempfile.TemporaryDirectory(prefix='office space ', dir=workspace) as folde
     hook('SubagentStart', session='agent-1', spawned_by='sess-1', agent_type='Explore agent')
     sub = [a for a in json.loads(run('agents').stdout) if a['session_id'] == 'agent-1']
     assert sub and sub[0]['spawned_by'] == 'sess-1' and sub[0]['agent_type'] == 'Explore-agent', sub
+    # A subagent on another model: its window is unknown, so tokens only and no percent.
+    hook('context.usage', session='agent-1', context_window={'used_tokens': 45000})
+    sub = [a for a in json.loads(run('agents').stdout) if a['session_id'] == 'agent-1'][0]
+    assert sub['context_used_tokens'] == 45000 and 'context_used_percent' not in sub, sub
     hook('SubagentStop', session='agent-1', spawned_by='sess-1')
     assert [a['status'] for a in json.loads(run('agents').stdout) if a['session_id'] == 'agent-1'] == ['offline']
     hook('SubagentStart', session='agent-2', spawned_by='sess-1')  # interrupted: never stops
