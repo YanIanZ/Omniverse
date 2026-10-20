@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { acknowledged, agentLabel, facts, levelOf, others, parsePrepared, present, recordLines, recordsOf } from './register'
+import { acknowledged, agentLabel, facts, levelOf, others, parsePrepared, parseWindows, present, recordLines, recordsOf } from './register'
 
 const DIGEST = '0123456789abcdef'
 const PREPARED = `OmniMemo context handoff (fresh session; verify everything against the repository).\nGoal:\n- task_1 ship it [doing]\nHandoff: h-1 · digest ${DIGEST} (created)\n`
@@ -266,4 +266,9 @@ test('Codex and OpenCode are offered as subagent types that delegate read-only t
   expect(registered[0]?.prompt).toContain('codex run --prompt-file')
   expect(registered[1]?.prompt).toContain('opencode run --prompt-file')
   expect(registered.every(r => r.prompt.includes('read-only by default') && r.prompt.includes('Never commit, push'))).toBe(true)
+})
+
+test('stated context windows: model=tokens pairs, bad entries ignored', () => {
+  const w = parseWindows(' claude-sonnet-5-5=1000000, claude-haiku-5-5 = 200000, bad, x=-1, y=abc')
+  expect([...w.entries()]).toEqual([['claude-sonnet-5-5', 1_000_000], ['claude-haiku-5-5', 200_000]])
 })

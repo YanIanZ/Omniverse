@@ -108,6 +108,8 @@ export type Placement = {
   fresh: boolean
   task?: Task
   approval?: Approval
+  /** Subagents and delegated runs working for this session: they sit with it, not at desks of their own. */
+  helpers: number
 }
 
 export function minutesAgo(iso: string, now = Date.now()) {
@@ -150,8 +152,19 @@ export function place(
   const used: Partial<Record<RoomId, number>> = {}
   const overflow: Partial<Record<RoomId, number>> = {}
   const placed: Placement[] = []
+  // A subagent or delegated run sits with the session that spawned it (counted on its figure),
+  // so a busy session's helpers do not fill the rooms.
+  const here = new Set(present.map((a) => a.session_id))
+  const helped = (a: Agent) => a.spawned_by !== undefined && here.has(a.spawned_by)
+  const byId = new Map(present.map((a) => [a.session_id, a]))
+  const helpers = new Map<string, number>()
+  for (const a of present.filter(helped)) {
+    let root = a
+    for (let depth = 0; depth < 8 && helped(root); depth++) root = byId.get(root.spawned_by!)!
+    helpers.set(root.session_id, (helpers.get(root.session_id) ?? 0) + 1)
+  }
 
-  for (const agent of present) {
+  for (const agent of present.filter((a) => !helped(a))) {
     const primary = latest.get(agent.agent) === agent
     const approval = primary
       ? approvals.find((p) => p.status === 'pending' && p.requested_by === agent.agent)
@@ -241,6 +254,7 @@ export function place(
       fresh: seenSeconds < 60 && (room === 'workspace' || room === 'review'),
       task,
       approval,
+      helpers: helpers.get(agent.session_id) ?? 0,
     })
   }
 

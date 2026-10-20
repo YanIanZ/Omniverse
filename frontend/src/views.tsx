@@ -709,7 +709,7 @@ export function AgentsView({ store, office }: { store: Store; office: Office }) 
                         {roomLabel(p.room)} <span className="muted">· {p.state}</span>
                       </>
                     ) : (
-                      <span className="muted">{a.status === 'offline' ? 'Left the office' : a.status === 'stale' ? 'Out of the office' : 'Room full'}</span>
+                      <span className="muted">{a.status === 'offline' ? 'Left the office' : a.status === 'stale' ? 'Out of the office' : a.spawned_by ? 'With the session that spawned it' : 'Room full'}</span>
                     )}
                   </td>
                   <td>{sourceLabel(a.source)}</td>

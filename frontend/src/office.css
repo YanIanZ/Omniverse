@@ -119,6 +119,17 @@
   stroke: var(--floor);
   stroke-width: 1.5;
 }
+/* Subagents and delegated runs, counted on the figure of the session that spawned them. */
+.plan .agent .helpers rect {
+  fill: var(--floor);
+  stroke: var(--line);
+  stroke-width: 1.2;
+}
+.plan .agent .helpers text {
+  font: 600 10px var(--cond);
+  text-anchor: middle;
+  fill: var(--line);
+}
 .plan .tone-working .pip {
   fill: var(--ok);
 }

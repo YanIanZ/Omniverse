@@ -279,7 +279,7 @@ export function OfficeMap({ placed, overflow, health, selected, now, live, onSel
             role="button"
             tabIndex={0}
             aria-pressed={isSelected}
-            aria-label={`${agentName(p.agent)}, ${p.state}${p.task ? ': ' + p.task.title : ''}, in ${ROOMS.find((r) => r.id === p.room)?.label}, last signal ${minutes} minutes ago`}
+            aria-label={`${agentName(p.agent)}${p.helpers ? ` with ${p.helpers} subagent${p.helpers === 1 ? '' : 's'}` : ''}, ${p.state}${p.task ? ': ' + p.task.title : ''}, in ${ROOMS.find((r) => r.id === p.room)?.label}, last signal ${minutes} minutes ago`}
             onClick={() => onSelect(p.key)}
             onKeyDown={select(p.key)}
           >
@@ -288,6 +288,12 @@ export function OfficeMap({ placed, overflow, health, selected, now, live, onSel
             <circle className="select-ring" cy={-12} r={20} />
             <FigureGlyph agent={p.agent.agent} unknown={p.tone === 'unknown'} />
             <circle className="pip" cx={11} cy={-24} r={3.6} />
+            {p.helpers > 0 && (
+              <g className="helpers" aria-hidden="true">
+                <rect x={-34} y={-36} width={22} height={14} rx={7} />
+                <text x={-23} y={-25.5}>+{p.helpers}</text>
+              </g>
+            )}
             <rect className="plate" x={-38} y={5} width={76} height={18} />
             <text className="plate-name" y={18}>
               {/* A subagent's plate names its type; the figure already shows its client. */}

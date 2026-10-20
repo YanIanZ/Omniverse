@@ -97,7 +97,19 @@ type Pending = { parent: string; child?: string; digest: string; capsule: string
 const pendingLimitMs = 15 * 60_000
 
 // Options are read in register on each load; the rest starts over on a reload.
-const config = { om: 'om', mode: 'suggest', rolloverAt: 80, prepareAt: 70 }
+const config = { om: 'om', mode: 'suggest', rolloverAt: 80, prepareAt: 70, windows: new Map<string, number>() }
+
+/** `claude-sonnet-5-5=1000000, claude-haiku-5-5=200000`: windows the person states for models
+ * other than the session's, which the host does not report. Bad entries are ignored. */
+export function parseWindows(text: string) {
+  const windows = new Map<string, number>()
+  for (const entry of text.split(',')) {
+    const [model, size] = entry.split('=').map(s => s.trim())
+    const tokens = Number(size)
+    if (model && Number.isInteger(tokens) && tokens > 0) windows.set(model, tokens)
+  }
+  return windows
+}
 let pending: Pending | undefined
 let lastLevel = 'unknown'
 const rollovers: number[] = []
@@ -299,7 +311,9 @@ async function subagentContext($: EngineInterface, agentId: string, usage: TurnU
   try {
     const { context } = await $.session.usage()
     const base = (m: string) => m.replace(/\[.*\]$/, '')
-    const window = context.window && base(usage.model) === base(await $.session.model()) ? context.window : undefined
+    const window =
+      (context.window && base(usage.model) === base(await $.session.model()) ? context.window : undefined)
+      ?? config.windows.get(base(usage.model))
     const tokens = usage.input_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens + usage.output_tokens
     if (Math.abs((sampled.get(agentId) ?? -Infinity) - tokens) < (window ? window / 100 : 5_000)) return
     sampled.set(agentId, tokens)
@@ -320,6 +334,7 @@ export const register: Register = (on, options) => {
   config.mode = String(options.rollover || 'suggest')
   config.rolloverAt = Number(options.rolloverAt ?? 80)
   config.prepareAt = Math.min(Number(options.prepareAt ?? 70), config.rolloverAt)
+  config.windows = parseWindows(String(options.contextWindows ?? ''))
 
   on('session.start', async ($, e, next) => {
     void lifecycle($, 'SessionStart')

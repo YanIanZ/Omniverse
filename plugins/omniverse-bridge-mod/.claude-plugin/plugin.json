@@ -1,6 +1,6 @@
 {
   "name": "omniverse-bridge",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "description": "OmniMemo agent cards, context usage reporting and opt-in fresh-context rollover for Claude Code.",
   "author": {
     "name": "YanIanZ"
@@ -31,6 +31,12 @@
       "title": "Path to om",
       "description": "The om command the plugin runs directly (not through a shell); the installer sets it to the installed binary.",
       "default": "om"
+    },
+    "contextWindows": {
+      "type": "string",
+      "title": "Context windows of other models",
+      "description": "Comma-separated model=tokens (for example claude-sonnet-5-5=1000000). A subagent on a model other than the session's gets a context bar only when its window is stated here; otherwise its tokens in use are shown.",
+      "default": ""
     }
   }
 }
