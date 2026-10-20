@@ -33,3 +33,5 @@ The mod runs with your permissions (it calls `om` through `$.process`); review i
 claude plugin validate plugins/omniverse-bridge-mod
 claude plugin test plugins/omniverse-bridge-mod
 ```
+
+Delegation to other CLIs: the plugin adds two Claude subagent types, `omniverse-bridge:codex` and `omniverse-bridge:opencode`. Ask for one by name ("run it with the codex subagent"); it writes a task brief, runs `om codex run` / `om opencode run` (read-only unless you asked for edits, about ten minutes at most) and reports the answer. The delegated run's card is linked to your session (`--spawned-by`), so it shows in Claude's own subagent list and not again in the band.

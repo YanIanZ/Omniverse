@@ -83,6 +83,8 @@ extension OmniMemo {
       @Flag(help: "Opt in to a managed fresh-session rollover near the context limit.") var rollover = false
       @Option(help: "Reported context percent that triggers a rollover.") var rolloverAt: Double = 80
       @Option(help: "Most rollovers in this run (one child per parent always).") var maxRollovers = 1
+      @Option(help: "Session that delegated this run (a Claude Code session id); links the card to it.")
+      var spawnedBy: String?
 
       func validate() throws {
         guard ["read-only", "workspace-write"].contains(sandbox) else {
@@ -101,7 +103,7 @@ extension OmniMemo {
           defer { connection.close() }
           let run = ManagedCodexRun(
             store: store, connection: connection, sandbox: sandbox, model: model, task: task,
-            timeout: timeout)
+            timeout: timeout, spawnedBy: spawnedBy)
           return try await run.execute(
             prompt: text, rollover: rollover, rolloverAt: rolloverAt, maxRollovers: maxRollovers)
         }
@@ -144,7 +146,12 @@ final class ManagedCodexRun: @unchecked Sendable {
     set { state.withLock { turnValue = newValue } }
   }
 
-  init(store: MemoryStore, connection: AppServerConnection, sandbox: String, model: String?, task: String?, timeout: Int) {
+  let spawnedBy: String?
+  init(
+    store: MemoryStore, connection: AppServerConnection, sandbox: String, model: String?, task: String?, timeout: Int,
+    spawnedBy: String? = nil
+  ) {
+    self.spawnedBy = spawnedBy
     self.store = store
     self.connection = connection
     self.sandbox = sandbox
@@ -357,6 +364,10 @@ final class ManagedCodexRun: @unchecked Sendable {
   private func report(_ type: String, _ thread: String, category: String? = nil, task: String? = nil) async {
     var metadata: [String: MetaValue] = ["observability": .string("managed")]
     if let category { metadata["tool_category"] = .string(category) }
+    if let spawnedBy {
+      metadata["spawned_by"] = .string(spawnedBy)
+      metadata["agent_type"] = .string("delegated")
+    }
     _ = try? await store.ingest(
       RuntimeEventInput(
         source: "codex_app_server", provider: "codex", externalSessionID: thread, eventType: type,

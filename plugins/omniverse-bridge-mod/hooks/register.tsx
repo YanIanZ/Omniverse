@@ -262,6 +262,34 @@ async function subagent($: EngineInterface, agentId: string) {
   return { session_id: agentId, model: undefined, spawned_by: parents.get(agentId) ?? (await $.session.id()) }
 }
 
+/** Other CLIs as Claude subagent types: each hands one task to its CLI through `om` and reports
+ * back. Read-only by default; offered only for a request that names that CLI. */
+const WORKERS = [
+  { name: 'codex', cli: 'Codex (OpenAI)', run: 'codex run', write: '--sandbox workspace-write' },
+  { name: 'opencode', cli: 'OpenCode', run: 'opencode run', write: '--write' },
+]
+
+function workerPrompt(w: (typeof WORKERS)[number]) {
+  return `You hand one task to ${w.cli}, another coding agent CLI, through OmniMemo, then report back.
+1. Write the task as a self-contained brief to a new file in $TMPDIR (use Write): the goal, the files or area in scope, what done means, and constraints. Include only what the task needs: never secrets, credentials, or this conversation.
+2. Run it with Bash, Bash timeout 600000: \`${config.om} --agent claude ${w.run} --prompt-file <file> --timeout 570 --spawned-by "$CLAUDE_CODE_SESSION_ID"\`
+   It is read-only by default. Add \`${w.write}\` only when the task you were given explicitly asks for file edits. A task too big for ten minutes: say so and suggest how to split it.
+3. Reply with what it reported: its answer, the files it changed (\`git status --short\`), and any failure exactly as printed. Do not redo its work yourself. Never commit, push, or change git settings.
+If the command is missing or fails to start, say so and stop.`
+}
+
+async function registerWorkers($: EngineInterface) {
+  for (const w of WORKERS) {
+    await $.agent.register({
+      name: w.name,
+      description: `Hands one self-contained task to the ${w.cli} CLI through OmniMemo and returns its answer. Use only when the user asks for ${w.name} (for example "run it with ${w.name}" or "${w.name} subagent"). Read-only unless the user asked for edits.`,
+      prompt: workerPrompt(w),
+      tools: ['Bash', 'Write', 'Read'],
+      model: 'haiku',
+    }).catch(() => undefined) // a host without agent types keeps the rest of the bridge
+  }
+}
+
 /** Last context sample (tokens) sent per subagent, so a step that barely moved it spawns no `om`. */
 const sampled = new Map<string, number>()
 
@@ -300,7 +328,9 @@ export const register: Register = (on, options) => {
     await $.command.register({ name: 'om-rollover', description: 'Save a checkpoint and continue this work in a fresh, empty conversation' })
     $.clock.after(300, () => void refresh($))
     $.clock.every(15_000, () => void refresh($))
-    return next(e)
+    const result = await next(e)
+    void registerWorkers($) // agent types are accepted once the session has bound
+    return result
   })
 
   on('command.run', { command: 'om-agents' }, async $ => {

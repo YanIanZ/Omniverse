@@ -822,8 +822,11 @@ extension OmniMemo {
       var metadata: [String: MetaValue] = ["observability": .string("passive")]
       if phase == .tool { metadata["tool_category"] = .string(RuntimeMapping.toolCategory(object["tool_name"] as? String)) }
       if let mode = object["permission_mode"] as? String { metadata["permission_mode"] = .string(mode) }
-      let parent = object["spawned_by"] as? String
+      // A run `om opencode run --spawned-by` launched names its delegating session in the environment.
+      let delegated = ProcessInfo.processInfo.environment["OMNIMEM_SPAWNED_BY"].flatMap { $0.isEmpty ? nil : $0 }
+      let parent = object["spawned_by"] as? String ?? delegated
       if let parent { metadata["spawned_by"] = .string(parent) }
+      if object["spawned_by"] == nil, delegated != nil { metadata["agent_type"] = .string("delegated") }
       // A subagent's few-word task label (kept only where titles are opted in); one that looks
       // like a secret is dropped so it cannot cost the event.
       if parent != nil, let title = object["title"] as? String, (try? SecretFilter.check(title)) != nil {

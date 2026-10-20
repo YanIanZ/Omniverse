@@ -250,3 +250,20 @@ test("a subagent's context: a percent of the session window on its model, else t
   expect(sent[0]).toMatchObject({ session_id: 'agent-9', context_window: { used_percentage: 25, context_window_size: 200_000 } })
   expect(sent[1]?.context_window).toEqual({ used_tokens: 90_000 })
 })
+
+test('Codex and OpenCode are offered as subagent types that delegate read-only through om', async ($, on) => {
+  const w = world(on, 10)
+  const registered: { name: string; prompt: string; tools?: readonly string[] }[] = []
+  on('agent.register', async (_$, e) => {
+    registered.push(e)
+    return { value: { agent: 'omniverse-bridge:' + e.name } }
+  })
+  on('command.register', async (_$, e) => ({ value: { command: e.name } }))
+  on('session.start', async (_$, e) => ({ cwd: e.cwd }))
+  await $.session.start({ source: 'startup', cwd: '/repo', surface: 'terminal', isInteractive: true } as unknown as Parameters<Engine['session']['start']>[0])
+  await w.clock.advance(10)
+  expect(registered.map(r => r.name)).toEqual(['codex', 'opencode'])
+  expect(registered[0]?.prompt).toContain('codex run --prompt-file')
+  expect(registered[1]?.prompt).toContain('opencode run --prompt-file')
+  expect(registered.every(r => r.prompt.includes('read-only by default') && r.prompt.includes('Never commit, push'))).toBe(true)
+})
