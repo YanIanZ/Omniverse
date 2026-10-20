@@ -190,17 +190,19 @@ private struct SampleSkipped: Error {}
 
 extension MemoryStore {
   /// Atomically reserves the only child of a parent session; false when one was already reserved.
+  /// A parent resumed after a completed rollover is a new generation and may hand off again.
   public func beginRollover(agent: String, parent: String) async throws -> Bool {
     try validate()
     let agent = try Self.label(agent, "agent")
     let parent = try Self.label(parent, "session")
     do {
-      guard try await backend.session(project: binding.id, agent: agent, session: parent) != nil else {
+      guard let stored = try await backend.session(project: binding.id, agent: agent, session: parent) else {
         throw MemoError.notFound
       }
+      let generation = stored.rolloverState == "completed" ? "|after|" + (stored.childSessionID ?? "") : ""
       guard
         try await backend.claimRuntimeEvent(
-          project: binding.id, key: "rollover|" + agent + "|" + parent, at: nowISO())
+          project: binding.id, key: "rollover|" + agent + "|" + parent + generation, at: nowISO())
       else { return false }
       try await updateSession(agent: agent, session: parent) { stored in
         guard var s = stored else { throw MemoError.notFound }

@@ -222,6 +222,13 @@ final class ContextRolloverTests: XCTestCase {
     XCTAssertNil(retired.taskID)
     XCTAssertEqual(child.taskID, "task_b")
     XCTAssertEqual(child.parentSessionID, "p2")
+    // The retired parent was resumed and filled up again: it may hand off once more, only once.
+    async let again = store.beginRollover(agent: "codex", parent: "p2")
+    async let twice = store.beginRollover(agent: "codex", parent: "p2")
+    let reclaims = try await [again, twice]
+    XCTAssertEqual(reclaims.filter { $0 }.count, 1)
+    let reopened = try await stored(store, "p2")
+    XCTAssertEqual(reopened.rolloverState, "starting_child")
     let types = try await store.events(after: 0).map(\.type).filter { $0.hasPrefix("rollover.") }
     XCTAssertEqual(types, ["rollover.created", "rollover.failed", "rollover.created", "rollover.completed"])
   }
