@@ -74,6 +74,12 @@ with tempfile.TemporaryDirectory(prefix='office space ', dir=workspace) as folde
     assert hook('UserPromptSubmit', prompt='again') == '', 'unchanged capsule repeated'
     agents = json.loads(run('agents').stdout)
     assert [(a['agent'], a['status'], a['source']) for a in agents] == [('claude', 'working', 'claude_hook')]
+    # A subagent is its own session, linked to the one that spawned it; its end is no session handoff.
+    hook('SubagentStart', session='agent-1', spawned_by='sess-1', agent_type='Explore agent')
+    sub = [a for a in json.loads(run('agents').stdout) if a['session_id'] == 'agent-1']
+    assert sub and sub[0]['spawned_by'] == 'sess-1' and sub[0]['agent_type'] == 'Explore-agent', sub
+    hook('SubagentStop', session='agent-1', spawned_by='sess-1')
+    assert [a['status'] for a in json.loads(run('agents').stdout) if a['session_id'] == 'agent-1'] == ['offline']
 
     # Real Redis (temporary, isolated port) to prove the optional live signal works.
     redis = subprocess.Popen(['redis-server', '--port', str(REDIS_PORT), '--bind', '127.0.0.1', '--save', '',
@@ -172,6 +178,6 @@ with tempfile.TemporaryDirectory(prefix='office space ', dir=workspace) as folde
     assert not list((data / 'servers').glob('*.json'))
     assert json.loads(run('stop').stdout)['server'] == 'not running'
 
-print(f'PASS: Claude hook wake/first-prompt once/end; office reuse; React served by Vapor; '
+print(f'PASS: Claude hook wake/first-prompt once/end; subagent session; office reuse; React served by Vapor; '
       f'WS origin/auth/scope guards; live task event ({latency:.2f}s with Redis); CAS conflict; '
       f'Redis outage keeps MongoDB writes; Redis state honest and resubscribed; one server per project; om stop --all')

@@ -22,6 +22,8 @@ public struct AgentSession: Codable, Sendable {
     case parentSessionID = "parent_session_id"
     case childSessionID = "child_session_id"
     case rolloverState = "rollover_state"
+    case spawnedBy = "spawned_by"
+    case agentType = "agent_type"
     case revision
   }
   public var agent: String
@@ -52,6 +54,9 @@ public struct AgentSession: Codable, Sendable {
   public var parentSessionID: String? = nil
   public var childSessionID: String? = nil
   public var rolloverState: String? = nil
+  /// A subagent's parent session (or parent subagent) and the type it was spawned as.
+  public var spawnedBy: String? = nil
+  public var agentType: String? = nil
   /// Write counter for compare-and-set saves; nil on sessions stored before it existed.
   public var revision: Int? = nil
 }

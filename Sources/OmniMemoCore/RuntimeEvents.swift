@@ -64,7 +64,7 @@ public struct RuntimeEventInput: Codable, Sendable {
   /// Metadata keys an adapter may send; anything else is rejected rather than stored.
   public static let metadataKeys: Set<String> = [
     "tool_category", "error_kind", "observability", "title", "client_version", "turn_id",
-    "reason", "permission_mode",
+    "reason", "permission_mode", "spawned_by", "agent_type",
   ]
 }
 

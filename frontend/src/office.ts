@@ -142,7 +142,8 @@ export function place(
   const present = agents.filter(inOffice)
   // A task or approval belongs to the most recently seen session of that provider.
   const latest = new Map<string, Agent>()
-  for (const a of present) {
+  // A subagent works for its parent session; tasks and approvals stay with the parent.
+  for (const a of present.filter((x) => !x.spawned_by)) {
     const prev = latest.get(a.agent)
     if (!prev || prev.last_seen < a.last_seen) latest.set(a.agent, a)
   }

@@ -2,6 +2,7 @@ import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'rea
 import type { Store } from './App'
 import {
   type Agent,
+  agentName,
   ApiError,
   type Approval,
   type Memory,
@@ -277,7 +278,7 @@ export function OfficeView({ store, office }: { store: Store; office: Office }) 
                     <th scope="row">
                       <button type="button" className="row-select" aria-pressed={current?.key === p.key} onClick={() => setSelected(p.key)}>
                         <AgentMark agent={p.agent.agent} size={16} unknown={p.tone === 'unknown'} />
-                        {p.agent.agent}
+                        {agentName(p.agent)}
                       </button>
                     </th>
                     <td>{roomLabel(p.room)}</td>
@@ -302,7 +303,7 @@ export function OfficeView({ store, office }: { store: Store; office: Office }) 
               <h2>
                 <span className="detail-name">
                   <AgentMark agent={current.agent.agent} size={22} unknown={current.tone === 'unknown'} />
-                  {current.agent.agent}
+                  {agentName(current.agent)}
                 </span>
                 <span className="panel-note mono">{current.agent.session_id}</span>
               </h2>
@@ -329,6 +330,12 @@ export function OfficeView({ store, office }: { store: Store; office: Office }) 
                     <dd>
                       <a href="#approvals">{current.approval.action}</a>
                     </dd>
+                  </>
+                )}
+                {current.agent.spawned_by && (
+                  <>
+                    <dt>Subagent of</dt>
+                    <dd className="mono">{current.agent.spawned_by}</dd>
                   </>
                 )}
                 <dt>Signal</dt>
@@ -677,7 +684,7 @@ export function AgentsView({ store, office }: { store: Store; office: Office }) 
                   <th scope="row">
                     <span className="cell-agent">
                       <AgentMark agent={a.agent} size={20} unknown={a.status === 'stale'} />
-                      {a.agent}
+                      {agentName(a)}
                     </span>
                   </th>
                   <td>

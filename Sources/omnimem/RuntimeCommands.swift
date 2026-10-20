@@ -779,6 +779,9 @@ extension OmniMemo {
       case "UserPromptSubmit", "BeforeAgent", "chat.message": return (.prompt, "prompt.received")
       case "Stop", "AfterAgent", "session.idle": return (.stop, "turn.completed")
       case "SessionEnd", "session.deleted": return (.end, "session.ended")
+      // A subagent is its own session, linked to the one that spawned it.
+      case "SubagentStart": return (.start, "session.started")
+      case "SubagentStop": return (.end, "session.ended")
       case "PreToolUse", "BeforeTool", "tool.execute.before": return (.tool, "tool.started")
       case "PostToolUse", "AfterTool", "tool.execute.after": return (.tool, "tool.succeeded")
       case "PostToolUseFailure", "tool.execute.failed": return (.tool, "tool.failed")
@@ -814,6 +817,12 @@ extension OmniMemo {
       var metadata: [String: MetaValue] = ["observability": .string("passive")]
       if phase == .tool { metadata["tool_category"] = .string(RuntimeMapping.toolCategory(object["tool_name"] as? String)) }
       if let mode = object["permission_mode"] as? String { metadata["permission_mode"] = .string(mode) }
+      let parent = object["spawned_by"] as? String
+      if let parent { metadata["spawned_by"] = .string(parent) }
+      if let type = object["agent_type"] as? String {
+        let label = type.prefix(64).replacingOccurrences(of: "[^A-Za-z0-9._:-]", with: "-", options: .regularExpression)
+        if !label.isEmpty { metadata["agent_type"] = .string(label) }
+      }
       let runtimeEvent = RuntimeEventInput(
         source: source, provider: host, externalSessionID: session, eventType: eventType,
         modelID: model.map { String($0.prefix(80)) }, metadata: metadata)
@@ -823,7 +832,8 @@ extension OmniMemo {
         return
       }
       // Codex has no session-end hook; its per-turn Stop checkpoints are deduplicated by content.
-      let ends = phase == .end || (host == "codex" && phase == .stop)
+      // A subagent's end is part of its parent's work, not a session handoff.
+      let ends = parent == nil && (phase == .end || (host == "codex" && phase == .stop))
       if phase == .prompt, let prompt = object["prompt"] as? String {
         await store.autoPromptSummary(agent: host, session: session, prompt: prompt)
       }

@@ -1,5 +1,5 @@
 import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { Health } from './api'
+import { agentName, type Health } from './api'
 import { FigureGlyph } from './Figure'
 import { BUILDING, CORRIDOR, HALL_X, minutesAgo, PLAN, type Placement, ROOMS, type RoomId, route } from './office'
 import './office.css'
@@ -104,7 +104,7 @@ export function OfficeMap({ placed, overflow, health, selected, now, live, onSel
       const from = ROOMS.find((r) => r.id === before.room)!
       const to = ROOMS.find((r) => r.id === p.room)!
       const points = route(from, to, [before.x, before.y], [p.x, p.y])
-      const short = `${p.agent.agent} → ${to.label}`
+      const short = `${agentName(p.agent)} → ${to.label}`
       fresh.push({ id: Date.now() + Math.random(), key: p.key, points, short, label: p.task ? `${short} · ${p.task.title}` : short })
       const node = nodes.current.get(p.key)
       if (!node || reducedMotion()) continue
@@ -277,7 +277,7 @@ export function OfficeMap({ placed, overflow, health, selected, now, live, onSel
             role="button"
             tabIndex={0}
             aria-pressed={isSelected}
-            aria-label={`${p.agent.agent}, ${p.state}${p.task ? ': ' + p.task.title : ''}, in ${ROOMS.find((r) => r.id === p.room)?.label}, last signal ${minutes} minutes ago`}
+            aria-label={`${agentName(p.agent)}, ${p.state}${p.task ? ': ' + p.task.title : ''}, in ${ROOMS.find((r) => r.id === p.room)?.label}, last signal ${minutes} minutes ago`}
             onClick={() => onSelect(p.key)}
             onKeyDown={select(p.key)}
           >
@@ -288,7 +288,7 @@ export function OfficeMap({ placed, overflow, health, selected, now, live, onSel
             <circle className="pip" cx={11} cy={-24} r={3.6} />
             <rect className="plate" x={-38} y={5} width={76} height={18} />
             <text className="plate-name" y={18}>
-              {p.agent.agent.length > 11 ? p.agent.agent.slice(0, 10) + '…' : p.agent.agent}
+              {agentName(p.agent).length > 11 ? agentName(p.agent).slice(0, 10) + '…' : agentName(p.agent)}
             </text>
             {/* Stale figures carry no per-agent line: the room tag already says there is no recent signal. */}
             {p.tone !== 'unknown' && (

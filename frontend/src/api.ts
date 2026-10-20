@@ -28,7 +28,13 @@ export type Agent = {
   context_used_percent?: number
   context_window_tokens?: number
   context_observed_at?: string
+  /** Set on a subagent: the session that spawned it, and its type. */
+  spawned_by?: string
+  agent_type?: string
 }
+
+/** `claude` for a session, `claude › Explore` for a subagent. */
+export const agentName = (a: Agent) => (a.spawned_by ? `${a.agent} › ${a.agent_type ?? 'subagent'}` : a.agent)
 
 // Records written before the runtime bridge still carry the old status names.
 const LEGACY: Record<string, AgentStatus> = {

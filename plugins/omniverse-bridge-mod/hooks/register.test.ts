@@ -190,3 +190,21 @@ test('slash commands submit no lifecycle prompt and get no capsule', async ($, o
   await $.prompt.submit({ text: '/om-agents', command: { name: 'om-agents', args: '' } } as Parameters<Engine['prompt']['submit']>[0])
   expect(w.hooks().some(h => h.hook_event_name === 'UserPromptSubmit')).toBe(false)
 })
+
+test('a subagent is its own session: started, its tool calls, its end, linked to the spawning session', async ($, on) => {
+  const w = world(on, 10)
+  on('agent.spawn', async () => ({ model: 'claude-haiku-test', agentId: 'agent-7' }))
+  on('tool.call', async () => ({ result: 'ok' }))
+  await $.agent.spawn({ prompt: 'Find the parser', subagentType: 'Explore' } as Parameters<Engine['agent']['spawn']>[0])
+  await $.tool.call({ tool: 'Grep', pattern: 'parse', agentId: 'agent-7' } as unknown as Parameters<Engine['tool']['call']>[0])
+  await $.turn.complete({ ...turn('found it'), agentId: 'agent-7' } as Parameters<Engine['turn']['complete']>[0])
+  await w.clock.advance(10)
+  const sub = w.hooks().filter(h => h.session_id === 'agent-7')
+  expect(sub.map(h => h.hook_event_name)).toEqual(['SubagentStart', 'PreToolUse', 'PostToolUse', 'SubagentStop'])
+  expect(sub[0]).toMatchObject({ spawned_by: 'sess-1', agent_type: 'Explore', model: 'claude-haiku-test' })
+  expect(sub.slice(1).every(h => h.model === undefined)).toBe(true)
+  // The main session is neither marked busy by the subagent's tools nor ended by its turn.
+  expect(w.hooks().some(h => h.session_id === 'sess-1' && ['PreToolUse', 'Stop'].includes(String(h.hook_event_name)))).toBe(false)
+  const list = [card('me', 'working', 'claude'), { ...card('agent-7', 'working', 'claude'), spawned_by: 'me' }, card('c1', 'working', 'codex')]
+  expect(others(list, 'me').map(a => a.session_id)).toEqual(['c1'])
+})

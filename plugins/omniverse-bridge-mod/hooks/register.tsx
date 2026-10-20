@@ -21,11 +21,12 @@ export function present(list: AgentCard[]) {
   return list.filter(a => a.status !== 'offline' && a.status !== 'stale')
 }
 
-/** Other terminal agents for the band: present, not this session, busiest first. */
+/** Other terminal agents for the band: present, not this session nor its own subagents
+ * (Claude lists those itself), busiest first. */
 export function others(list: AgentCard[], session: string) {
   const order = ['blocked', 'working', 'waiting']
   return present(list)
-    .filter(a => a.session_id !== session)
+    .filter(a => a.session_id !== session && a.spawned_by !== session)
     .sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status))
 }
 
@@ -303,12 +304,25 @@ export const register: Register = (on, options) => {
     return next(capsule ? { ...e, context: [...(e.context ?? []), capsule] } : e)
   }).catch(($, e, next) => next(e)) // fail open: the prompt always goes through
 
+  // A subagent is its own OmniMemo session (its loop's agentId), linked to the loop that spawned it.
+  on('agent.spawn', async ($, e, next) => {
+    const result = await next(e)
+    if (result.agentId)
+      void lifecycle($, 'SubagentStart', {
+        session_id: result.agentId, model: result.model,
+        spawned_by: e.parentAgentId ?? (await $.session.id()), agent_type: e.subagentType,
+      })
+    return result
+  }).catch(($, e, next) => next(e)) // fail open: never refuses a spawn
+
   // Tool activity by category: `om` maps the tool name and reads nothing else of the call.
+  // A subagent's call counts for the subagent, not for the main session.
   on('tool.call', async ($, e, next) => {
-    void lifecycle($, 'PreToolUse', { tool_name: e.tool })
+    const who = e.agentId ? { session_id: e.agentId, model: undefined } : {}
+    void lifecycle($, 'PreToolUse', { tool_name: e.tool, ...who })
     const result = await next(e)
     const failed = result.deny !== undefined || result.isError === true
-    void lifecycle($, failed ? 'PostToolUseFailure' : 'PostToolUse', { tool_name: e.tool })
+    void lifecycle($, failed ? 'PostToolUseFailure' : 'PostToolUse', { tool_name: e.tool, ...who })
     return result
   }).catch(($, e, next) => next(e)) // fail open: never refuses or repeats a tool call
 
@@ -321,6 +335,7 @@ export const register: Register = (on, options) => {
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
     if (e.agentId === undefined) void lifecycle($, 'Stop')
+    else void lifecycle($, 'SubagentStop', { session_id: e.agentId, model: undefined })
     // After the turn, so /clear and prompts run with the session idle.
     if (e.agentId === undefined) $.clock.after(200, () => void afterTurn($, e.answer))
     return result
