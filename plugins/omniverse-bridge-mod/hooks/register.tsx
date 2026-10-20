@@ -21,12 +21,13 @@ export function present(list: AgentCard[]) {
   return list.filter(a => a.status !== 'offline' && a.status !== 'stale')
 }
 
-/** Other terminal agents for the band: present, not this session nor its own subagents
- * (Claude lists those itself), busiest first. */
+/** Other agents for the band: present, not this session, busiest first. Claude subagents are
+ * left out (each Claude lists its own); a Codex or OpenCode run delegated from here stays in,
+ * since Claude's list shows only the subagent waiting on it, not the run's progress. */
 export function others(list: AgentCard[], session: string) {
   const order = ['blocked', 'working', 'waiting']
   return present(list)
-    .filter(a => a.session_id !== session && a.spawned_by !== session)
+    .filter(a => a.session_id !== session && !(a.spawned_by && (a.client ?? a.display_slug.split('-')[0]) === 'claude'))
     .sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status))
 }
 
@@ -73,7 +74,7 @@ const tone = (status: string) => (status === 'working' ? 'success' : status === 
 
 /** What is known about an agent, in order; unknown values are left out rather than printed as "unknown". */
 export function facts(a: AgentCard, now: number) {
-  const out = [a.status]
+  const out = [a.agent_type === 'delegated' ? `delegated · ${a.status}` : a.status]
   if (a.task) out.push(a.task.title)
   else if (a.tool_category) out.push(a.tool_category.replace('_', ' '))
   const p = a.progress
@@ -285,7 +286,7 @@ function workerPrompt(w: (typeof WORKERS)[number]) {
   return `You hand one task to ${w.cli}, another coding agent CLI, through OmniMemo, then report back.
 1. Write the task as a self-contained brief to a new file in $TMPDIR (use Write): the goal, the files or area in scope, what done means, and constraints. Include only what the task needs: never secrets, credentials, or this conversation.
 2. Run it with Bash, Bash timeout 600000: \`${config.om} --agent claude ${w.run} --prompt-file <file> --timeout 570 --spawned-by "$CLAUDE_CODE_SESSION_ID"\`
-   It is read-only by default. Add \`${w.write}\` only when the task you were given explicitly asks for file edits. A task too big for ten minutes: say so and suggest how to split it.
+   A model named for the task goes in \`--model <id>\`, not in the brief. It is read-only by default. Add \`${w.write}\` only when the task you were given explicitly asks for file edits. A task too big for ten minutes: say so and suggest how to split it.
 3. Reply with what it reported: its answer, the files it changed (\`git status --short\`), and any failure exactly as printed. Do not redo its work yourself. Never commit, push, or change git settings.
 If the command is missing or fails to start, say so and stop.`
 }

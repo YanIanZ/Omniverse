@@ -205,8 +205,14 @@ test('a subagent is its own session: started, its tool calls, its end, linked to
   expect(sub.slice(1).every(h => h.model === undefined)).toBe(true)
   // The main session is neither marked busy by the subagent's tools nor ended by its turn.
   expect(w.hooks().some(h => h.session_id === 'sess-1' && ['PreToolUse', 'Stop'].includes(String(h.hook_event_name)))).toBe(false)
-  const list = [card('me', 'working', 'claude'), { ...card('agent-7', 'working', 'claude'), spawned_by: 'me' }, card('c1', 'working', 'codex')]
-  expect(others(list, 'me').map(a => a.session_id)).toEqual(['c1'])
+  const list = [
+    card('me', 'working', 'claude'), { ...card('agent-7', 'working', 'claude'), spawned_by: 'me' },
+    { ...card('agent-8', 'working', 'claude'), spawned_by: 'other' }, card('c1', 'working', 'codex'),
+    { ...card('d1', 'working', 'codex'), spawned_by: 'me', agent_type: 'delegated' },
+  ]
+  // Claude subagents are Claude's to list; a run delegated to Codex shows here with its progress.
+  expect(others(list, 'me').map(a => a.session_id)).toEqual(['c1', 'd1'])
+  expect(facts(list[4]!, 0)[0]).toBe('delegated · working')
 })
 
 test('a subagent is linked by its first event, even when its spawn settles after it ended', async ($, on) => {
