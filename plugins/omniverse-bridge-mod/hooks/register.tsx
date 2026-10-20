@@ -4,7 +4,7 @@
 // Lifecycle (session, prompt, tool, turn) comes from the plugin's own engine events, so no
 // Claude Code settings hooks are needed for OmniMemo.
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, TurnUsage } from 'claude-code'
 
 import type { AgentCard, AgentRecord } from '../types'
 
@@ -262,6 +262,29 @@ async function subagent($: EngineInterface, agentId: string) {
   return { session_id: agentId, model: undefined, spawned_by: parents.get(agentId) ?? (await $.session.id()) }
 }
 
+/** Last context sample sent per subagent, so a step that barely moved it spawns no `om`. */
+const sampled = new Map<string, number>()
+
+/** A subagent's context: its last request's tokens over the session's window. The window is known
+ * only when the subagent runs the session's model; any other model's stays unknown. */
+async function subagentContext($: EngineInterface, agentId: string, usage: TurnUsage) {
+  try {
+    const { context } = await $.session.usage()
+    const base = (m: string) => m.replace(/\[.*\]$/, '')
+    if (!context.window || base(usage.model) !== base(await $.session.model())) return
+    const tokens = usage.input_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens + usage.output_tokens
+    const percent = Math.min(100, Math.round((tokens / context.window) * 1000) / 10)
+    if (Math.abs((sampled.get(agentId) ?? -1) - percent) < 1) return
+    sampled.set(agentId, percent)
+    await run($, ['hook', 'claude'], JSON.stringify({
+      hook_event_name: 'context.usage', session_id: agentId, cwd: await $.session.cwd(), model: usage.model,
+      context_window: { used_percentage: percent, context_window_size: context.window },
+    }))
+  } catch {
+    // Context is best effort: a failed sample leaves the card's context unknown.
+  }
+}
+
 export const register: Register = (on, options) => {
   config.om = String(options.omPath || 'om')
   config.mode = String(options.rollover || 'suggest')
@@ -337,6 +360,13 @@ export const register: Register = (on, options) => {
     void lifecycle($, failed ? 'PostToolUseFailure' : 'PostToolUse', { tool_name: e.tool, ...who })
     return result
   }).catch(($, e, next) => next(e)) // fail open: never refuses or repeats a tool call
+
+  // A subagent's requests carry its context use; the main session's comes from session.usage.
+  on('turn.step', async function* ($, e, next) {
+    const result = yield* next(e)
+    if (e.agentId && result.usage) void subagentContext($, e.agentId, result.usage)
+    return result
+  })
 
   on('session.end', async ($, e, next) => {
     // The engine allows about 1.5 s for every session.end hook together.
