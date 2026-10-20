@@ -259,12 +259,19 @@ extension MemoryStore {
     let passive = format.string(from: Date().addingTimeInterval(-Self.presenceTimeout))
     let managed = format.string(from: Date().addingTimeInterval(-Self.managedStaleAfter))
     do {
-      return Self.withoutMCPShadows(try await backend.sessions(project: binding.id, limit: limit)).map {
+      let sessions = Self.withoutMCPShadows(try await backend.sessions(project: binding.id, limit: limit)).map {
         var s = $0
         s.status = RuntimeMapping.legacy(s.status)
         // Silence never becomes offline or done: it is stale, shown with its last-seen time.
         let cutoff = s.observability == "managed" ? managed : passive
         if s.status != "offline" && s.lastSeen < cutoff { s.status = "stale" }
+        return s
+      }
+      // An interrupted subagent never reports its end; it ends with the session that spawned it.
+      let ended = Set(sessions.filter { $0.status == "offline" }.map { $0.agent + "|" + $0.sessionID })
+      return sessions.map {
+        var s = $0
+        if let parent = s.spawnedBy, ended.contains(s.agent + "|" + parent) { s.status = "offline" }
         return s
       }
     } catch { throw Self.safeError(error) }

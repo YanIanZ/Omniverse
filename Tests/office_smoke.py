@@ -80,6 +80,7 @@ with tempfile.TemporaryDirectory(prefix='office space ', dir=workspace) as folde
     assert sub and sub[0]['spawned_by'] == 'sess-1' and sub[0]['agent_type'] == 'Explore-agent', sub
     hook('SubagentStop', session='agent-1', spawned_by='sess-1')
     assert [a['status'] for a in json.loads(run('agents').stdout) if a['session_id'] == 'agent-1'] == ['offline']
+    hook('SubagentStart', session='agent-2', spawned_by='sess-1')  # interrupted: never stops
 
     # Real Redis (temporary, isolated port) to prove the optional live signal works.
     redis = subprocess.Popen(['redis-server', '--port', str(REDIS_PORT), '--bind', '127.0.0.1', '--save', '',
@@ -138,6 +139,7 @@ with tempfile.TemporaryDirectory(prefix='office space ', dir=workspace) as folde
         hook('SessionEnd')
         assert ws_recv(s)['data']['status'] == 'offline'
         s.close()
+        assert [a['status'] for a in json.loads(run('agents').stdout) if a['session_id'] == 'agent-2'] == ['offline']
     finally:
         redis.terminate(); redis.wait(timeout=10)
 

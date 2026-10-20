@@ -181,7 +181,8 @@ extension MemoryStore {
       let model = s.model.map { $0.lowercased().replacingOccurrences(of: "[^a-z0-9._-]+", with: "-", options: .regularExpression) }
       let task =
         tasks.first { $0.id == s.taskID }
-        ?? tasks.filter { $0.owner == s.agent && ["doing", "review", "blocked"].contains($0.status) }
+        // A subagent works under its parent's task; only a task assigned to it is its own.
+        ?? tasks.filter { s.spawnedBy == nil && $0.owner == s.agent && ["doing", "review", "blocked"].contains($0.status) }
           .max { $0.updatedAt < $1.updatedAt }
       return RuntimeAgentView(
         // `client-model`, without repeating a client name the model id already carries.
