@@ -88,6 +88,8 @@ type Props = {
   onSelect: (key: string) => void
 }
 
+const plate = (name: string) => (name.length > 11 ? name.slice(0, 10) + '…' : name)
+
 export function OfficeMap({ placed, overflow, health, selected, now, live, onSelect }: Props) {
   const nodes = useRef(new Map<string, SVGGElement>())
   const previous = useRef(new Map<string, { room: RoomId; x: number; y: number }>())
@@ -288,7 +290,8 @@ export function OfficeMap({ placed, overflow, health, selected, now, live, onSel
             <circle className="pip" cx={11} cy={-24} r={3.6} />
             <rect className="plate" x={-38} y={5} width={76} height={18} />
             <text className="plate-name" y={18}>
-              {agentName(p.agent).length > 11 ? agentName(p.agent).slice(0, 10) + '…' : agentName(p.agent)}
+              {/* A subagent's plate names its type; the figure already shows its client. */}
+              {plate(p.agent.spawned_by ? '› ' + (p.agent.agent_type ?? 'subagent') : p.agent.agent)}
             </text>
             {/* Stale figures carry no per-agent line: the room tag already says there is no recent signal. */}
             {p.tone !== 'unknown' && (

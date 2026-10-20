@@ -152,7 +152,8 @@ fi
 "$LAUNCHER" --version
 COMMITTED=1
 # Claude Code runs its own copy of an installed plugin; refresh it so new sessions get this code.
-if command -v claude >/dev/null && claude plugin list 2>/dev/null | grep -q 'omniverse-bridge@omnimemo'; then
+# Captured first: with pipefail, `grep -q` closing the pipe early would read as "not installed".
+if command -v claude >/dev/null && [[ "$(claude plugin list 2>/dev/null || true)" == *'omniverse-bridge@omnimemo'* ]]; then
   claude plugin marketplace update omnimemo >/dev/null && claude plugin update omniverse-bridge@omnimemo \
     || printf 'Claude Code plugin not refreshed; run: claude plugin update omniverse-bridge@omnimemo\n'
 fi
