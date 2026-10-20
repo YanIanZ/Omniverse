@@ -8,7 +8,7 @@ import {
   type Task,
   api,
 } from './api'
-import { place } from './office'
+import { inOffice, place } from './office'
 import { Logo } from './Figure'
 import { useLive } from './useLive'
 import { AgentsView, ApprovalsView, EventsView, MemoryView, OfficeView, TasksView } from './views'
@@ -117,8 +117,7 @@ export function App() {
 
   const office = useMemo(() => place(agents, tasks, approvals, events, now), [agents, tasks, approvals, events, now])
   const pending = approvals.filter((a) => a.status === 'pending').length
-  const present = agents.filter((a) => a.status !== 'offline')
-  const stale = present.filter((a) => a.status === 'stale').length
+  const present = agents.filter(inOffice)
 
   if (unauthorized) {
     return (
@@ -194,7 +193,6 @@ export function App() {
             {loaded ? (
               <>
                 {present.length} {present.length === 1 ? 'session' : 'sessions'} present
-                {stale ? ` · ${stale} with no recent signal` : ''}
               </>
             ) : (
               'Reading the project…'

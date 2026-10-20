@@ -331,12 +331,8 @@ export function OfficeMap({ placed, overflow, health, selected, now, live, onSel
         <text x={16} y={50}>
           waiting
         </text>
-        <rect className="key-unknown" x={117} y={41} width={10} height={10} />
+        <circle className="key-fault" cx={122} cy={46} r={4.5} />
         <text x={133} y={50}>
-          stale (no recent signal)
-        </text>
-        <circle className="key-fault" cx={300} cy={46} r={4.5} />
-        <text x={311} y={50}>
           fault (server rack)
         </text>
         {[

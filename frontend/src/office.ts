@@ -121,10 +121,16 @@ export function ago(iso: string, now = Date.now()) {
   return `${Math.round(s / 3600)}h ago`
 }
 
+/** In the office: a session reporting now. Offline and stale (silent) sessions leave the map at
+ * once; they stay listed on the Agents page and return with their next signal. */
+export function inOffice(a: Agent): boolean {
+  return a.status !== 'offline' && a.status !== 'stale'
+}
+
 /**
  * Every placement is derived from a verified record: a session signal, a task the
  * agent owns, an approval it requested, or a checkpoint event it committed.
- * Offline sessions leave the map; nothing is inferred beyond these rules.
+ * Offline and stale sessions leave the map; nothing is inferred beyond these rules.
  */
 export function place(
   agents: Agent[],
@@ -133,7 +139,7 @@ export function place(
   events: LiveEvent[],
   now = Date.now(),
 ): { placed: Placement[]; overflow: Partial<Record<RoomId, number>> } {
-  const present = agents.filter((a) => a.status !== 'offline')
+  const present = agents.filter(inOffice)
   // A task or approval belongs to the most recently seen session of that provider.
   const latest = new Map<string, Agent>()
   for (const a of present) {

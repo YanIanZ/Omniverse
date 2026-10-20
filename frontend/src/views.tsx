@@ -13,7 +13,7 @@ import {
   api,
 } from './api'
 import { AgentMark } from './Figure'
-import { ago, PLAN, type Placement, ROOMS, type RoomId } from './office'
+import { ago, inOffice, PLAN, type Placement, ROOMS, type RoomId } from './office'
 import { OfficeMap } from './OfficeMap'
 
 type Office = { placed: Placement[]; overflow: Partial<Record<RoomId, number>> }
@@ -36,7 +36,7 @@ const STATUS_HELP: Record<Agent['status'], string> = {
   working: 'The host reported a prompt or tool call in this session.',
   waiting: 'The session reported in and is waiting for work.',
   blocked: 'The host reported the session is waiting on an approval or a blocker.',
-  stale: 'No recent signal. It may still be running; OmniMemo cannot tell.',
+  stale: 'No recent signal. It may still be running; OmniMemo cannot tell. It leaves the office map until its next signal.',
   offline: 'The host reported that the session ended.',
 }
 const MEMORY_HELP: Record<string, string> = {
@@ -178,7 +178,6 @@ const PLAN_STATES: [string, Placement['tone'], string][] = [
   ['reviewing', 'flight', 'The agent owns a task in review.'],
   ['handing off', 'flight', 'The agent saved a checkpoint in the last three minutes.'],
   ['waiting', 'neutral', 'The session reported in and is waiting for work.'],
-  ['stale', 'unknown', 'No recent signal, even if it owns a task. It may still be running; OmniMemo cannot tell.'],
 ]
 
 const stateLabel = (p: Placement) => p.state[0].toUpperCase() + p.state.slice(1)
@@ -235,7 +234,6 @@ export function OfficeView({ store, office }: { store: Store; office: Office }) 
             <li className="key-working">working</li>
             <li className="key-attention">asks you</li>
             <li className="key-flight">reviewing</li>
-            <li className="key-unknown">stale</li>
           </ul>
         </div>
         {store.loaded && office.placed.length === 0 && (
@@ -243,7 +241,7 @@ export function OfficeView({ store, office }: { store: Store; office: Office }) 
             <p>
               {store.agents.length === 0
                 ? 'No agent has reported in yet.'
-                : 'Nobody is in the office: every observed session has gone offline.'}
+                : 'Nobody is in the office: every observed session has ended or gone silent.'}
             </p>
             <p className="muted">
               Agents appear once their host reports in: Claude Code through the omniverse-bridge plugin, Codex and
@@ -621,6 +619,7 @@ export function TasksView({ store }: { store: Store }) {
 /* Agents */
 
 export function AgentsView({ store, office }: { store: Store; office: Office }) {
+  const [history, setHistory] = useState(false)
   if (!store.loaded) return <Loading label="Loading sessions" />
   if (store.agents.length === 0) {
     return (
@@ -632,7 +631,10 @@ export function AgentsView({ store, office }: { store: Store; office: Office }) 
     )
   }
   const order: Agent['status'][] = ['working', 'blocked', 'waiting', 'stale', 'offline']
-  const agents = [...store.agents].sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status))
+  const gone = store.agents.filter((a) => !inOffice(a)).length
+  const agents = store.agents
+    .filter((a) => history || inOffice(a))
+    .sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status))
   const sources = [...new Set(store.agents.map((a) => a.source))]
   return (
     <div className="stack">
@@ -641,6 +643,13 @@ export function AgentsView({ store, office }: { store: Store; office: Office }) 
         model's window the host reported: at 70% save a checkpoint, at 80% hand off to a fresh session, 90% is
         critical.
       </p>
+      {gone > 0 && (
+        <p className="small">
+          <button type="button" className="link" onClick={() => setHistory(!history)}>
+            {history ? 'Hide' : 'Show'} {gone} ended or silent {gone === 1 ? 'session' : 'sessions'}
+          </button>
+        </p>
+      )}
       <div className="table-wrap">
         <table className="table">
           <thead>
@@ -656,6 +665,11 @@ export function AgentsView({ store, office }: { store: Store; office: Office }) 
             </tr>
           </thead>
           <tbody>
+            {agents.length === 0 && (
+              <tr>
+                <td colSpan={8} className="muted">No session is reporting right now.</td>
+              </tr>
+            )}
             {agents.map((a) => {
               const p = office.placed.find((x) => x.agent === a)
               return (
@@ -678,7 +692,7 @@ export function AgentsView({ store, office }: { store: Store; office: Office }) 
                         {roomLabel(p.room)} <span className="muted">· {p.state}</span>
                       </>
                     ) : (
-                      <span className="muted">{a.status === 'offline' ? 'Left the office' : 'Room full'}</span>
+                      <span className="muted">{a.status === 'offline' ? 'Left the office' : a.status === 'stale' ? 'Out of the office' : 'Room full'}</span>
                     )}
                   </td>
                   <td>{sourceLabel(a.source)}</td>
