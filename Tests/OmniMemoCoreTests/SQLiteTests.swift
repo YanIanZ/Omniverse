@@ -4,7 +4,9 @@ import XCTest
 
 /// The `sqlite` profile needs no server, so these always run.
 final class SQLiteTests: XCTestCase {
-  func fixture() async throws -> (URL, URL, MemoryStore) {
+  /// Cleanup is registered on `owner`, the test that is running: a helper instance never runs,
+  /// and some XCTest versions run its teardown blocks as soon as it is released.
+  func fixture(owner: XCTestCase? = nil) async throws -> (URL, URL, MemoryStore) {
     let base = URL(
       fileURLWithPath: ProcessInfo.processInfo.environment["OMNIMEM_TEST_ROOT"] ?? NSTemporaryDirectory())
     let root = base.appendingPathComponent(UUID().uuidString)
@@ -18,7 +20,7 @@ final class SQLiteTests: XCTestCase {
     try Data("let answer = 42\n".utf8).write(to: project.appendingPathComponent("main.swift"))
     let data = root.appendingPathComponent("memory")
     let store = try await MemoryStore.initialize(dataDir: data.path, project: project.path, backend: "sqlite")
-    addTeardownBlock {
+    (owner ?? self).addTeardownBlock {
       await store.close()
       try? FileManager.default.removeItem(at: root)
     }

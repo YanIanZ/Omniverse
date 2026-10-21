@@ -4,19 +4,9 @@ import XCTest
 
 final class RuntimeIngestTests: XCTestCase {
   private func fixture(mongo: Bool) async throws -> MemoryStore {
-    let root: URL
-    let store: MemoryStore
-    if mongo {
-      (root, store) = try await MongoTests().fixture()
-    } else {
-      let (data, _, sqlite) = try await SQLiteTests().fixture()
-      root = data.deletingLastPathComponent()
-      store = sqlite
-    }
-    addTeardownBlock {
-      await store.close()
-      try? FileManager.default.removeItem(at: root)
-    }
+    let store = mongo
+      ? try await MongoTests().fixture(owner: self).1
+      : try await SQLiteTests().fixture(owner: self).2
     try await store.ensureRuntimeIndexes()
     return store
   }

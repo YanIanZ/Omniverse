@@ -8,7 +8,7 @@ final class ServerTests: XCTestCase {
   let token = String(repeating: "a", count: 64)
 
   func app(dist: String? = nil, present: Bool = true) async throws -> (Application, MemoryStore) {
-    let (_, store) = try await MongoTests().fixture()
+    let (_, store) = try await MongoTests().fixture(owner: self)
     let app = try await Application.make(.testing)
     try await OmniServer.configure(
       app, store: store,

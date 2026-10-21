@@ -3,7 +3,9 @@ import XCTest
 @testable import OmniMemoCore
 
 final class MongoTests: XCTestCase {
-  func fixture() async throws -> (URL, MemoryStore) {
+  /// Cleanup is registered on `owner`, the test that is running: a helper instance never runs,
+  /// and some XCTest versions run its teardown blocks as soon as it is released.
+  func fixture(owner: XCTestCase? = nil) async throws -> (URL, MemoryStore) {
     guard let uri = ProcessInfo.processInfo.environment["OMNIMEM_TEST_MONGO_URI"] else {
       throw XCTSkip("Set OMNIMEM_TEST_MONGO_URI for real MongoDB integration tests")
     }
@@ -16,7 +18,7 @@ final class MongoTests: XCTestCase {
     try Data("let answer = 42\n".utf8).write(to: project.appendingPathComponent("main.swift"))
     let store = try await MemoryStore.initialize(
       dataDir: root.appendingPathComponent("memory").path, project: project.path, uri: uri)
-    addTeardownBlock {
+    (owner ?? self).addTeardownBlock {
       await store.close()
       try? FileManager.default.removeItem(at: root)
     }
