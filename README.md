@@ -1,288 +1,138 @@
-# OmniMemo 0.3.0
+# OmniMemo
 
-Local memory and handoff for coding agents, built with **Swift + MongoDB**, with an optional **Vapor 4** HTTP/WebSocket server and **React + TypeScript + Vite** Mission Control. Redis is optional and never stores durable data.
+**Local, shared memory and handoff for coding agents.** Claude Code, Codex, Gemini CLI, OpenCode and any MCP host working on the same project read and write one project memory, see each other in a live Mission Control, and hand work to a fresh session without losing the thread.
 
-One executable provides a CLI and MCP stdio server. MongoDB stores records; local directories hold storage pointers and disposable caches. Agents working on the same project share its database. OmniMemo does not read private agent histories or require an LLM/API key.
+- **One binary** (`om`, alias `omnimem`): a CLI and an MCP stdio server, written in Swift.
+- **Your machine only.** Storage is MongoDB or SQLite on your disk; the web UI listens on loopback. No cloud service, no LLM or API key.
+- **Agents never read each other's private chats.** They share saved records, checkpoints and reported status, nothing more.
 
-## Quickstart
+> Status: 0.3.0, macOS only. It works daily for its author; expect rough edges and breaking changes before 1.0.
 
-1. Install, set up this project and connect your agents (Claude Code gets the `omniverse-bridge` plugin, Codex and Gemini get hooks, OpenCode its plugin, every host gets MCP):
-   `./install.sh --setup --global --with-hooks --start-mongo --project "$PWD"`
-   (no MongoDB? use `--backend sqlite` instead of `--start-mongo`). The command is `om`; `omnimem` is the same program.
-2. Check it: `om status` (and `om doctor` if something looks wrong).
-3. Restart your agents. In Claude Code, `/plugin` should list `omniverse-bridge` as enabled.
-4. Open Mission Control: `om office` (it signs the browser in with a one-time link).
-5. Before a piece of work: `om context "what you are about to do"`; after it: `om checkpoint --done "…" --next "…"`.
+## Contents
 
-## Storage profiles and auto-save
-
-Each data directory picks one profile at `om init` (PRD §100); there is no automatic fallback between them:
-
-| Profile | Use | Storage |
-|---|---|---|
-| `mongodb` (default) | shared/hybrid setups, optional Redis live signal | existing MongoDB server |
-| `sqlite` | single machine, no database server | `<data-dir>/db/memory.sqlite` (FTS5, WAL, `BEGIN IMMEDIATE` writes) |
-
-```sh
-om init --backend sqlite            # or: bash install.sh --setup --backend sqlite
-om autosave enable                  # opt-in (PRD FR-15); add --no-prompts etc. to narrow it
-om autosave status
-```
-
-Auto-save records only verifiable state: a checkpoint when a session ends (hook `SessionEnd`, Codex `Stop`, MCP disconnect) with branch, commit, changed files from `git status` and the tasks the agent owns; a memory for task review/done/blocked and approval requests/decisions; and a short summary of each prompt. Prompt summaries are skipped when the secret filter matches, are never the full text, and are excluded from context capsules so they add no prompt tokens. Repeated checkpoints with unchanged state are merged.
-
-## Mission Control and `om`
-
-`om` is a short alias of `omnimem`. Bare `om` prints status and never starts a server.
-
-```sh
-om office            # start or reuse this project's loopback server (next free port from 8787), open the UI
-om serve --port 8787 # same server in the foreground
-om stop              # stops this project's server (--all: every project's), never MongoDB/Redis
-om recall "query"    # search memory
-om agents            # observed sessions; stale presence shows as unknown
-om tasks add "Review hook" --priority P1 ; om tasks move <id> doing --revision 1 --owner codex
-om --agent codex approvals request "Push main to origin" --reason "release"
-om --agent claude wake --session <id>
-om --agent claude context --first-prompt --session <id>
-```
-
-- **Agent Office:** a pixel-art office (original sprites; design canvas "OmniMemo Pixel Office") where each agent stands in the room its verified state belongs to: Briefing (session ready), Workspace (task doing or prompt active), Review, Approvals (waiting for you), Handoffs (checkpoint saved), Lounge (no signal for 10 min, shown as unknown). Disconnected sessions leave the map. Views: Office, Tasks (Kanban with priority and owner), Agents, Approvals, Memory, Events.
-- **Host signals (opt-in: `bash install.sh --global --with-hooks`; each host's own extension point):**
-
-  | Host | Signal | Context capsule |
-  |---|---|---|
-  | Claude Code | `omniverse-bridge` plugin: `session.start/end`, `prompt.submit`, `tool.call`, `turn.complete` (no settings hooks) | prompt context, once per change |
-  | Codex | `~/.codex/hooks.json` `SessionStart`, `UserPromptSubmit`, `Stop` (Codex asks you to trust new hooks) | plain text, once per change |
-  | Gemini CLI | `SessionStart`, `BeforeAgent`, `AfterAgent`, `SessionEnd` | `hookSpecificOutput.additionalContext` |
-  | OpenCode 2.x | OmniMemo OpenCode plugin (tool and session hooks, event stream) plus MCP | via MCP tools |
-  | Any MCP host | MCP connection | via MCP tools |
-
-  Hooks and plugins fail open and never block a prompt; unchanged capsules and empty projects inject nothing. OpenCode 2.x gets a plugin built on tool/session hooks and a detached event stream (a callback-style event subscription stalled sessions in 2.0.31). No IDE-open event is assumed for any host.
-- **Approvals:** agents request with `om approvals request`; only the Mission Control browser session (cookie + Origin) can approve or deny, bearer tokens are refused, and approving also needs Touch ID or your password at this Mac (denying does not). A decision never runs the action or authorizes a Git push.
-- **Server:** loopback only; per-install token in `<data-dir>/server-token` (0600); `om office` opens the browser with a single-use sign-in link (valid 60 s; plain URLs, old links and the token itself do not sign in), which sets an HttpOnly `SameSite=Strict` cookie holding a random session, never the token; Host allowlist, Origin checks for writes and WebSockets, CSP. API: `/api/v1/health|agents|tasks|memory/search|events`, WebSocket `/ws/v1/live`. Task updates require `If-Match: <revision>` and return 409 on a stale revision.
-- **Data:** sessions, tasks, approvals and events live in MongoDB; events are committed before broadcast. Redis is optional: `om redis enable [--url redis://127.0.0.1:6379]` checks PING and stores the credential-free URL in the data directory (`om redis status`, `om redis disable`); `OMNIMEM_REDIS_URL` overrides it and is the place for credentials. OmniMemo only PUBLISHes/SUBSCRIBEs on `omnimemo:v1:<project>:events` so the UI updates immediately; it never writes keys, flushes or changes Redis configuration. Without Redis the server polls MongoDB every second.
-- **Frontend development:** `cd frontend && npm run dev`, with `om serve --dev-origin http://127.0.0.1:5173`. Release builds copy `frontend/dist` next to the binary; no Node runtime is needed.
-- **Not built yet (PRD P2):** REA/Reach/OmniBias review flows in the UI, one UI across projects (each project has its own server and port), LAN access, reconnect history beyond 1000 events.
-
-## REA integration
-
-Version 0.3.0 includes the complete public investigation skill and references from [YanIanZ/rea](https://github.com/YanIanZ/rea), plus a pinned runtime exposing **184 MCP tools, 135 CLI commands, and 6 prompts**. The memory core uses Swift + MongoDB; REA runs through a separate Node runtime using `omnimem rea run` and `omnimem rea mcp`. Installing with `--with-rea` registers both servers and the complete skill. The default profile enables memory only.
-
-```sh
-python3 scripts/prepare-rea.py
-./scripts/package.sh
-/Volumes/Ext/DevCache/OmniMemo/dist/0.3.0/omnimem rea status
-```
-
-See [REA setup, capabilities, evidence-to-memory workflows, and engine prerequisites](docs/REA.md). Native/runtime tools depend on upstream OS and engine support; every provider has not been tested.
+- [Features](#features) · [Requirements](#requirements) · [Install](#install) · [Usage](#usage)
+- [Connected agents](#connected-agents) · [Storage](#storage) · [Security and limits](#security-and-limits)
+- [Documentation](#documentation) · [Contributing](#contributing) · [License](#license)
 
 ## Features
 
-- Four MCP tools through the official Swift SDK: `memory_save`, `memory_get`, `memory_context`, and `memory_checkpoint`.
-- CLI save/search/show/list/delete/export, checkpoint, context, status, doctor, and cache commands.
-- Project binding at launch, with every record query filtered by project ID.
-- Agent/branch/commit metadata, file-evidence hashes, and `unverified`/`active`/`stale` states.
-- Unique indexes for deduplication and idempotency; bilingual text search without stemming and literal code-symbol search.
-- Compact context with conservative response limits, including an MCP envelope allowance. The latest checkpoint remains available when task search has no match.
-- A default 32 MiB disk cache, 24-hour TTL, and eviction. Keys include current records and evidence; retrieval still checks the database.
-- Project-scoped Codex/Claude adapters with preview by default, explicit application, backups, and uninstall that preserves unrelated settings.
-- Recall and handoff skills, plus the optional REA skill. Canonical resources live in `Sources/OmniMemoCore/Skills`; `skills` is a distribution symlink.
+- **Project memory over MCP:** four tools (`memory_save`, `memory_get`, `memory_context`, `memory_checkpoint`) and matching CLI commands. Every query is scoped to the project the server was launched in.
+- **Compact context:** `om context "task"` returns a token-budgeted capsule (256–16384 tokens, a conservative byte-based estimate) instead of whole transcripts.
+- **Evidence, not trust:** records carry agent, branch, commit and file hashes, and become `stale` when their source files change. Likely secrets are rejected before they are stored.
+- **Checkpoints and handoff:** save what is done and what is next; another agent, or a fresh session of the same one, picks it up.
+- **Mission Control:** `om office` opens a pixel-art office in the browser with live agent cards, a task board, approvals, memory and events.
+- **Context rollover for Claude Code:** near the context limit, the `omniverse-bridge` plugin can checkpoint, start a fresh session and hand it a verified capsule (opt-in).
+- **Approvals:** agents ask, you decide in the browser with Touch ID or your password. A decision never runs anything or pushes to Git by itself.
+- **Optional REA:** a pinned reverse-engineering toolkit exposed as a separate MCP server ([docs/REA.md](docs/REA.md)).
 
 ## Requirements
 
-Tested on macOS Apple Silicon with Swift 6.4 and MongoDB 7.0.31. The package declares macOS 13 as its minimum; that minimum OS has not been tested separately. Linux/Windows are not supported or packaged; hashing currently uses CryptoKit. Swift language mode 5 maintains library compatibility with the Swift 6 compiler.
+- macOS 13+ (tested on Apple Silicon); Linux and Windows are not supported yet
+- Swift 6+ with Xcode Command Line Tools, and Git
+- One storage backend: [MongoDB Community](https://www.mongodb.com/docs/manual/administration/install-community/) 7+, **or** none at all with `--backend sqlite`
+- For connecting agents globally (`--global`): Python 3.11+ and Node/npm
 
-A running local MongoDB server is required. Swift + MongoDB supersede the original PRD's Rust/SQLite and no-database-service requirements. MongoKitten is used because MongoDB's official Swift driver was archived. The pinned MCP SDK 0.12.1 supports 2025-era handshakes; 2026 protocol compatibility is not claimed.
-
-## Automatic installation
-
-With Swift 6+, Git, and MongoDB already installed on macOS:
+## Install
 
 ```sh
-git clone https://github.com/YanIanZ/Omniverse.git
-cd Omniverse
-./install.sh --dry-run
+git clone https://github.com/YanIanZ/Omniverse.git OmniMemo
+cd OmniMemo
+./install.sh --dry-run          # preview: prints the plan, changes nothing
+```
+
+Then pick one:
+
+```sh
+# No database server: SQLite, and connect your installed agents
+./install.sh --setup --backend sqlite --global --with-hooks --project "$PWD"
+
+# MongoDB: start a dedicated loopback server on port 27018, and connect your agents
+./install.sh --setup --start-mongo --global --with-hooks --project "$PWD"
+
+# Just the CLI in ~/.local/bin, nothing configured
 ./install.sh
 ```
 
-The installer builds a release, keeps resource bundles beside the executable, and installs
-`~/.local/bin/omnimem`. It uses Ext for caches when available, otherwise the macOS user
-cache. It does not edit your shell profile; add `~/.local/bin` to `PATH` if needed.
+The installer builds a release, puts `om` and `omnimem` in `~/.local/bin` (add it to `PATH` if needed) and never uses `sudo`, edits your shell profile, or installs login services. `--global` registers the MCP server with the agent hosts it detects, backing up each file it changes; `--with-hooks` adds live presence for each host. Everything it adds can be removed again.
 
-For automatic memory setup and global registration in detected agent/IDE profiles:
+Check the result and restart your agents:
 
 ```sh
-./install.sh --global --setup --start-mongo --project "$PWD"
-# Optional project-only profile with the complete separate REA MCP server:
-./install.sh --with-rea --setup --project "$PWD"
+om status
+om doctor        # if something looks wrong
 ```
 
-`--global --setup` also sets the CLI default storage pointer, preserving a backup.
-Global installation requires Python 3.11+ and Node/npm for the standard skills installer.
-Use `--prefix`, `--cache-dir`, and `--data-dir` for custom locations. An existing MongoDB
-server can be selected with `--mongo-uri` instead of `--start-mongo`. Dependencies must
-be installed separately; the script does not install Xcode, providers, or login services.
-See [installation, supported global profiles, backups, and uninstall](docs/INSTALLATION.md).
+Full options, supported hosts, backups and uninstall: [docs/INSTALLATION.md](docs/INSTALLATION.md).
 
-## Install skills with npx
+Only want the agent skills (instructions, no binary)? `npx skills add YanIanZ/Omniverse`.
 
-The repository works directly with the standard [Agent Skills CLI](https://github.com/vercel-labs/skills):
+## Usage
 
 ```sh
-npx skills add YanIanZ/Omniverse --list
-npx skills add YanIanZ/Omniverse
-# Global, noninteractive installation for selected hosts:
-npx skills add YanIanZ/Omniverse --global --agent codex claude-code opencode gemini-cli --skill '*' --yes
-# From a local checkout; the wrapper pins skills CLI 1.5.12:
-./scripts/install-skills.sh --global --agent codex claude-code --skill '*' --yes
+om context "add rate limiting to the API"        # what is known before you start
+om memory save --kind decision --title "Use token bucket" --content "…" --source src/limit.ts
+om checkpoint --done "limiter + tests" --next "wire into router"
+om recall "rate limit"                           # search
+om office                                        # Mission Control in the browser
+om agents                                        # who is working on this project
+om tasks add "Review limiter" --priority P1
 ```
 
-Available skills: `omnimem-recall`, `omnimem-handoff`, and `reverse-engineer-anything`
-(with all six references). Installing skill instructions does not install Swift, MongoDB,
-MCP servers, the REA runtime, or external engines. Use the automatic installer for those
-OmniMemo components. Universal hosts share `~/.agents/skills`; host-specific links are
-created where required by the skills CLI.
+Inside an agent you rarely type these: the MCP tools and the installed skills (`omnimem-recall`, `omnimem-handoff`) let the agent recall and checkpoint on its own. Use `memory save --stdin` to keep text out of shell history. Run `om --help` for everything else.
 
-## Build
+## Connected agents
 
-For a fresh macOS clone with Swift and `mongod` available:
+| Host | How it connects | Live presence (`--with-hooks`) |
+|---|---|---|
+| Claude Code | MCP + skills | `omniverse-bridge` plugin: sessions, prompts, tool categories, context use, rollover |
+| Codex | MCP + skills | hooks in `~/.codex/hooks.json` (Codex asks you to trust them) |
+| Gemini CLI | MCP + skills | hooks |
+| OpenCode 2.x | MCP + skills | OmniMemo OpenCode plugin |
+| Cursor, VS Code, JetBrains, Xcode, Antigravity, others | MCP | — |
 
-```sh
-git clone https://github.com/YanIanZ/Omniverse.git
-cd Omniverse
-export OMNIMEM_BUILD_CACHE="$HOME/Library/Caches/OmniMemo/swift"
-export OMNIMEM_MONGO_ROOT="$HOME/Library/Application Support/OmniMemo/mongodb"
-export OMNIMEM_REA_RUNTIME="$HOME/Library/Caches/OmniMemo/integrations/rea-runtime.json"
-./scripts/package.sh "$HOME/Library/Application Support/OmniMemo/bin"
-./scripts/mongodb.sh start
+Hooks and plugins fail open: they never block a prompt or a tool call. Only categories are reported (for example "edit" or "shell"), never prompts, tool arguments or secrets.
 
-BIN="$HOME/Library/Application Support/OmniMemo/bin/omnimem"
-DATA="$HOME/Library/Application Support/OmniMemo/data"
-PROJECT="$PWD"
-"$BIN" --data-dir "$DATA" --project "$PROJECT" init \
-  --mongo-uri mongodb://127.0.0.1:27018/omnimemo
-"$BIN" --data-dir "$DATA" --project "$PROJECT" status
-```
+The Claude Code plugin's options (`rollover`: `off` / `suggest` / `auto`, thresholds, extra context windows) are set in `/config`; see [plugins/omniverse-bridge-mod/README.md](plugins/omniverse-bridge-mod/README.md).
 
-Optional REA support requires a compatible Node/npm installation. Run
-`python3 scripts/prepare-rea.py --base "$HOME/Library/Caches/OmniMemo"`, then rerun
-`package.sh` to include the local runtime pointer. Keep runtime pointers, databases,
-credentials, and build artifacts out of Git. The `/Volumes/Ext` examples below use
-the development machine's layout; the overrides above work without that disk.
+## Storage
 
-To build using the development layout:
+Each data directory chooses one profile at `om init`; there is no silent fallback between them.
 
-```sh
-cd /Volumes/Ext/MinionsProject/OmniMemo
-./scripts/swift.sh build
-./scripts/package.sh
-```
+| Profile | Best for | Where data lives |
+|---|---|---|
+| `sqlite` | one machine, nothing to run | `<data-dir>/db/memory.sqlite` |
+| `mongodb` (default) | several agents and processes, optional Redis live updates | your MongoDB server |
 
-Default artifact: `/Volumes/Ext/DevCache/OmniMemo/dist/0.3.0/omnimem`. Keep the executable and its skill resource bundles in the same directory. Package caches, checkouts, module caches, and build output use `/Volumes/Ext/DevCache/OmniMemo/swift`; set `OMNIMEM_BUILD_CACHE` for another location. No Xcode project or application server is required.
+Redis is optional and only speeds up the live UI; it never holds data. Pass credentials through `OMNIMEM_MONGO_URI` / `OMNIMEM_REDIS_URL`, never on the command line. Auto-save is opt-in: `om autosave enable`.
 
-## Getting started
+## Security and limits
 
-If you do not already have a suitable MongoDB server, start the dedicated OmniMemo instance. The script does not enable a Homebrew login/background service:
+- Memory is **untrusted data**: agents are told to verify it against the repository. `active` means the source file still matches its hash, not that a claim is true.
+- Agent names are labels, not authentication. Anyone with local access to the database or data directory can read it; rely on OS and database permissions.
+- Secret detection is heuristic and cannot catch every format. Do not store secrets.
+- The server is loopback-only, uses a per-install token, single-use sign-in links, HttpOnly cookies, Origin checks and a CSP.
+- Not implemented: cloud sync, LAN access, embeddings, automatic conflict resolution, Linux/Windows.
 
-```sh
-./scripts/mongodb.sh start  # loopback 127.0.0.1:27018; dbPath on Ext
+Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 
-BIN=/Volumes/Ext/DevCache/OmniMemo/dist/0.3.0/omnimem
-DATA=/Volumes/Ext/DevCache/OmniMemo/data
-PROJECT=/Volumes/Ext/MinionsProject/OmniMemo
+## Documentation
 
-"$BIN" --data-dir "$DATA" --project "$PROJECT" init \
-  --mongo-uri mongodb://127.0.0.1:27018/omnimemo
+| Document | For |
+|---|---|
+| [docs/INSTALLATION.md](docs/INSTALLATION.md) | install options, global hosts, backups, uninstall |
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | building, testing, packaging, repository layout |
+| [docs/RUNTIME_EVENTS.md](docs/RUNTIME_EVENTS.md) | agent cards, runtime events, context rollover contract |
+| [docs/REA.md](docs/REA.md) | the optional reverse-engineering toolkit |
+| [docs/VALIDATION.md](docs/VALIDATION.md) | what has been tested, and how |
+| [CHANGELOG.md](CHANGELOG.md) | release history |
+| [SPEC.md](SPEC.md), [AGENTS.md](AGENTS.md) | the working spec and the rules coding agents follow in this repo |
 
-"$BIN" --data-dir "$DATA" --project "$PROJECT" memory save \
-  --kind decision --title 'Storage choice' \
-  --content 'Use Swift and MongoDB.' --source Package.swift
+The other files in `docs/` are the original product requirement and technical specification documents, kept for reference; several describe features that are still proposals.
 
-"$BIN" --data-dir "$DATA" --project "$PROJECT" context 'storage' --max-tokens 1000
+## Contributing
 
-"$BIN" --data-dir "$DATA" --project "$PROJECT" checkpoint \
-  --done 'Core implementation complete' --next 'Verify host integration' \
-  --tests 'swift test: actual results' --changed-file Package.swift
-```
+Issues and pull requests are welcome; start with [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Use `memory save --stdin` to keep input text out of process arguments and shell history. Do not store secrets. Supply credential-bearing URIs through `OMNIMEM_MONGO_URI`; metadata stores a URI without username/password. The MVP accepts `mongodb://`; `mongodb+srv://` is not supported.
+## License
 
-Storage resolution: `--data-dir` → `OMNIMEM_HOME` → `~/.config/omnimem/location.json` → `~/.local/share/omnimem`. `init --set-default` explicitly writes a user-level pointer with a backup. Queries, status, and MCP do not initialize a replacement database or directory when storage is missing. MongoDB's port and dbPath are independent of the metadata/cache directory.
-
-## Codex and Claude integration
-
-Initialize the metadata directory, then preview the proposed additions:
-
-```sh
-"$BIN" --data-dir "$DATA" --project "$PROJECT" install --agents codex,claude
-# After reviewing the preview:
-"$BIN" --data-dir "$DATA" --project "$PROJECT" install --agents codex,claude --apply
-```
-
-The installer writes `.codex/config.toml`, `.mcp.json`, two canonical skills in `.agents/skills`, and Claude skill shims pointing to the same sources. It targets the selected project and preserves global configuration. Use `--config-root /path/staging` to prepare output for review elsewhere. Each project has a unique server ID; its MCP command is bound to that root and invokes `mcp serve --stdio`. Restart/approve MCP as required by the host. The installer does not run Git hooks or change Git identity.
-
-```sh
-"$BIN" --data-dir "$DATA" --project "$PROJECT" uninstall --apply
-```
-
-Uninstall removes only entries that still match its manifest. Edited managed entries cause a refusal requiring manual review. Backups remain in the Git-ignored `.omnimemo-installer/` directory, with private directories and mode-600 files. Review backups before deleting them if they contain older sensitive settings. Uninstall before reinstalling with a different host/path.
-
-## Runtime events, managed Codex and context rollover
-
-Host hooks report session, prompt, tool and turn activity as normalized runtime events (tool calls by category only, never arguments). Mission Control and `om runtime sessions` show each agent as `client-model` with status (working, waiting, blocked, offline, stale), current task, verified-milestone progress and, separately, reported context usage.
-
-```sh
-om runtime sessions                      # agent cards
-om runtime doctor                        # store, server and route check
-om tasks milestones add <task> "write tests"
-om tasks milestones verify <task> <milestone> --evidence "swift test: 63 passed"
-om codex run --task <task> --prompt "…"  # OmniMemo-managed Codex thread via codex app-server
-om rollover preview                      # bounded handoff capsule for a fresh session
-```
-
-Claude Code context usage comes from the `omniverse-bridge` plugin after each turn (or the opt-in status line, `install-global.py --with-statusline`, added only when no status line exists). `om codex run --rollover` is the only automatic fresh-session rollover; everything else is manual handoff. Contract and limits: [docs/RUNTIME_EVENTS.md](docs/RUNTIME_EVENTS.md).
-
-## Context limits
-
-`--max-tokens` accepts 256–16384; a budget too small for metadata is rejected. `estimated_tokens` is a **UTF-8 byte-based upper bound**, rather than a model tokenizer result. It includes text escaping and the MCP envelope, reserving 64 bytes for the request ID; fixture IDs are shorter. Responses may be substantially smaller than a model's capacity. Host tool/skill declarations are outside this per-response budget and must be measured separately when benchmarking total cost.
-
-No achieved savings percentage, recall@k, RAM, or latency target is claimed. The 32 MiB limit applies only to the cache; database files, WiredTiger journals, logs, backups, and build caches are separate.
-
-## Testing
-
-```sh
-./scripts/test-mongo.sh start  # port 27019; dedicated test data
-OMNIMEM_TEST_REA_MANIFEST=/Volumes/Ext/DevCache/OmniMemo/integrations/rea-runtime.json \
-OMNIMEM_TEST_MONGO_URI=mongodb://127.0.0.1:27019/omnimemo_tests \
-OMNIMEM_TEST_ROOT=/Volumes/Ext/DevCache/OmniMemo/test-workspaces \
-  ./scripts/swift.sh test
-
-python3 Tests/mcp_smoke.py /Volumes/Ext/DevCache/OmniMemo/dist/0.3.0/omnimem
-python3.12 Tests/cli_smoke.py /Volumes/Ext/DevCache/OmniMemo/dist/0.3.0/omnimem
-python3 Tests/rea_smoke.py /Volumes/Ext/DevCache/OmniMemo/dist/0.3.0/omnimem
-python3 Tests/office_smoke.py /Volumes/Ext/DevCache/OmniMemo/dist/0.3.0/omnimem  # needs redis-server on PATH
-./scripts/test-mongo.sh stop
-```
-
-Current validation: **63 XCTest cases passed, zero failures, zero skips**, plus nine independent smoke tests (including `Tests/office_smoke.py` and `Tests/agents_smoke.py`) against the packaged release. See [validation scope and results](docs/VALIDATION.md). Python 3.11+ is required for the CLI smoke test's TOML parser; the memory core does not require Python. Individual REA tools retain their upstream dependencies.
-
-Real MongoDB tests cover multiple writer connections, persistence, isolation, deduplication, secret rejection, evidence staleness, cache invalidation, and missing metadata. An independent Python client tests MCP wire behavior and handoff between two subprocesses labeled as Codex/Claude fixtures. These are not live paid conversations with either product. Without `OMNIMEM_TEST_MONGO_URI`, database tests are reported as skipped.
-
-## Trust and MVP limitations
-
-`active` means a source file still matches its hash; it does not prove a semantic interpretation or a test claim. Memory is untrusted data. Agent provenance is a label, not authentication. Project filtering enforces the MCP contract; local processes with direct MongoDB/filesystem access remain subject to database and OS permissions. The instance script binds only to loopback; configure MongoDB authentication and OS permissions for your environment. Secret detection is heuristic and cannot guarantee recognition of every secret format.
-
-Not implemented: transactional MongoDB migration/relocation, physical drive-disconnection recovery, automatic conflict resolution/revision ledgers, graphs, LAN (non-loopback) HTTP, embeddings, cloud sync, or ROI benchmarks. Do not move a WiredTiger dbPath while its server is running. Use appropriate MongoDB backup/restore procedures; the cache directory is not a database backup.
-
-The supplied requirement documents are kept in `docs/` as references (their file names carry the supplier's document numbers, not OmniMemo releases), together with technical specs for the REA Bridge, Omni Reach, OmniBias Guard, hybrid MongoDB+Redis storage and Swift/Vapor/React, with example configs and on-demand skills in `skills/`. Mission Control, hooks, approvals and the storage profiles above are implemented in 0.3.0; Omni Agent delegation, REA Bridge, Omni Reach, OmniBias Guard and the P1/P2 Mission Control views remain proposed. Your Swift + MongoDB amendments remain authoritative.
-
-Project rules are in `AGENTS.md`. The original supplied PRD is retained in `docs/OmniMemo_PRD_v1.2_Guardrails.md`, with user amendments recorded in `SPEC.md`. Historical source documents retain their original language. Git uses the owner's configured identity; remote changes and pushes require explicit approval.
-
-## References
-
-- [MCP Swift SDK](https://github.com/modelcontextprotocol/swift-sdk)
-- [MongoKitten](https://github.com/orlandos-nl/MongoKitten)
-- [MongoDB Swift driver status](https://github.com/mongodb/mongo-swift-driver)
-- [Codex MCP](https://developers.openai.com/codex/mcp/)
-- [Claude MCP](https://code.claude.com/docs/en/mcp)
+[MIT](LICENSE) © 2026 YanIanZ. Built on the [MCP Swift SDK](https://github.com/modelcontextprotocol/swift-sdk), [MongoKitten](https://github.com/orlandos-nl/MongoKitten) and [Vapor](https://vapor.codes).
