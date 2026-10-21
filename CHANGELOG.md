@@ -24,6 +24,7 @@ First public release.
 - A session resumed after a completed rollover can roll over again.
 - Stale and offline sessions leave the office at once; a CLI agent is shown once, not again as its MCP presence.
 - Redis resubscribes after a dropped connection.
+- A new data directory under a symlinked path (such as `/tmp` or `/var` on macOS) is usable right after `init` in the same process.
 - Hardening of the bridge, server authentication, storage and guard hooks from code review.
 - Build and test scripts work on machines without the maintainer's external disk.
 - Mission Control builds from its TypeScript sources; stale compiled `.js` files are no longer committed beside them.

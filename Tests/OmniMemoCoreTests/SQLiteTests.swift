@@ -27,6 +27,20 @@ final class SQLiteTests: XCTestCase {
     return (data, project, store)
   }
 
+  /// A new data directory under a symlinked parent (macOS /tmp and /var) works in the same process.
+  func testNewDataDirectoryBehindSymlinkIsUsable() async throws {
+    let (_, project, _) = try await fixture()
+    let real = project.deletingLastPathComponent().appendingPathComponent("real")
+    let link = project.deletingLastPathComponent().appendingPathComponent("link")
+    try privateDirectory(real)
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: real)
+    let store = try await MemoryStore.initialize(
+      dataDir: link.appendingPathComponent("memory").path, project: project.path, backend: "sqlite")
+    addTeardownBlock { await store.close() }
+    let saved = try await store.save(SaveInput(kind: "decision", title: "Linked", content: "Saved through a symlink"))
+    XCTAssertEqual(saved.disposition, "created")
+  }
+
   func testSaveDedupSearchDeleteAndReopen() async throws {
     let (data, project, store) = try await fixture()
     XCTAssertEqual(store.profile, "sqlite")
