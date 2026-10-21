@@ -34,7 +34,15 @@ def hosts(home):
         if app(appname) or (home/config).exists(): found.append(name)
     if app('IntelliJ IDEA') or (home/'.ai/mcp/mcp.json').exists():found.append('jetbrains')
     if app('Xcode'): found += ['xcode-codex','xcode-claude']
+    if 'codex' in found and codex_app_home(home, False) and (home/'.codex/config.toml').exists(): found.append('codex-app')
     return found
+
+def codex_app_home(home, custom_home):
+    """The Codex desktop app always reads ~/.codex; the CLI reads $CODEX_HOME. When they differ the
+    app is a host of its own (None otherwise, so no file is written twice)."""
+    if custom_home or 'CODEX_HOME' not in os.environ:return None
+    app=home/'.codex'
+    return app if app.resolve()!=pathlib.Path(os.environ['CODEX_HOME']).resolve() else None
 
 def locations(home, custom_home, layout):
     codex = home/'.codex' if custom_home else pathlib.Path(os.environ.get('CODEX_HOME', str(home/'.codex')))
@@ -46,8 +54,10 @@ def locations(home, custom_home, layout):
     # With CLAUDE_CONFIG_DIR set, Claude Code keeps .claude.json in that directory, beside the
     # settings.json that receives hooks and the status line.
     claude=home/'.claude.json' if custom_home or 'CLAUDE_CONFIG_DIR' not in os.environ else pathlib.Path(os.environ['CLAUDE_CONFIG_DIR'])/'.claude.json'
+    app=codex_app_home(home, custom_home)
     return {
         'codex':(codex/'config.toml','toml',()),
+        **({'codex-app':(app/'config.toml','toml',())} if app else {}),
         'claude':(claude,'json',('mcpServers',)),
         'gemini':(home/'.gemini/settings.json','json',('mcpServers',)),
         'opencode':(config/'opencode/opencode.json','json',('mcp','servers') if layout=='v2' else ('mcp',)),
@@ -255,6 +265,24 @@ def preexisting(path, kind, keys, servers):
         for key in keys:current=current.get(key,{}) if isinstance(current,dict) else {}
     return isinstance(current,dict) and all(current.get(n)==e for n,e in servers.items())
 
+PLUGIN='omniverse-bridge@omnimemo'
+
+def claude_plugin(binary, uninstall):
+    """Claude Code's official route for lifecycle presence: the plugin shipped beside the binary,
+    added as a local marketplace and installed for the user. Returns what to record."""
+    claude=shutil.which('claude')
+    market=binary.parent if binary else None
+    if uninstall:
+        if claude:subprocess.run([claude,'plugin','uninstall',PLUGIN,'--scope','user'],check=False,timeout=120)
+        return False
+    if not claude or not (market/'.claude-plugin/marketplace.json').is_file():
+        print('Claude Code plugin skipped: '+('claude CLI not found' if not claude else 'no plugin marketplace beside '+str(binary)))
+        return False
+    subprocess.run([claude,'plugin','marketplace','add',str(market),'--scope','user'],check=True,timeout=120)
+    # omPath names this binary, so the plugin does not depend on the PATH Claude starts with.
+    subprocess.run([claude,'plugin','install',PLUGIN,'--scope','user','--config','omPath='+str(binary)],check=True,timeout=120)
+    return True
+
 def bare(entry):return {k:v for k,v in entry.items() if k!='preexisting'}
 
 def main():
@@ -307,9 +335,14 @@ def main():
             codex_dir=home/'.codex' if args.home else pathlib.Path(os.environ.get('CODEX_HOME',str(home/'.codex')))
             config_dir=home/'.config' if args.home else pathlib.Path(os.environ.get('XDG_CONFIG_HOME',str(home/'.config')))
             hook_files={'claude':claude_dir/'settings.json','codex':codex_dir/'hooks.json','gemini':home/'.gemini/settings.json'}
-            # Hooks are added only for hosts already selected for MCP, plus Claude as before.
-            for host in ['claude']+[h for h in ('codex','gemini') if h in selected]:
+            app_home=codex_app_home(home, args.home is not None)
+            # Hooks only where hooks are the host's own extension point (Codex, Gemini). Claude Code
+            # gets its lifecycle from the omniverse-bridge plugin instead (claude_plugin below).
+            for host in [h for h in ('codex','gemini') if h in selected]:
                 entries.append({'host':host+'-hooks','path':str(hook_files[host].resolve()),'kind':'hooks','keys':['hooks'],'servers':host_hooks(host,binary,data)})
+            # The Codex app's own home gets the same Codex hooks (it reports as provider codex).
+            if 'codex-app' in selected and app_home:
+                entries.append({'host':'codex-app-hooks','path':str((app_home/'hooks.json').resolve()),'kind':'hooks','keys':['hooks'],'servers':host_hooks('codex',binary,data)})
             # OpenCode 2.x: the callback-style api.event.subscribe stalled sessions in 2.0.31; the v2
             # plugin now uses tool/session hooks and a detached async stream (verified on 2.0.32).
             if 'opencode' in selected:
@@ -374,7 +407,7 @@ def main():
             manifest_path.unlink()
             print('Skills installed through npx stay in '+str(canonical)+'; remove them by hand if no longer wanted.')
         else:
-            atomic(manifest_path,encoded({'schema_version':1,'entries':entries}))
+            atomic(manifest_path,encoded({'schema_version':1,'entries':entries,'claude_plugin':args.with_hooks and 'claude' in selected}))
             portable=servers('claude',args.binary.absolute(),args.data_dir.absolute(),launcher,args.with_rea)
             atomic(state/'jetbrains-global-import.json',encoded({'mcpServers':portable}))
             atomic(state/'copilot-global-import.json',encoded({'servers':portable}))
@@ -385,8 +418,12 @@ def main():
                 else:atomic(path,old)
         raise
     finally:lock.rmdir()
+    # An alternate --home is a fixture or staging tree: never touch the real Claude Code profile.
+    if args.home:pass
+    elif args.uninstall and manifest.get('claude_plugin'):claude_plugin(None,True)
+    elif not args.uninstall and args.with_hooks and 'claude' in selected:claude_plugin(binary,False)
     if args.install_skills and not args.uninstall:
-        mapping={'codex':'codex','claude':'claude-code','gemini':'gemini-cli','opencode':'opencode',
+        mapping={'codex':'codex','codex-app':'codex','claude':'claude-code','gemini':'gemini-cli','opencode':'opencode',
                  'vscode':'github-copilot','antigravity':'antigravity','cursor':'cursor','windsurf':'windsurf','copilot-xcode':'github-copilot'}
         agents=sorted({mapping[e['host']] for e in entries if e['host'] in mapping})
         if (home/'.continue').exists():agents.append('continue')

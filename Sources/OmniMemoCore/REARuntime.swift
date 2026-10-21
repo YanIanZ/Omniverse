@@ -9,6 +9,7 @@ public struct REABuildIdentity: Codable, Sendable, Equatable {
     case lockSHA256 = "lock_sha256"
     case catalogSHA256 = "catalog_sha256"
     case mcpSHA256 = "mcp_sha256"
+    case distSHA256 = "dist_sha256"
     case toolCount = "tool_count"
     case cliCount = "cli_count"
     case promptCount = "prompt_count"
@@ -20,6 +21,9 @@ public struct REABuildIdentity: Codable, Sendable, Equatable {
   public var lockSHA256: String
   public var catalogSHA256: String
   public var mcpSHA256: String
+  /// Tree digest of every file under dist/ (see `REARuntime.treeDigest`). Optional so runtime
+  /// manifests written before it existed still load; the bundled provenance always has it.
+  public var distSHA256: String?
   public var toolCount: Int
   public var cliCount: Int
   public var promptCount: Int
@@ -67,7 +71,10 @@ public struct REARuntime: Sendable {
       throw MemoError.invalid(
         "REA runtime unavailable; run scripts/prepare-rea.py or select --runtime-manifest")
     }
-    guard descriptor.schemaVersion == 1, descriptor.identity == (try Self.bundledIdentity()) else {
+    let bundled = try Self.bundledIdentity()
+    var claimed = descriptor.identity
+    claimed.distSHA256 = claimed.distSHA256 ?? bundled.distSHA256
+    guard descriptor.schemaVersion == 1, claimed == bundled else {
       throw MemoError.invalid("REA runtime revision or schema does not match the bundled skill")
     }
     guard descriptor.packageRoot.hasPrefix("/"), descriptor.nodePath.hasPrefix("/"),
@@ -92,8 +99,34 @@ public struct REARuntime: Sendable {
         throw MemoError.invalid("REA runtime artifact missing or changed: " + relative)
       }
     }
+    // All of dist/ runs, not only the files named above.
+    guard let expected = bundled.distSHA256, Self.treeDigest(root.appendingPathComponent("dist"), within: root) == expected
+    else { throw MemoError.invalid("REA runtime artifact missing or changed: dist/") }
     self.descriptor = descriptor
     self.manifestPath = path.path
+  }
+
+  /// SHA-256 over sorted lines `relative-path NUL file-sha256 LF` for every regular file; nil
+  /// when anything else (a symlink, a path outside `root`) is found. Mirrors prepare-rea.py.
+  static func treeDigest(_ folder: URL, within root: URL) -> String? {
+    guard let walker = FileManager.default.enumerator(
+      at: folder, includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey])
+    else { return nil }
+    var lines: [(String, String)] = []
+    for case let url as URL in walker {
+      guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey]),
+        values.isSymbolicLink != true
+      else { return nil }
+      if values.isDirectory == true { continue }
+      let path = url.standardizedFileURL.path
+      guard values.isRegularFile == true, path.hasPrefix(root.path + "/"),
+        let bytes = try? Data(contentsOf: url)
+      else { return nil }
+      lines.append((String(path.dropFirst(root.path.count + 1)), digest(bytes)))
+    }
+    let text = lines.sorted { $0.0.utf8.lexicographicallyPrecedes($1.0.utf8) }
+      .map { $0.0 + "\u{0}" + $0.1 + "\n" }.joined()
+    return digest(Data(text.utf8))
   }
   public func nodeVersion() throws -> String {
     let process = Process()

@@ -6,6 +6,8 @@ export type Health = {
   storage: string
   redis: 'disabled' | 'connected' | 'unavailable'
   project_id: string
+  /** The project folder's name, for people; project_id is the identity. */
+  project_name?: string
   records: string
   revision: string
 }
@@ -21,11 +23,27 @@ export type Agent = {
   last_seen: string
   /** Reported by the host adapter; absent means the model is unknown. */
   model?: string
+  /** A few-word task label, stored only where session titles are opted in. */
+  title?: string
   tool_category?: string
   /** Active context occupancy reported by the host; absence means unknown. */
   context_used_percent?: number
   context_window_tokens?: number
+  /** Tokens in use when the window is unknown (a subagent on another model): no percent. */
+  context_used_tokens?: number
   context_observed_at?: string
+  /** Set on a subagent: the session that spawned it, and its type. */
+  spawned_by?: string
+  agent_type?: string
+}
+
+/** `claude` for a session, `claude › Explore · haiku` for a subagent. */
+export const agentName = (a: Agent) =>
+  a.spawned_by ? `${a.agent} › ${a.agent_type ?? 'subagent'}${family(a.model)}` : a.agent
+/** ` · opus` from `claude-opus-5-5`: tells apart subagents of one type running different models. */
+const family = (model?: string) => {
+  const name = model?.match(/^claude-([a-z]+)/)?.[1]
+  return name ? ` · ${name}` : ''
 }
 
 // Records written before the runtime bridge still carry the old status names.

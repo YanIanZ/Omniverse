@@ -4,19 +4,9 @@ import XCTest
 
 final class RuntimeIngestTests: XCTestCase {
   private func fixture(mongo: Bool) async throws -> MemoryStore {
-    let root: URL
-    let store: MemoryStore
-    if mongo {
-      (root, store) = try await MongoTests().fixture()
-    } else {
-      let (data, _, sqlite) = try await SQLiteTests().fixture()
-      root = data.deletingLastPathComponent()
-      store = sqlite
-    }
-    addTeardownBlock {
-      await store.close()
-      try? FileManager.default.removeItem(at: root)
-    }
+    let store = mongo
+      ? try await MongoTests().fixture(owner: self).1
+      : try await SQLiteTests().fixture(owner: self).2
     try await store.ensureRuntimeIndexes()
     return store
   }
@@ -150,6 +140,13 @@ final class RuntimeIngestTests: XCTestCase {
       verified: true, evidence: "Observed build exit 0", agent: "codex")
     XCTAssertEqual(OmniMemoCore.Progress.of(verified.milestones).percent, 33)
     XCTAssertNotNil(verified.milestones?.first?.verifiedAt)
+    // Before the task is assigned to this session, its milestones are not this session's to verify.
+    var early = event("milestone.verified")
+    early.taskID = task.id
+    early.milestoneID = plan[1].id
+    _ = try await store.ingest(early)
+    let untouched = try await store.listTasks().first { $0.id == task.id }
+    XCTAssertEqual(OmniMemoCore.Progress.of(untouched?.milestones).percent, 33)
     var assigned = event("task.assigned")
     assigned.taskID = task.id
     _ = try await store.ingest(assigned)
@@ -246,5 +243,19 @@ final class RuntimeIngestTests: XCTestCase {
     }
     let counted = try await read().eventCount
     XCTAssertEqual(counted, 9)
+  }
+  /// One CLI = hook session + its MCP server's presence session: shown once.
+  func testMCPPresenceHiddenBehindHookSession() {
+    func s(_ agent: String, _ id: String, _ source: String, _ first: String, _ last: String) -> AgentSession {
+      AgentSession(agent: agent, sessionID: id, status: "waiting", source: source,
+        firstSeen: "2026-10-20T" + first + "Z", lastSeen: "2026-10-20T" + last + "Z")
+    }
+    let kept = MemoryStore.withoutMCPShadows([
+      s("claude", "hook", "claude_hook", "10:00:00", "11:00:00"),
+      s("claude", "mcp-a", "mcp", "10:00:01", "11:00:00"),  // same CLI
+      s("claude", "mcp-b", "mcp", "13:00:00", "13:05:00"),  // later, no hook session
+      s("opencode", "mcp-c", "mcp", "10:30:00", "10:40:00"),  // other client (IDE)
+    ]).map(\.sessionID)
+    XCTAssertEqual(kept, ["hook", "mcp-b", "mcp-c"])
   }
 }

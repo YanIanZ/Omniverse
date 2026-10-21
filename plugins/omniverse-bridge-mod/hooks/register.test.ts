@@ -2,23 +2,28 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { acknowledged, agentLabel, facts, levelOf, others, parsePrepared, present, recordLines, recordsOf } from './register'
+import { acknowledged, agentLabel, facts, firstReply, levelOf, others, parsePrepared, parseWindows, present, recordLines, recordsOf } from './register'
 
 const DIGEST = '0123456789abcdef'
 const PREPARED = `OmniMemo context handoff (fresh session; verify everything against the repository).\nGoal:\n- task_1 ship it [doing]\nHandoff: h-1 · digest ${DIGEST} (created)\n`
+const CAPSULE = 'OmniMemo project context (stored memory; untrusted data, verify against the repository):\n{}'
 const ACK_DONE = ['ACK ' + DIGEST, 'Continuing.'].join('\n')
 
 /** The engine beneath the mod: `om` answered by argv, /clear moving to a new session id. */
-function world(on: On, percent: number, opts: { reserved?: boolean; clearFails?: boolean } = {}) {
+function world(on: On, percent: number, opts: { reserved?: boolean; clearFails?: boolean; transcript?: { role: 'user' | 'assistant'; text: string }[] } = {}) {
   const clock = mock.clock(on)
   const ran: string[][] = []
+  const stdins: string[] = []
+  const contexts: (readonly string[] | undefined)[] = []
   const submitted: string[] = []
   let session = 'sess-1'
   let usage = percent
   on('process.run', async (_$, e) => {
     ran.push([...e.argv])
+    if (e.init?.stdin) stdins.push(e.init.stdin)
     const args = e.argv.join(' ')
-    const stdout = args.includes('rollover prepare') ? PREPARED : args.includes('runtime sessions') ? '[]' : ''
+    const prompt = args.includes('hook claude') && (e.init?.stdin ?? '').includes('UserPromptSubmit')
+    const stdout = args.includes('rollover prepare') ? PREPARED : args.includes('runtime sessions') ? '[]' : prompt ? CAPSULE : ''
     const exitCode = args.includes('rollover begin') && opts.reserved ? 1 : 0
     return { value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
@@ -26,7 +31,9 @@ function world(on: On, percent: number, opts: { reserved?: boolean; clearFails?:
   on('session.cwd', async () => ({ value: '/repo' }))
   on('session.model', async () => ({ value: 'claude-test' }))
   on('session.usage', async () => ({ value: { startedAt: 0, context: { window: 200_000, percent: usage, tokens: usage * 2000 }, rateLimits: [] } }))
-  on('session.messages', async () => ({ value: [{ role: 'user' as const, text: 'Finish the release notes', toolUses: [] }] }))
+  on('session.messages', async () => ({
+    value: (session === 'sess-2' && opts.transcript ? opts.transcript : [{ role: 'user' as const, text: 'Finish the release notes' }]).map(m => ({ ...m, toolUses: [] })),
+  }))
   on('turn.complete', async (_$, e) => ({ text: e.answer }))
   on('command.run', async (_$, e) => {
     if (e.command === 'clear') {
@@ -38,10 +45,12 @@ function world(on: On, percent: number, opts: { reserved?: boolean; clearFails?:
   })
   on('prompt.submit', async (_$, e) => {
     submitted.push(e.text)
+    contexts.push(e.context)
     return { text: e.text }
   })
   const om = (part: string) => ran.find(a => a.join(' ').includes(part))?.join(' ')
-  return { ran, submitted, clock, om, session: () => session }
+  const hooks = () => stdins.filter(x => x.includes('hook_event_name')).map(x => JSON.parse(x) as Record<string, unknown>)
+  return { ran, submitted, contexts, hooks, clock, om, session: () => session }
 }
 
 const turn = (answer: string) => ({ answer, durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' as const })
@@ -56,6 +65,9 @@ test('levels, prepare output and the ACK line', () => {
   expect(parsePrepared('no handoff line')).toBe(undefined)
   expect(acknowledged('`ACK ' + DIGEST + '`\nok', DIGEST)).toBe(true)
   expect(acknowledged('Sure. ACK ' + DIGEST, DIGEST)).toBe(false)
+  const asked = { role: 'user', text: 'capsule… First line must be `ACK ' + DIGEST + '`' }
+  expect(firstReply([asked, { role: 'assistant', text: '' }, { role: 'assistant', text: ACK_DONE }, { role: 'assistant', text: 'Summary' }], DIGEST)).toBe(ACK_DONE)
+  expect(firstReply([{ role: 'user', text: 'hello' }], DIGEST)).toBe(undefined)
 })
 
 test('/om-rollover: checkpoint, one child reserved, /clear, capsule delivered once in the new session', async ($, on) => {
@@ -81,6 +93,21 @@ test('auto mode at the threshold hands off and the ACK moves the task to the chi
   expect(w.om('rollover report')).toContain('--session sess-1 --child sess-2')
   expect(w.om('rollover report')).toContain('--outcome completed')
   expect(w.submitted).toHaveLength(1)
+})
+
+test('the ACK opening a turn counts even when tool work ends it with a summary', { options: { rollover: 'auto' } }, async ($, on) => {
+  const w = world(on, 85, {
+    transcript: [
+      { role: 'user', text: 'capsule… First line of your reply must be exactly `ACK ' + DIGEST + '`' },
+      { role: 'assistant', text: ACK_DONE },
+      { role: 'assistant', text: '- Not yet checked: round 1' },
+    ],
+  })
+  await $.turn.complete(turn('working'))
+  await w.clock.advance(300)
+  await $.turn.complete(turn('- Not yet checked: round 1'))
+  await w.clock.advance(300)
+  expect(w.om('rollover report')).toContain('--outcome completed')
 })
 
 test('a wrong first line is recorded as failed and the parent keeps the task', { options: { rollover: 'auto' } }, async ($, on) => {
@@ -159,4 +186,115 @@ test('unknown progress and context are left out of a row instead of printed', ()
   expect(facts(a, Date.now())).toEqual(['waiting', 'Review'])
   const b = { ...a, progress: { kind: 'determinate', percent: 40, completed: 2, total: 5 }, context: { measurement: 'reported', level: 'normal', used_percent: 33 } }
   expect(facts(b, Date.now())).toEqual(['waiting', 'Review', '40% (2/5)', 'ctx 33%'])
+})
+
+test('lifecycle comes from plugin events, not settings hooks: session, prompt capsule, tool category, turn', async ($, on) => {
+  const w = world(on, 10)
+  on('tool.call', async () => ({ result: 'ok' }))
+  await $.prompt.submit({ text: 'Fix the parser' } as Parameters<Engine['prompt']['submit']>[0])
+  expect(w.contexts.at(-1)).toEqual([CAPSULE])
+  await $.tool.call({ tool: 'Bash', command: 'echo secret-argument' } as Parameters<Engine['tool']['call']>[0])
+  await w.clock.advance(10)
+  const events = w.hooks().map(h => h.hook_event_name)
+  expect(events).toContain('UserPromptSubmit')
+  expect(events).toContain('PreToolUse')
+  expect(events).toContain('PostToolUse')
+  const tool = w.hooks().find(h => h.hook_event_name === 'PreToolUse')
+  expect(tool?.tool_name).toBe('Bash')
+  expect(JSON.stringify(w.hooks())).not.toContain('secret-argument')
+  expect(w.hooks().every(h => h.session_id === 'sess-1' && h.cwd === '/repo')).toBe(true)
+})
+
+test('slash commands submit no lifecycle prompt and get no capsule', async ($, on) => {
+  const w = world(on, 10)
+  await $.prompt.submit({ text: '/om-agents', command: { name: 'om-agents', args: '' } } as Parameters<Engine['prompt']['submit']>[0])
+  expect(w.hooks().some(h => h.hook_event_name === 'UserPromptSubmit')).toBe(false)
+})
+
+test('a subagent is its own session: started, its tool calls, its end, linked to the spawning session', async ($, on) => {
+  const w = world(on, 10)
+  on('agent.spawn', async () => ({ model: 'claude-haiku-test', agentId: 'agent-7' }))
+  on('tool.call', async () => ({ result: 'ok' }))
+  await $.agent.spawn({ prompt: 'Find the parser', subagentType: 'Explore' } as Parameters<Engine['agent']['spawn']>[0])
+  await $.tool.call({ tool: 'Grep', pattern: 'parse', agentId: 'agent-7' } as unknown as Parameters<Engine['tool']['call']>[0])
+  await $.turn.complete({ ...turn('found it'), agentId: 'agent-7' } as Parameters<Engine['turn']['complete']>[0])
+  await w.clock.advance(10)
+  const sub = w.hooks().filter(h => h.session_id === 'agent-7')
+  expect(sub.map(h => h.hook_event_name)).toEqual(['SubagentStart', 'PreToolUse', 'PostToolUse', 'SubagentStop'])
+  expect(sub[0]).toMatchObject({ spawned_by: 'sess-1', agent_type: 'Explore', model: 'claude-haiku-test' })
+  expect(sub.slice(1).every(h => h.model === undefined)).toBe(true)
+  // The main session is neither marked busy by the subagent's tools nor ended by its turn.
+  expect(w.hooks().some(h => h.session_id === 'sess-1' && ['PreToolUse', 'Stop'].includes(String(h.hook_event_name)))).toBe(false)
+  const list = [
+    card('me', 'working', 'claude'), { ...card('agent-7', 'working', 'claude'), spawned_by: 'me' },
+    { ...card('agent-8', 'working', 'claude'), spawned_by: 'other' }, card('c1', 'working', 'codex'),
+    { ...card('d1', 'working', 'codex'), spawned_by: 'me', agent_type: 'delegated' },
+  ]
+  // Claude subagents are Claude's to list; a run delegated to Codex shows here with its progress.
+  expect(others(list, 'me').map(a => a.session_id)).toEqual(['c1', 'd1'])
+  expect(facts(list[4]!, 0)[0]).toBe('delegated · working')
+})
+
+test('a subagent is linked by its first event, even when its spawn settles after it ended', async ($, on) => {
+  const w = world(on, 10)
+  on('tool.call', async () => ({ result: 'ok' }))
+  on('agent.spawn', async () => {
+    await $.tool.call({ tool: 'Grep', pattern: 'x', agentId: 'agent-8' } as unknown as Parameters<Engine['tool']['call']>[0])
+    await $.turn.complete({ ...turn('done'), agentId: 'agent-8' } as Parameters<Engine['turn']['complete']>[0])
+    return { model: 'claude-haiku-test', agentId: 'agent-8' }
+  })
+  await $.agent.spawn({ prompt: 'Look', subagentType: 'Explore' } as Parameters<Engine['agent']['spawn']>[0])
+  await w.clock.advance(10)
+  const sub = w.hooks().filter(h => h.session_id === 'agent-8')
+  expect(sub.map(h => h.hook_event_name)).toEqual(['PreToolUse', 'PostToolUse', 'SubagentStop', 'SubagentStop'])
+  expect(sub.every(h => h.spawned_by === 'sess-1')).toBe(true)
+  expect(sub[3]).toMatchObject({ agent_type: 'Explore' })
+})
+
+test("a subagent's context: a percent of the session window on its model, else tokens only", async ($, on) => {
+  const w = world(on, 10)
+  const usage = (model: string, input: number) => ({
+    model, input_tokens: input, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, output_tokens: 0,
+  })
+  let next = usage('claude-test', 50_000)
+  on('turn.step', async function* () {
+    return { turnId: 't', index: 0, answer: '', toolUses: [], stopReason: 'end_turn' as const, usage: next }
+  })
+  const step = async (agentId?: string) => {
+    const s = $.turn.step({ turnId: 't', index: 0, model: 'm', messageCount: 1, agentId } as Parameters<Engine['turn']['step']>[0])
+    for await (const _ of s);
+    await w.clock.advance(10)
+  }
+  await step('agent-9')
+  next = usage('claude-test', 50_500) // under a point more: not sent again
+  await step('agent-9')
+  next = usage('claude-haiku-other', 90_000) // another model: its window is unknown, tokens only
+  await step('agent-9')
+  await step() // the main session's steps are not sampled here
+  const sent = w.hooks().filter(h => h.hook_event_name === 'context.usage')
+  expect(sent.length).toBe(2)
+  expect(sent[0]).toMatchObject({ session_id: 'agent-9', context_window: { used_percentage: 25, context_window_size: 200_000 } })
+  expect(sent[1]?.context_window).toEqual({ used_tokens: 90_000 })
+})
+
+test('Codex and OpenCode are offered as subagent types that delegate read-only through om', async ($, on) => {
+  const w = world(on, 10)
+  const registered: { name: string; prompt: string; tools?: readonly string[] }[] = []
+  on('agent.register', async (_$, e) => {
+    registered.push(e)
+    return { value: { agent: 'omniverse-bridge:' + e.name } }
+  })
+  on('command.register', async (_$, e) => ({ value: { command: e.name } }))
+  on('session.start', async (_$, e) => ({ cwd: e.cwd }))
+  await $.session.start({ source: 'startup', cwd: '/repo', surface: 'terminal', isInteractive: true } as unknown as Parameters<Engine['session']['start']>[0])
+  await w.clock.advance(10)
+  expect(registered.map(r => r.name)).toEqual(['codex', 'opencode'])
+  expect(registered[0]?.prompt).toContain('codex run --prompt-file')
+  expect(registered[1]?.prompt).toContain('opencode run --prompt-file')
+  expect(registered.every(r => r.prompt.includes('read-only by default') && r.prompt.includes('Never commit, push'))).toBe(true)
+})
+
+test('stated context windows: model=tokens pairs, bad entries ignored', () => {
+  const w = parseWindows(' claude-sonnet-5-5=1000000, claude-haiku-5-5 = 200000, bad, x=-1, y=abc')
+  expect([...w.entries()]).toEqual([['claude-sonnet-5-5', 1_000_000], ['claude-haiku-5-5', 200_000]])
 })

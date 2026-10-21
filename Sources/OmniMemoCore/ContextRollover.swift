@@ -118,6 +118,7 @@ extension MemoryStore {
           }
           s.contextUsedPercent = (usedPercent * 10).rounded() / 10
           s.contextWindowTokens = windowTokens
+          s.contextUsedTokens = nil
           s.contextObservedAt = now
           s.lastSeen = now
           if let model { s.model = model }
@@ -132,6 +133,32 @@ extension MemoryStore {
         ])
       return ContextUsage.of(s)
     } catch { throw Self.safeError(error) }
+  }
+
+  /// A sample whose window the host could not say: tokens only, so no percent and no level.
+  /// Returns false when the session was never announced by a lifecycle hook.
+  @discardableResult
+  public func recordContextTokens(agent: String, session: String, model: String?, usedTokens: Int) async throws -> Bool {
+    try validate()
+    let agent = try Self.label(agent, "agent")
+    let session = try Self.label(session, "session")
+    guard (0...10_000_000).contains(usedTokens) else { throw MemoError.invalid("used tokens") }
+    if let model {
+      guard (1...80).contains(model.utf8.count) else { throw MemoError.invalid("model_id") }
+      try SecretFilter.check(model)
+    }
+    do {
+      try await updateSession(agent: agent, session: session) { stored in
+        guard var s = stored else { throw SampleSkipped() }
+        s.contextUsedTokens = usedTokens
+        s.contextUsedPercent = nil
+        s.contextWindowTokens = nil
+        s.contextObservedAt = nowISO()
+        if let model { s.model = model }
+        return s
+      }
+      return true
+    } catch is SampleSkipped { return false } catch { throw Self.safeError(error) }
   }
 
   /// Capsule for a manual fresh-session handoff. Git state is passed in by the caller.
@@ -190,17 +217,19 @@ private struct SampleSkipped: Error {}
 
 extension MemoryStore {
   /// Atomically reserves the only child of a parent session; false when one was already reserved.
+  /// A parent resumed after a completed rollover is a new generation and may hand off again.
   public func beginRollover(agent: String, parent: String) async throws -> Bool {
     try validate()
     let agent = try Self.label(agent, "agent")
     let parent = try Self.label(parent, "session")
     do {
-      guard try await backend.session(project: binding.id, agent: agent, session: parent) != nil else {
+      guard let stored = try await backend.session(project: binding.id, agent: agent, session: parent) else {
         throw MemoError.notFound
       }
+      let generation = stored.rolloverState == "completed" ? "|after|" + (stored.childSessionID ?? "") : ""
       guard
         try await backend.claimRuntimeEvent(
-          project: binding.id, key: "rollover|" + agent + "|" + parent, at: nowISO())
+          project: binding.id, key: "rollover|" + agent + "|" + parent + generation, at: nowISO())
       else { return false }
       try await updateSession(agent: agent, session: parent) { stored in
         guard var s = stored else { throw MemoError.notFound }

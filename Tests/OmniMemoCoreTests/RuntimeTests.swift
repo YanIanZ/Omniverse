@@ -5,7 +5,7 @@ import XCTest
 
 final class RuntimeTests: XCTestCase {
   func store() async throws -> MemoryStore {
-    let (_, store) = try await MongoTests().fixture()
+    let (_, store) = try await MongoTests().fixture(owner: self)
     try await store.ensureRuntimeIndexes()
     return store
   }
@@ -94,7 +94,7 @@ final class RuntimeTests: XCTestCase {
 
   func testConcurrentIdempotentCreateOnFreshStoreMakesOneTask() async throws {
     // No server ever ran here, so the unique index must be created by the first writer.
-    let (_, store) = try await MongoTests().fixture()
+    let (_, store) = try await MongoTests().fixture(owner: self)
     try? await store.mongoDatabase!["omnimem_tasks"].dropIndex(.name("project_task"))
     let made = await withTaskGroup(of: String?.self) { group in
       for _ in 0..<4 {
@@ -108,7 +108,7 @@ final class RuntimeTests: XCTestCase {
   }
 
   func testDuplicateTaskCopiesMergeToHighestRevision() async throws {
-    let (_, store) = try await MongoTests().fixture()
+    let (_, store) = try await MongoTests().fixture(owner: self)
     // Reproduce a store written before the unique index existed.
     try? await store.mongoDatabase!["omnimem_tasks"].dropIndex(.name("project_task"))
     for revision in [1, 2] {

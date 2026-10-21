@@ -10,6 +10,9 @@ export type AgentCard = {
   task?: { id: string; title: string }
   progress: { kind: string; percent?: number; completed?: number; total?: number }
   context: { measurement: string; level: string; used_percent?: number }
+  /** Set on a subagent: the session that spawned it, and its type. */
+  spawned_by?: string
+  agent_type?: string
 }
 
 /** One OmniMemo record an agent saved (`om memory list`), cut down to what the pane prints. */

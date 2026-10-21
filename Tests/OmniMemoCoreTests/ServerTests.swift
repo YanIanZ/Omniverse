@@ -7,11 +7,12 @@ import XCTest
 final class ServerTests: XCTestCase {
   let token = String(repeating: "a", count: 64)
 
-  func app(dist: String? = nil) async throws -> (Application, MemoryStore) {
-    let (_, store) = try await MongoTests().fixture()
+  func app(dist: String? = nil, present: Bool = true) async throws -> (Application, MemoryStore) {
+    let (_, store) = try await MongoTests().fixture(owner: self)
     let app = try await Application.make(.testing)
     try await OmniServer.configure(
-      app, store: store, config: ServerConfig(port: 8787, token: token, distPath: dist))
+      app, store: store,
+      config: ServerConfig(port: 8787, token: token, distPath: dist, confirmPresence: { _ in present }))
     addTeardownBlock { try? await app.asyncShutdown() }
     return (app, store)
   }
@@ -25,8 +26,17 @@ final class ServerTests: XCTestCase {
   /// Signs in like the browser does and returns the minted session cookie value.
   func session(_ app: Application) async throws -> String {
     var value = ""
-    try await app.test(.GET, "auth?token=\(token)", headers: headers(auth: false)) {
-      value = $0.headers.setCookie?[OmniServer.cookie]?.string ?? ""
+    try await app.test(.GET, "auth?code=\(try await code(app))", headers: headers(auth: false)) {
+      value = $0.headers.setCookie?[OmniServer.cookie(8787)]?.string ?? ""
+    }
+    return value
+  }
+
+  /// A single-use sign-in code, as `om office` requests it with the bearer token.
+  func code(_ app: Application) async throws -> String {
+    var value = ""
+    try await app.test(.POST, "api/v1/login-code", headers: headers()) {
+      value = (try? $0.content.decode([String: String].self))?["code"] ?? ""
     }
     return value
   }
@@ -47,18 +57,31 @@ final class ServerTests: XCTestCase {
     try await app.test(
       .POST, "api/v1/tasks",
       headers: headers(
-        [("Cookie", "omnimemo_session=\(cookie)"), ("Content-Type", "application/json")],
+        [("Cookie", "omnimemo_session_8787=\(cookie)"), ("Content-Type", "application/json")],
         auth: false),
       body: ByteBuffer(string: #"{"title":"x"}"#)
     ) { XCTAssertEqual($0.status, .forbidden) }
-    try await app.test(.GET, "auth?token=wrong", headers: headers(auth: false)) {
-      XCTAssertEqual($0.status, .unauthorized)
+    try await app.test(.GET, "auth?code=wrong", headers: headers(auth: false)) {
+      // Refused: back to the locked screen, with no session cookie.
+      XCTAssertEqual($0.status, .seeOther)
+      XCTAssertNil($0.headers.first(name: .setCookie))
     }
+    // The token itself is no longer a sign-in URL; only a single-use code from the CLI is.
     try await app.test(.GET, "auth?token=\(token)", headers: headers(auth: false)) {
+      // Refused: back to the locked screen, with no session cookie.
+      XCTAssertEqual($0.status, .seeOther)
+      XCTAssertNil($0.headers.first(name: .setCookie))
+    }
+    let signIn = try await code(app)
+    try await app.test(.GET, "auth?code=\(signIn)", headers: headers(auth: false)) {
       XCTAssertEqual($0.status, .seeOther)
       let cookie = $0.headers.first(name: .setCookie) ?? ""
       XCTAssertTrue(cookie.contains("HttpOnly") && cookie.contains("SameSite=Strict"))
       XCTAssertFalse(cookie.contains(token), "the cookie never carries the server token")
+    }
+    try await app.test(.GET, "auth?code=\(signIn)", headers: headers(auth: false)) {
+      XCTAssertEqual($0.status, .seeOther)
+      XCTAssertNil($0.headers.first(name: .setCookie), "a sign-in code works once")
     }
     try await app.test(.GET, "api/v1/health", headers: headers()) { res in
       XCTAssertEqual(res.status, .ok)
@@ -115,7 +138,7 @@ final class ServerTests: XCTestCase {
     }
     let cookie = try await session(app)
     try await app.test(.POST, "api/runtime/events",
-      headers: headers([("Cookie", "omnimemo_session=\(cookie)"), ("Content-Type", "application/json")], auth: false),
+      headers: headers([("Cookie", "omnimemo_session_8787=\(cookie)"), ("Content-Type", "application/json")], auth: false),
       body: body) {
       XCTAssertEqual($0.status, .forbidden, "cookie writes require an Origin")
     }
@@ -164,21 +187,41 @@ final class ServerTests: XCTestCase {
       XCTAssertEqual($0.status, .forbidden)
     }
     // The server token itself is not a browser session, even when sent as the cookie.
-    let forged = headers([json, origin, ("Cookie", "omnimemo_session=\(token)")], auth: false)
+    let forged = headers([json, origin, ("Cookie", "omnimemo_session_8787=\(token)")], auth: false)
     try await app.test(.POST, path, headers: forged, body: body) {
       XCTAssertEqual($0.status, .unauthorized)
     }
     let signedIn = try await session(app)
-    let browser = headers([json, origin, ("Cookie", "omnimemo_session=\(signedIn)")], auth: false)
+    let browser = headers([json, origin, ("Cookie", "omnimemo_session_8787=\(signedIn)")], auth: false)
     try await app.test(.POST, path, headers: browser, body: body) { res in
       XCTAssertEqual(res.status, .ok)
       XCTAssertEqual(try res.content.decode(ApprovalRecord.self).status, "approved")
     }
     try await app.test(.POST, path, headers: browser, body: body) {
       XCTAssertEqual($0.status, .conflict, "a request is decided once")
+      XCTAssertTrue($0.body.string.contains("already decided"))
     }
     let events = try await store.events(after: 0).map(\.type)
     XCTAssertEqual(events, ["approval.requested", "approval.decided"])
+  }
+
+  /// A browser session is not enough to approve: the owner check at the Mac must pass too.
+  func testApprovalNeedsPresenceButDenialDoesNot() async throws {
+    let (app, store) = try await app(present: false)
+    let request = try await store.requestApproval(action: "Push main", reason: "release", agent: "codex")
+    let path = "api/v1/approvals/\(request.id)/decision"
+    let signedIn = try await session(app)
+    let browser = headers(
+      [("Content-Type", "application/json"), ("Origin", "http://127.0.0.1:8787"), ("Cookie", "omnimemo_session_8787=\(signedIn)")],
+      auth: false)
+    try await app.test(.POST, path, headers: browser, body: ByteBuffer(string: #"{"decision":"approved"}"#)) {
+      XCTAssertEqual($0.status, .forbidden)
+    }
+    let still = try await store.listApprovals().first { $0.id == request.id }
+    XCTAssertEqual(still?.status, "pending")
+    try await app.test(.POST, path, headers: browser, body: ByteBuffer(string: #"{"decision":"denied"}"#)) {
+      XCTAssertEqual($0.status, .ok)
+    }
   }
 
   func testSpaFallbackNeverSwallowsApi() async throws {

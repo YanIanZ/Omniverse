@@ -11,6 +11,8 @@ public struct RuntimeAgentView: Codable, Sendable {
     case lastEvent = "last_event"
     case toolCategory = "tool_category"
     case eventCount = "event_count"
+    case spawnedBy = "spawned_by"
+    case agentType = "agent_type"
   }
   public struct TaskRef: Codable, Sendable {
     public var id: String
@@ -32,6 +34,9 @@ public struct RuntimeAgentView: Codable, Sendable {
   public var progress: Progress
   /// Separate from task progress: what the host reported about its context window.
   public var context: ContextUsage
+  /// Set on a subagent: the session that spawned it, and its type.
+  public var spawnedBy: String? = nil
+  public var agentType: String? = nil
 }
 
 extension MemoryStore {
@@ -82,6 +87,8 @@ extension MemoryStore {
       if let text = value.text { metadata[key] = String(text.prefix(120)) }
     }
     guard metadata.count <= 12 else { throw MemoError.invalid("metadata size") }
+    if let parent = metadata["spawned_by"] { _ = try Self.label(parent, "spawned_by") }
+    if let type = metadata["agent_type"] { _ = try Self.label(type, "agent_type") }
     // Categories only: a raw tool name or argument text is reduced to its category.
     if let category = metadata["tool_category"], !RuntimeMapping.toolCategories.contains(category) {
       metadata["tool_category"] = RuntimeMapping.toolCategory(category)
@@ -108,6 +115,9 @@ extension MemoryStore {
         session.lastSeen = now
         session.source = source
         session.eventCount = (session.eventCount ?? 0) + 1
+        // Lineage is fixed by the first event that names it.
+        if session.spawnedBy == nil, let parent = metadata["spawned_by"] { session.spawnedBy = parent }
+        if session.agentType == nil, let type = metadata["agent_type"] { session.agentType = type }
         if let mode = metadata["observability"], ["managed", "passive"].contains(mode) {
           session.observability = mode
         } else if session.observability == nil {
@@ -139,7 +149,10 @@ extension MemoryStore {
       }
       saved = true
 
-      if e.eventType == "milestone.verified", let task = e.taskID, let milestone = e.milestoneID {
+      // A session verifies only the task assigned to it, never another agent's plan.
+      if e.eventType == "milestone.verified", let task = e.taskID, let milestone = e.milestoneID,
+        session.taskID == task
+      {
         _ = try? await setMilestone(
           taskID: task, milestoneID: milestone, verified: true,
           evidence: "runtime event \(e.eventID) from \(source)", agent: e.provider)
@@ -168,7 +181,8 @@ extension MemoryStore {
       let model = s.model.map { $0.lowercased().replacingOccurrences(of: "[^a-z0-9._-]+", with: "-", options: .regularExpression) }
       let task =
         tasks.first { $0.id == s.taskID }
-        ?? tasks.filter { $0.owner == s.agent && ["doing", "review", "blocked"].contains($0.status) }
+        // A subagent works under its parent's task; only a task assigned to it is its own.
+        ?? tasks.filter { s.spawnedBy == nil && $0.owner == s.agent && ["doing", "review", "blocked"].contains($0.status) }
           .max { $0.updatedAt < $1.updatedAt }
       return RuntimeAgentView(
         // `client-model`, without repeating a client name the model id already carries.
@@ -179,7 +193,8 @@ extension MemoryStore {
         source: s.source, lastSeen: s.lastSeen, lastEvent: s.lastEvent, toolCategory: s.toolCategory,
         eventCount: s.eventCount ?? 0,
         task: task.map { .init(id: $0.id, title: $0.title) } ?? s.title.map { .init(id: "", title: $0) },
-        progress: Progress.of(task?.milestones), context: ContextUsage.of(s))
+        progress: Progress.of(task?.milestones), context: ContextUsage.of(s),
+        spawnedBy: s.spawnedBy, agentType: s.agentType)
     }
     // Same client-model twice: add a short session suffix instead of merging identities.
     let counts = Dictionary(grouping: views, by: \.displaySlug).mapValues(\.count)

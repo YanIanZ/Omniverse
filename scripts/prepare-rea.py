@@ -8,6 +8,14 @@ VERSION='6.4.0'
 
 def sha(path):return hashlib.sha256(path.read_bytes()).hexdigest()
 
+def tree(root,folder):
+    """Mirrors REARuntime.treeDigest: sorted 'path NUL sha256 LF' lines over regular files."""
+    lines=[]
+    for item in folder.rglob('*'):
+        if item.is_symlink():raise SystemExit('REA dist contains a symlink; refusing to fingerprint it.')
+        if item.is_file():lines.append((str(item.relative_to(root)).encode(),sha(item)))
+    return hashlib.sha256(b''.join(p+b'\0'+h.encode()+b'\n' for p,h in sorted(lines))).hexdigest()
+
 def prepare(base,node,vendor=False):
     base=base.resolve();source=base/'upstream/rea';source.parent.mkdir(parents=True,exist_ok=True)
     env=dict(os.environ,HUSKY='0',DO_NOT_TRACK='1',TURBO_TELEMETRY_DISABLED='1',npm_config_cache=str(base/'npm'))
@@ -27,7 +35,7 @@ def prepare(base,node,vendor=False):
     subprocess.run(['npm','ci','--cache',str(base/'npm')],cwd=source,env=env,check=True)
     subprocess.run(['npm','run','build:cached'],cwd=source,env=env,check=True)
     counts=json.loads(subprocess.check_output([node,'--input-type=module','-e','import {CATALOG_IDENTITY} from "./dist/catalogIdentity.js"; console.log(JSON.stringify(CATALOG_IDENTITY.counts));'],cwd=source,text=True))
-    bundle={'source_url':REPO,'commit':REV,'version':VERSION,'entrypoint_sha256':sha(source/'scripts/rea.mjs'),'lock_sha256':sha(source/'package-lock.json'),'catalog_sha256':sha(source/'dist/catalogIdentity.js'),'mcp_sha256':sha(source/'dist/mcp/main.js'),'tool_count':counts['mcp_tools'],'cli_count':counts['cli_commands'],'prompt_count':counts['mcp_prompts']}
+    bundle={'source_url':REPO,'commit':REV,'version':VERSION,'entrypoint_sha256':sha(source/'scripts/rea.mjs'),'lock_sha256':sha(source/'package-lock.json'),'catalog_sha256':sha(source/'dist/catalogIdentity.js'),'mcp_sha256':sha(source/'dist/mcp/main.js'),'dist_sha256':tree(source,source/'dist'),'tool_count':counts['mcp_tools'],'cli_count':counts['cli_commands'],'prompt_count':counts['mcp_prompts']}
     expected_path=pathlib.Path(__file__).resolve().parent.parent/'Sources/OmniMemoCore/REA/provenance.json'
     if not vendor and expected_path.exists() and json.loads(expected_path.read_text())!=bundle:
         raise SystemExit('Built REA differs from bundled provenance; preserve the current runtime manifest and review/re-vendor explicitly.')
@@ -38,7 +46,7 @@ def prepare(base,node,vendor=False):
     return source,bundle
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--base',type=pathlib.Path,default=pathlib.Path('/Volumes/Ext/DevCache/OmniMemo'));parser.add_argument('--node',default=shutil.which('node'));parser.add_argument('--vendor',action='store_true',help='Refresh versioned skill/provenance resources from the matching built source.')
+    parser=argparse.ArgumentParser();parser.add_argument('--base',type=pathlib.Path,default=pathlib.Path('/Volumes/Ext/DevCache/OmniMemo') if pathlib.Path('/Volumes/Ext/DevCache').is_dir() else pathlib.Path.home()/'Library/Caches/OmniMemo');parser.add_argument('--node',default=shutil.which('node'));parser.add_argument('--vendor',action='store_true',help='Refresh versioned skill/provenance resources from the matching built source.')
     args=parser.parse_args()
     if not args.node:raise SystemExit('Node is not installed; install a supported version explicitly.')
     source,bundle=prepare(args.base,args.node,args.vendor)

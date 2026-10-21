@@ -5,7 +5,8 @@ import Foundation
 import OmniMemoCore
 import OmniServer
 
-/// Pointer to the one OmniMemo-owned HTTP server for a data directory.
+/// Pointer to the OmniMemo-owned HTTP server of one project: each project has its own server and
+/// port, recorded under `<data-dir>/servers/<project-id>.json`.
 struct ServerState: Codable {
   enum CodingKeys: String, CodingKey {
     case pid, port
@@ -15,14 +16,55 @@ struct ServerState: Codable {
   var port: Int
   var projectID: String
 
-  static func file(_ dataDir: String) -> URL {
+  /// One server per data directory before projects had their own.
+  static func legacyFile(_ dataDir: String) -> URL {
     canonical(dataDir).appendingPathComponent("server.json")
   }
-  static func read(dataDir: String) -> ServerState? {
-    guard let data = try? Data(contentsOf: file(dataDir)), data.count < 4096,
+  static func file(_ dataDir: String, project: String) -> URL {
+    canonical(dataDir).appendingPathComponent("servers").appendingPathComponent(project + ".json")
+  }
+  private static func load(_ url: URL) -> ServerState? {
+    guard let data = try? Data(contentsOf: url), data.count < 4096,
       let state = try? JSONDecoder().decode(ServerState.self, from: data), alive(state.pid)
     else { return nil }
     return state
+  }
+  /// This project's running server, if any (a legacy record counts when it names this project).
+  static func read(dataDir: String, project: String) -> ServerState? {
+    load(file(dataDir, project: project))
+      ?? load(legacyFile(dataDir)).flatMap { $0.projectID == project ? $0 : nil }
+  }
+  /// Every running server recorded in this data directory, whatever its project.
+  static func all(dataDir: String) -> [ServerState] {
+    let folder = canonical(dataDir).appendingPathComponent("servers")
+    let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+    var states = files.filter { $0.pathExtension == "json" }.compactMap(load)
+    if let legacy = load(legacyFile(dataDir)), !states.contains(where: { $0.pid == legacy.pid }) { states.append(legacy) }
+    return states
+  }
+  static func forget(dataDir: String, project: String) {
+    try? FileManager.default.removeItem(at: file(dataDir, project: project))
+    if let data = try? Data(contentsOf: legacyFile(dataDir)),
+      let state = try? JSONDecoder().decode(ServerState.self, from: data), state.projectID == project
+    {
+      try? FileManager.default.removeItem(at: legacyFile(dataDir))
+    }
+  }
+  /// A loopback port nothing listens on yet.
+  static func free(_ port: Int) -> Bool {
+    let fd = socket(AF_INET, SOCK_STREAM, 0)
+    guard fd >= 0 else { return false }
+    defer { close(fd) }
+    // As the server binds: a port a stopped server just released (TIME_WAIT) is free to reuse.
+    var yes: Int32 = 1
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, socklen_t(MemoryLayout<Int32>.size))
+    var address = sockaddr_in()
+    address.sin_family = sa_family_t(AF_INET)
+    address.sin_port = in_port_t(UInt16(port).bigEndian)
+    address.sin_addr.s_addr = inet_addr("127.0.0.1")
+    return withUnsafePointer(to: &address) {
+      $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) == 0 }
+    }
   }
   static func alive(_ pid: Int32) -> Bool { pid > 0 && kill(pid, 0) == 0 }
   /// Per-install browser/API credential; created once, private to the data directory.
@@ -50,6 +92,18 @@ struct ServerState: Codable {
     }
     var projectID: String
   }
+  /// Single-use sign-in code for the browser URL.
+  static func loginCode(port: Int, token: String) async -> String? {
+    guard let url = URL(string: "http://127.0.0.1:\(port)/api/v1/login-code") else { return nil }
+    var request = URLRequest(url: url, timeoutInterval: 2)
+    request.httpMethod = "POST"
+    request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    guard let (data, response) = try? await URLSession.shared.data(for: request),
+      (response as? HTTPURLResponse)?.statusCode == 200
+    else { return nil }
+    return (try? JSONDecoder().decode([String: String].self, from: data))?["code"]
+  }
+
   static func probe(port: Int, token: String) async -> Health? {
     guard let url = URL(string: "http://127.0.0.1:\(port)/api/v1/health") else { return nil }
     var request = URLRequest(url: url, timeoutInterval: 1)
@@ -76,7 +130,7 @@ func withStore<T>(_ options: Options, _ body: (MemoryStore) async throws -> T) a
 extension OmniMemo {
   struct Wake: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-      abstract: "Idempotent session signal from a supported hook; never starts a server.")
+      abstract: "(internal, used by host adapters) Mark a session present; never starts a server.")
     @OptionGroup var options: Options
     @Option(help: "Host session identifier; --agent names the provider (e.g. claude).")
     var session: String
@@ -90,10 +144,10 @@ extension OmniMemo {
   }
 
   struct Recall: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Search project memory.")
+    static let configuration = CommandConfiguration(abstract: "Search project memory (same as om memory search).")
     @OptionGroup var options: Options
     @Argument var query: String
-    @Option var limit: Int = 8
+    @Option(help: "Most results to show.") var limit: Int = 8
     func run() async throws {
       try await withStore(options) { try output(await $0.search(query, limit: limit)) }
     }
@@ -101,7 +155,7 @@ extension OmniMemo {
 
   struct Agents: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-      abstract: "Observed agent sessions; stale presence is reported as unknown.")
+      abstract: "Agent sessions OmniMemo has seen; ones with no recent signal are marked stale.")
     @OptionGroup var options: Options
     func run() async throws {
       try await withStore(options) { try output(await $0.agents()) }
@@ -110,7 +164,7 @@ extension OmniMemo {
 
   struct Tasks: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-      abstract: "Project tasks with revision-checked updates.",
+      abstract: "Shared project tasks; every change names the revision you last read, so two agents cannot overwrite each other.",
       subcommands: [List.self, Add.self, Move.self, Milestones.self], defaultSubcommand: List.self)
     struct List: AsyncParsableCommand {
       @OptionGroup var options: Options
@@ -136,7 +190,7 @@ extension OmniMemo {
       @OptionGroup var options: Options
       @Argument var id: String
       @Argument(help: "todo, doing, review, done or blocked.") var status: String
-      @Option(help: "Revision you last read; stale revisions are rejected.") var revision: Int
+      @Option(help: "Revision you last read (see om tasks list); stale revisions are rejected.") var revision: Int
       @Option var owner: String?
       func run() async throws {
         try await withStore(options) {
@@ -187,7 +241,7 @@ extension OmniMemo {
       subcommands: [Ingest.self, Sessions.self, Doctor.self])
     struct Ingest: AsyncParsableCommand {
       static let configuration = CommandConfiguration(
-        abstract: "Ingest one JSON event or JSONL events from stdin; prints one result per event.")
+        abstract: "(internal, used by host adapters) Ingest JSON or JSONL runtime events from stdin.")
       @OptionGroup var options: Options
       func run() async throws {
         let input = FileHandle.standardInput.readData(ofLength: 1 << 20 + 1)
@@ -219,7 +273,7 @@ extension OmniMemo {
       }
     }
     struct Sessions: AsyncParsableCommand {
-      static let configuration = CommandConfiguration(abstract: "Agent cards with derived stale status.")
+      static let configuration = CommandConfiguration(abstract: "Agent cards as Mission Control shows them (same data as om agents).")
       @OptionGroup var options: Options
       func run() async throws {
         try await withStore(options) { try output(await $0.runtimeAgents()) }
@@ -241,7 +295,7 @@ extension OmniMemo {
           for state in ["waiting", "working", "blocked", "offline", "stale"] {
             report["status_" + state] = String(agents.filter { $0.status == state }.count)
           }
-          if let server = ServerState.read(dataDir: options.dataDir) {
+          if let server = ServerState.read(dataDir: options.dataDir, project: status.projectID) {
             report["server"] = "running on 127.0.0.1:\(server.port)"
             if let token = try? ServerState.token(dataDir: options.dataDir),
               let url = URL(string: "http://127.0.0.1:\(server.port)/api/runtime/health")
@@ -264,8 +318,8 @@ extension OmniMemo {
     static let configuration = CommandConfiguration(
       abstract: "Run the Vapor HTTP/WebSocket server in the foreground (loopback only).")
     @OptionGroup var options: Options
-    @Option var host = "127.0.0.1"
-    @Option var port = 8787
+    @Option(help: "Loopback address to listen on (127.0.0.1 or localhost).") var host = "127.0.0.1"
+    @Option(help: "Port to listen on.") var port = 8787
     @Option(help: "Built React dist directory; defaults to the packaged frontend.") var dist:
       String?
     @Option(name: .customLong("dev-origin"), help: "Allowed Vite dev origin, e.g. http://127.0.0.1:5173.")
@@ -282,9 +336,10 @@ extension OmniMemo {
     }
     func run() async throws {
       let token = try ServerState.token(dataDir: options.dataDir)
-      if let running = ServerState.read(dataDir: options.dataDir), running.pid != getpid() {
+      let project = try ProjectBinding(path: options.project).id
+      if let running = ServerState.read(dataDir: options.dataDir, project: project), running.pid != getpid() {
         throw ValidationError(
-          "OmniMemo server already running (pid \(running.pid), port \(running.port)); use om office or om stop")
+          "this project's server is already running (pid \(running.pid), port \(running.port)); use om office or om stop")
       }
       let store = try await options.open()
       let packaged = canonical(executablePath()).deletingLastPathComponent()
@@ -292,7 +347,8 @@ extension OmniMemo {
       let config = ServerConfig(
         host: host, port: port, token: token, distPath: dist.map { canonical($0).path } ?? packaged,
         devOrigins: devOrigins)
-      let stateFile = ServerState.file(options.dataDir)
+      let stateFile = ServerState.file(options.dataDir, project: store.binding.id)
+      try privateDirectory(stateFile.deletingLastPathComponent())
       defer { try? FileManager.default.removeItem(at: stateFile) }
       do {
         try await OmniServer.run(store: store, config: config) {
@@ -311,10 +367,10 @@ extension OmniMemo {
 
   struct Office: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-      abstract: "Start or reuse the one OmniMemo server, then open Mission Control.")
+      abstract: "Start or reuse this project's Mission Control server, then open it in the browser.")
     @OptionGroup var options: Options
-    @Option var port = 8787
-    @Flag(help: "Do not open a browser.") var noOpen = false
+    @Option(help: "First port to try for a new server; the next free one is used when it is taken.") var port = 8787
+    @Flag(help: "Do not open a browser; print a single-use sign-in link instead.") var noOpen = false
     func run() async throws {
       let token = try ServerState.token(dataDir: options.dataDir)
       let binding = try ProjectBinding(path: options.project)
@@ -324,21 +380,21 @@ extension OmniMemo {
       }
       defer { rmdir(lock.path) }
       var reused = true
-      var state = ServerState.read(dataDir: options.dataDir)
+      var state = ServerState.read(dataDir: options.dataDir, project: binding.id)
       if let running = state {
         guard let health = await ServerState.probe(port: running.port, token: token),
-          health.pid == String(running.pid)
-        else { throw ValidationError("server pid \(running.pid) is not responding; run om stop") }
-        guard health.projectID == binding.id else {
-          throw ValidationError(
-            "OmniMemo server for another project runs on port \(running.port); run om stop there first")
-        }
+          health.pid == String(running.pid), health.projectID == binding.id
+        else { throw ValidationError("this project's server (pid \(running.pid)) is not responding; run om stop") }
       } else {
         reused = false
-        try spawnServer()
+        // Each project gets its own server: skip ports other projects' servers or other programs hold.
+        let taken = Set(ServerState.all(dataDir: options.dataDir).map(\.port))
+        guard let chosen = (port..<min(port + 20, 65536)).first(where: { !taken.contains($0) && ServerState.free($0) })
+        else { throw ValidationError("no free port in \(port)-\(port + 19); pass --port") }
+        try spawnServer(port: chosen)
         for _ in 0..<60 {
           try await Task.sleep(nanoseconds: 250_000_000)
-          state = ServerState.read(dataDir: options.dataDir)
+          state = ServerState.read(dataDir: options.dataDir, project: binding.id)
           if let s = state, await ServerState.probe(port: s.port, token: token) != nil { break }
           state = nil
         }
@@ -347,17 +403,27 @@ extension OmniMemo {
         }
       }
       let base = "http://127.0.0.1:\(state!.port)/"
+      // The plain URL does not sign in: a browser needs this single-use link.
+      guard let code = await ServerState.loginCode(port: state!.port, token: token) else {
+        throw ValidationError("server did not issue a sign-in code; see server.log in the data directory")
+      }
+      let signIn = base + "auth?code=" + code
       if !noOpen {
         let open = Process()
         open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        open.arguments = [base + "auth?token=" + token]
+        open.arguments = [signIn]
         try open.run()
         open.waitUntilExit()
       }
-      try output(["url": base, "pid": String(state!.pid), "reused": String(reused)])
+      var result = ["url": base, "pid": String(state!.pid), "reused": String(reused)]
+      if noOpen {
+        result["sign_in"] = signIn
+        result["note"] = "sign_in works once, within 60 s, in a browser on this Mac"
+      }
+      try output(result)
     }
     /// New session (setsid) so the server survives the terminal; output goes to server.log.
-    func spawnServer() throws {
+    func spawnServer(port: Int) throws {
       let log = canonical(options.dataDir).appendingPathComponent("server.log").path
       let args = [
         executablePath(), "--data-dir", canonical(options.dataDir).path, "--project",
@@ -383,26 +449,35 @@ extension OmniMemo {
 
   struct Stop: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-      abstract: "Stop the OmniMemo-owned server only; databases are never touched.")
+      abstract: "Stop this project's Mission Control server (--all: every project's); databases are never touched.")
     @OptionGroup var options: Options
+    @Flag(help: "Stop the servers of every project in this data directory.") var all = false
     func run() async throws {
-      guard let state = ServerState.read(dataDir: options.dataDir) else {
-        try? FileManager.default.removeItem(at: ServerState.file(options.dataDir))
+      let project = try ProjectBinding(path: options.project).id
+      let states = all
+        ? ServerState.all(dataDir: options.dataDir)
+        : ServerState.read(dataDir: options.dataDir, project: project).map { [$0] } ?? []
+      guard !states.isEmpty else {
+        if !all { ServerState.forget(dataDir: options.dataDir, project: project) }
         try output(["server": "not running"])
         return
       }
       let token = try ServerState.token(dataDir: options.dataDir)
-      // Signal only a pid that proves it is our server on the recorded port.
-      guard let health = await ServerState.probe(port: state.port, token: token),
-        health.pid == String(state.pid)
-      else { throw ValidationError("pid \(state.pid) is not a responding OmniMemo server") }
-      kill(state.pid, SIGTERM)
-      for _ in 0..<40 where ServerState.alive(state.pid) {
-        try await Task.sleep(nanoseconds: 250_000_000)
+      var stopped: [String] = []
+      for state in states {
+        // Signal only a pid that proves it is our server on the recorded port.
+        guard let health = await ServerState.probe(port: state.port, token: token),
+          health.pid == String(state.pid)
+        else { throw ValidationError("pid \(state.pid) is not a responding OmniMemo server") }
+        kill(state.pid, SIGTERM)
+        for _ in 0..<40 where ServerState.alive(state.pid) {
+          try await Task.sleep(nanoseconds: 250_000_000)
+        }
+        guard !ServerState.alive(state.pid) else { throw ValidationError("server pid \(state.pid) did not stop") }
+        ServerState.forget(dataDir: options.dataDir, project: state.projectID)
+        stopped.append(String(state.pid))
       }
-      guard !ServerState.alive(state.pid) else { throw ValidationError("server did not stop") }
-      try? FileManager.default.removeItem(at: ServerState.file(options.dataDir))
-      try output(["server": "stopped", "pid": String(state.pid)])
+      try output(["server": "stopped", "pid": stopped.joined(separator: ",")])
     }
   }
 
@@ -418,11 +493,13 @@ extension OmniMemo {
       var transitions = true
       @Flag(inversion: .prefixedNo, help: "Store a short, secret-checked summary of each prompt (never the full text).")
       var prompts = true
+      @Flag(inversion: .prefixedNo, help: "Show a short task label on agent cards (a subagent's few-word task). Off unless asked.")
+      var titles = false
       func run() async throws {
         let root = canonical(options.dataDir)
         guard FileManager.default.fileExists(atPath: root.appendingPathComponent("meta.json").path)
         else { throw MemoError.storageUnavailable }
-        let value = AutoSave(checkpoints: checkpoints, transitions: transitions, prompts: prompts)
+        let value = AutoSave(checkpoints: checkpoints, transitions: transitions, prompts: prompts, titles: titles)
         try value.write(root)
         try output(value)
       }
@@ -511,7 +588,7 @@ extension OmniMemo {
   /// Claude Code `statusLine` command: prints one line and records the reported context usage.
   struct Statusline: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-      abstract: "Status line adapter (stdin JSON). Records reported context usage; never blocks the host.")
+      abstract: "(internal, used by the Claude Code status line) Record reported context usage; never blocks the host.")
     @OptionGroup var options: Options
     @Argument(help: "Only claude reports context usage through a status line.") var host: String
 
@@ -574,7 +651,7 @@ extension OmniMemo {
   /// Manual fresh-session handoff near context capacity. Nothing is launched (suggest mode).
   struct Rollover: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-      abstract: "Prepare a bounded handoff for a fresh session; never launches or controls one.",
+      abstract: "Hand work to a fresh agent session near the context limit: a short summary (capsule) saved as a checkpoint.",
       subcommands: [Preview.self, Prepare.self, Begin.self, Link.self, Report.self])
     struct Target: ParsableArguments {
       @Option(help: "Host session id whose reported context usage to include.") var session: String?
@@ -607,9 +684,9 @@ extension OmniMemo {
     // only child of the parent, link records the new session, report settles it on the ACK.
     struct Begin: AsyncParsableCommand {
       static let configuration = CommandConfiguration(
-        abstract: "Reserve the only child of a parent session; exits 1 when one was already reserved.")
+        abstract: "(internal, used by the Claude Code plugin) Reserve the one fresh session a parent may hand off to.")
       @OptionGroup var options: Options
-      @Option var session: String
+      @Option(help: "The parent session id (the one handing off).") var session: String
       @Option var provider = "claude"
       func run() async throws {
         let reserved = try await withStore(options) { try await $0.beginRollover(agent: provider, parent: session) }
@@ -617,9 +694,9 @@ extension OmniMemo {
       }
     }
     struct Link: AsyncParsableCommand {
-      static let configuration = CommandConfiguration(abstract: "Record the fresh child session of a reserved rollover.")
+      static let configuration = CommandConfiguration(abstract: "(internal, used by the Claude Code plugin) Record the fresh session of a reserved handoff.")
       @OptionGroup var options: Options
-      @Option var session: String
+      @Option(help: "The parent session id (the one handing off).") var session: String
       @Option var child: String
       @Option var provider = "claude"
       func run() async throws {
@@ -635,9 +712,9 @@ extension OmniMemo {
     }
     struct Report: AsyncParsableCommand {
       static let configuration = CommandConfiguration(
-        abstract: "Record a rollover outcome: with --child the task moves on ACK; without, a same-session reset.")
+        abstract: "(internal, used by the Claude Code plugin) Record whether the fresh session acknowledged the handoff.")
       @OptionGroup var options: Options
-      @Option var session: String
+      @Option(help: "The parent session id (the one handing off).") var session: String
       @Option(help: "Fresh child session; omit for a same-session reset.") var child: String?
       @Option var provider = "claude"
       @Option(help: "Digest printed by prepare.") var digest: String
@@ -691,7 +768,7 @@ extension OmniMemo {
 
   struct Hook: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-      abstract: "Host hook entrypoint (stdin JSON). Fail open: never blocks the host.")
+      abstract: "(internal, used by host adapters) Lifecycle event from a hook or plugin (stdin JSON); never blocks the host.")
     @OptionGroup var options: Options
     @Argument(help: "claude, codex, gemini or opencode.") var host: String
     @Option var maxTokens = 600
@@ -704,6 +781,9 @@ extension OmniMemo {
       case "UserPromptSubmit", "BeforeAgent", "chat.message": return (.prompt, "prompt.received")
       case "Stop", "AfterAgent", "session.idle": return (.stop, "turn.completed")
       case "SessionEnd", "session.deleted": return (.end, "session.ended")
+      // A subagent is its own session, linked to the one that spawned it.
+      case "SubagentStart": return (.start, "session.started")
+      case "SubagentStop": return (.end, "session.ended")
       case "PreToolUse", "BeforeTool", "tool.execute.before": return (.tool, "tool.started")
       case "PostToolUse", "AfterTool", "tool.execute.after": return (.tool, "tool.succeeded")
       case "PostToolUseFailure", "tool.execute.failed": return (.tool, "tool.failed")
@@ -730,6 +810,9 @@ extension OmniMemo {
           _ = try? await store.recordContext(
             agent: host, session: session, model: model.map { String($0.prefix(80)) }, usedPercent: percent,
             windowTokens: (window?["context_window_size"] as? NSNumber)?.intValue)
+        } else if let tokens = (window?["used_tokens"] as? NSNumber)?.intValue {
+          _ = try? await store.recordContextTokens(
+            agent: host, session: session, model: model.map { String($0.prefix(80)) }, usedTokens: tokens)
         }
         return await store.close()
       }
@@ -739,6 +822,20 @@ extension OmniMemo {
       var metadata: [String: MetaValue] = ["observability": .string("passive")]
       if phase == .tool { metadata["tool_category"] = .string(RuntimeMapping.toolCategory(object["tool_name"] as? String)) }
       if let mode = object["permission_mode"] as? String { metadata["permission_mode"] = .string(mode) }
+      // A run `om opencode run --spawned-by` launched names its delegating session in the environment.
+      let delegated = ProcessInfo.processInfo.environment["OMNIMEM_SPAWNED_BY"].flatMap { $0.isEmpty ? nil : $0 }
+      let parent = object["spawned_by"] as? String ?? delegated
+      if let parent { metadata["spawned_by"] = .string(parent) }
+      if object["spawned_by"] == nil, delegated != nil { metadata["agent_type"] = .string("delegated") }
+      // A subagent's few-word task label (kept only where titles are opted in); one that looks
+      // like a secret is dropped so it cannot cost the event.
+      if parent != nil, let title = object["title"] as? String, (try? SecretFilter.check(title)) != nil {
+        metadata["title"] = .string(title)
+      }
+      if let type = object["agent_type"] as? String {
+        let label = type.prefix(64).replacingOccurrences(of: "[^A-Za-z0-9._:-]", with: "-", options: .regularExpression)
+        if !label.isEmpty { metadata["agent_type"] = .string(label) }
+      }
       let runtimeEvent = RuntimeEventInput(
         source: source, provider: host, externalSessionID: session, eventType: eventType,
         modelID: model.map { String($0.prefix(80)) }, metadata: metadata)
@@ -748,7 +845,8 @@ extension OmniMemo {
         return
       }
       // Codex has no session-end hook; its per-turn Stop checkpoints are deduplicated by content.
-      let ends = phase == .end || (host == "codex" && phase == .stop)
+      // A subagent's end is part of its parent's work, not a session handoff.
+      let ends = parent == nil && (phase == .end || (host == "codex" && phase == .stop))
       if phase == .prompt, let prompt = object["prompt"] as? String {
         await store.autoPromptSummary(agent: host, session: session, prompt: prompt)
       }

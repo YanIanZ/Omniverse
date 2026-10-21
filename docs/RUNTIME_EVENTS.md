@@ -85,7 +85,8 @@ Add milestones to an existing task using `addMilestone`; titles are 1–160 UTF-
 bytes, weight is 1–100, and at most 50 milestones are allowed. Verify/revert with
 `setMilestone`, including 1–240 UTF-8 bytes of evidence. Mutations use task revision
 checks and emit `task.updated`. `milestone.verified` requires both IDs and attempts
-verification with an event/source evidence reference. Acceptance of the event
+verification with an event/source evidence reference, only when the task is the one
+assigned to that session (`task.assigned`); for any other task it is recorded as activity. Acceptance of the event
 alone does not prove that the referenced milestone was updated; read task state.
 
 Without milestones, progress is `indeterminate` with no percentage. Otherwise it
@@ -141,7 +142,7 @@ are rejected rather than retained.
 
 ### Managed Codex runs
 
-`om codex run --prompt <text> [--task <id>] [--sandbox read-only|workspace-write] [--timeout <s>]` starts `codex app-server`, opens a fresh thread (`approvalPolicy: never`, read-only sandbox by default) and runs one turn. The prompt and the replies go only to Codex and the terminal; OmniMemo records categories, statuses and reported usage. Thread items map to tool categories (`commandExecution` shell, `fileChange` file_edit, `mcpToolCall` mcp, `webSearch` web). A server request for approval is declined and shown as `blocked`, because a managed run has no approval channel. `--task` claims a todo task (revision-checked, owner `codex`) and never takes another owner's task. Verified with codex-cli 0.163.0; the protocol schema is generated with `codex app-server generate-json-schema`.
+`om codex run --prompt <text> [--task <id>] [--sandbox read-only|workspace-write] [--timeout <s>]` starts `codex app-server --disable hooks` (the run reports itself, so the user's Codex hooks would count every event twice), opens a fresh thread (`approvalPolicy: never`, read-only sandbox by default) and runs one turn. The prompt and the replies go only to Codex and the terminal; OmniMemo records categories, statuses and reported usage. Thread items map to tool categories (`commandExecution` shell, `fileChange` file_edit, `mcpToolCall` mcp, `webSearch` web). A server request for approval is declined and shown as `blocked`, because a managed run has no approval channel. `--task` claims a todo task (revision-checked, owner `codex`) and never takes another owner's task. Verified with codex-cli 0.163.0; the protocol schema is generated with `codex app-server generate-json-schema`.
 
 ## Context usage and rollover (v2.4)
 

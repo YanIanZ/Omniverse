@@ -61,7 +61,8 @@ with tempfile.TemporaryDirectory(prefix='global fixture ',dir=workspace) as fold
     assert 'omnimemo' not in tomllib.loads(codex.read_text())['mcp_servers']
     assert json.loads(paths['claude'].read_text())['new_setting']=='preserve'
     assert all(json.loads(p.read_text())['keep']=={'value':42} for p in paths.values())
-    # Opt-in Claude hooks merge beside existing user hooks and uninstall only their own entries.
+    # Opt-in lifecycle: hooks for Codex and Gemini only. Claude Code gets the plugin instead, so its
+    # settings (and the user's own hooks there) are never written.
     hstate=root/'hook-state';settings=home/'.claude/settings.json';settings.parent.mkdir(exist_ok=True)
     mine={'hooks':[{'type':'command','command':'echo user-hook'}]}
     settings.write_text(json.dumps({'theme':'dark','hooks':{'UserPromptSubmit':[mine]}}))
@@ -73,8 +74,7 @@ with tempfile.TemporaryDirectory(prefix='global fixture ',dir=workspace) as fold
     p=subprocess.run(hargs,text=True,capture_output=True,timeout=30);assert p.returncode==0,p.stderr
     assert json.loads(settings.read_text())==before, 'preview must not write'
     p=subprocess.run(hargs+['--apply'],text=True,capture_output=True,timeout=30);assert p.returncode==0,p.stderr
-    hooks=json.loads(settings.read_text())['hooks']
-    assert sorted(hooks)==['PostToolUse','PostToolUseFailure','PreToolUse','SessionEnd','SessionStart','Stop','UserPromptSubmit'] and hooks['UserPromptSubmit'][0]==mine
+    assert json.loads(settings.read_text())==before, 'Claude settings hooks are not installed'
     codex_hooks=json.loads((home/'.codex/hooks.json').read_text())['hooks']
     assert sorted(codex_hooks)==['PostToolUse','PreToolUse','SessionStart','Stop','UserPromptSubmit']
     assert codex_hooks['Stop'][0]['hooks'][0]['command'].endswith(' hook codex')
@@ -86,11 +86,11 @@ with tempfile.TemporaryDirectory(prefix='global fixture ',dir=workspace) as fold
     plugin=(home/'.config/opencode/plugins/omnimemo.js').read_text()
     assert 'ctx.tool.hook("execute.before"' in plugin and 'ctx.tool.hook("execute.after"' in plugin
     assert 'for await (const ev of ctx.event.subscribe' in plugin and 'api.event' not in plugin
-    command=hooks['SessionStart'][0]['hooks'][0]['command']
-    assert command.endswith(' hook claude') and "'"+str(root/'data space')+"'" in command
-    applied_hooks=settings.read_bytes()
+    command=codex_hooks['SessionStart'][0]['hooks'][0]['command']
+    assert command.endswith(' hook codex') and "'"+str(root/'data space')+"'" in command
+    applied_hooks=(home/'.codex/hooks.json').read_bytes()
     p=subprocess.run(hargs+['--apply'],text=True,capture_output=True,timeout=30);assert p.returncode==0,p.stderr
-    assert settings.read_bytes()==applied_hooks
+    assert (home/'.codex/hooks.json').read_bytes()==applied_hooks
     p=subprocess.run([sys.executable,str(script),'--home',str(home),'--state-dir',str(hstate),'--uninstall','--apply'],
                      text=True,capture_output=True,timeout=30);assert p.returncode==0,p.stderr
     assert json.loads(settings.read_text())==before
@@ -143,4 +143,13 @@ with tempfile.TemporaryDirectory(prefix='global fixture ',dir=workspace) as fold
     statusline_run('--apply')
     statusline_run('--uninstall','--apply')
     assert 'statusLine' not in json.loads(settings.read_text())
-print('PASS: global config schemas, hooks and status-line opt-in; preview; quoting; backups; repeat apply; preserve existing/edited status lines; owned uninstall')
+# The Codex desktop app (~/.codex) is its own host only when the CLI's CODEX_HOME is elsewhere.
+import importlib.util
+spec=importlib.util.spec_from_file_location('installer',script);installer=importlib.util.module_from_spec(spec);spec.loader.exec_module(installer)
+with tempfile.TemporaryDirectory(dir=workspace) as folder:
+    h=pathlib.Path(folder);(h/'.codex').mkdir();(h/'cli').mkdir()
+    os.environ['CODEX_HOME']=str(h/'cli');assert installer.codex_app_home(h,False)==h/'.codex'
+    assert 'codex-app' in installer.locations(h,False,'v2')
+    os.environ['CODEX_HOME']=str(h/'.codex');assert installer.codex_app_home(h,False) is None
+    assert installer.codex_app_home(h,True) is None, 'fixture homes never add the app host'
+print('PASS: global config schemas, hooks and status-line opt-in; preview; quoting; backups; repeat apply; preserve existing/edited status lines; owned uninstall; Codex app home as its own host')

@@ -94,7 +94,9 @@ public actor MemoryStore {
         await backend.close()
         throw error
       }
-      return MemoryStore(binding: binding, root: root, config: config, backend: backend)
+      // Resolved again now that it exists: a new directory under a symlink (/tmp, /var) would
+      // otherwise keep its unresolved path and fail validate() for this store's lifetime.
+      return MemoryStore(binding: binding, root: canonical(root.path), config: config, backend: backend)
     }
     // Same precedence as open(): the environment wins, so init and later reads use one database.
     let address =
@@ -123,7 +125,7 @@ public actor MemoryStore {
         await backend.close()
         throw error
       }
-      return MemoryStore(binding: binding, root: root, config: config, backend: backend)
+      return MemoryStore(binding: binding, root: canonical(root.path), config: config, backend: backend)
     } catch { throw safeError(error) }
   }
 

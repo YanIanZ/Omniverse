@@ -18,7 +18,7 @@ def ws_open(path, origin, cookie=None):
     lines = [f'GET {path} HTTP/1.1', f'Host: 127.0.0.1:{PORT}', 'Upgrade: websocket',
              'Connection: Upgrade', f'Sec-WebSocket-Key: {key}', 'Sec-WebSocket-Version: 13']
     if origin: lines.append(f'Origin: {origin}')
-    if cookie: lines.append(f'Cookie: omnimemo_session={cookie}')
+    if cookie: lines.append(f'Cookie: omnimemo_session_{PORT}={cookie}')
     s.sendall(('\r\n'.join(lines) + '\r\n\r\n').encode())
     head = b''
     while b'\r\n\r\n' not in head:
@@ -56,7 +56,7 @@ with tempfile.TemporaryDirectory(prefix='office space ', dir=workspace) as folde
     run('init', '--mongo-uri', mongo)
     # Bare `om` is status only and never starts a server.
     status = json.loads(run().stdout)
-    assert status['office'] == 'not running' and not (data / 'server.json').exists()
+    assert status['office'].startswith('not running') and not list((data / 'servers').glob('*.json'))
 
     # Claude hook flow (stdin JSON as Claude Code sends it); fail-open on garbage.
     def hook(event, session='sess-1', **kw):
@@ -74,6 +74,21 @@ with tempfile.TemporaryDirectory(prefix='office space ', dir=workspace) as folde
     assert hook('UserPromptSubmit', prompt='again') == '', 'unchanged capsule repeated'
     agents = json.loads(run('agents').stdout)
     assert [(a['agent'], a['status'], a['source']) for a in agents] == [('claude', 'working', 'claude_hook')]
+    # A subagent is its own session, linked to the one that spawned it; its end is no session handoff.
+    # Its task label is kept only where titles are opted in.
+    run('autosave', 'enable', '--titles', '--no-checkpoints', '--no-transitions', '--no-prompts')
+    hook('SubagentStart', session='agent-1', spawned_by='sess-1', agent_type='Explore agent', title='Find the parser')
+    run('autosave', 'disable')
+    sub = [a for a in json.loads(run('agents').stdout) if a['session_id'] == 'agent-1']
+    assert sub and sub[0]['spawned_by'] == 'sess-1' and sub[0]['agent_type'] == 'Explore-agent', sub
+    assert sub[0]['title'] == 'Find the parser', sub
+    # A subagent on another model: its window is unknown, so tokens only and no percent.
+    hook('context.usage', session='agent-1', context_window={'used_tokens': 45000})
+    sub = [a for a in json.loads(run('agents').stdout) if a['session_id'] == 'agent-1'][0]
+    assert sub['context_used_tokens'] == 45000 and 'context_used_percent' not in sub, sub
+    hook('SubagentStop', session='agent-1', spawned_by='sess-1')
+    assert [a['status'] for a in json.loads(run('agents').stdout) if a['session_id'] == 'agent-1'] == ['offline']
+    hook('SubagentStart', session='agent-2', spawned_by='sess-1')  # interrupted: never stops
 
     # Real Redis (temporary, isolated port) to prove the optional live signal works.
     redis = subprocess.Popen(['redis-server', '--port', str(REDIS_PORT), '--bind', '127.0.0.1', '--save', '',
@@ -101,9 +116,11 @@ with tempfile.TemporaryDirectory(prefix='office space ', dir=workspace) as folde
         # Sign in like the browser: /auth mints a session cookie that is not the server token.
         class Keep(urllib.request.HTTPRedirectHandler):
             def redirect_request(self, *a, **k): return None
-        try: urllib.request.build_opener(Keep).open(f'http://127.0.0.1:{PORT}/auth?token={token}', timeout=5)
+        mint = urllib.request.Request(f'http://127.0.0.1:{PORT}/api/v1/login-code', method='POST', headers={'Authorization': 'Bearer ' + token})
+        code = json.loads(urllib.request.urlopen(mint, timeout=5).read())['code']
+        try: urllib.request.build_opener(Keep).open(f'http://127.0.0.1:{PORT}/auth?code={code}', timeout=5)
         except urllib.error.HTTPError as e: signin = e.headers.get('Set-Cookie', '')
-        session = signin.split('omnimemo_session=', 1)[1].split(';', 1)[0]
+        session = signin.split(f'omnimemo_session_{PORT}=', 1)[1].split(';', 1)[0]
         assert session and session != token, 'the browser cookie must not carry the server token'
 
         # WebSocket guards: bad origin, missing auth, the raw token as cookie, out-of-scope project.
@@ -130,16 +147,47 @@ with tempfile.TemporaryDirectory(prefix='office space ', dir=workspace) as folde
         hook('SessionEnd')
         assert ws_recv(s)['data']['status'] == 'offline'
         s.close()
+        assert [a['status'] for a in json.loads(run('agents').stdout) if a['session_id'] == 'agent-2'] == ['offline']
     finally:
         redis.terminate(); redis.wait(timeout=10)
 
     # Redis gone: durable writes and server still work (degraded to MongoDB polling).
     run('tasks', 'add', 'Works without Redis')
     assert len(json.loads(run('tasks').stdout)) == 2
-    stop = json.loads(run('stop').stdout)
-    assert stop['server'] == 'stopped' and not (data / 'server.json').exists()
+
+    # The reported Redis state follows the real connection, and a restarted Redis is resubscribed.
+    bearer = (data / 'server-token').read_text()
+    def redis_state():
+        req = urllib.request.Request(f'http://127.0.0.1:{PORT}/api/v1/health', headers={'Authorization': 'Bearer ' + bearer})
+        return json.loads(urllib.request.urlopen(req, timeout=5).read())['redis']
+    def wait_for(state, seconds):
+        end = time.time() + seconds
+        while time.time() < end and redis_state() != state: time.sleep(0.5)
+        return redis_state()
+    assert wait_for('unavailable', 5) == 'unavailable', 'a dropped Redis must not be reported as connected'
+    redis = subprocess.Popen(['redis-server', '--port', str(REDIS_PORT), '--bind', '127.0.0.1', '--save', '',
+                              '--appendonly', 'no'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        assert wait_for('connected', 20) == 'connected', 'a restarted Redis must be resubscribed'
+    finally:
+        redis.terminate(); redis.wait(timeout=10)
+    # A second project gets its own server on the next free port; each serves only its own project.
+    other = root / 'other project'; other.mkdir(); subprocess.run(['git', 'init', '-q', str(other)], check=True)
+    second = json.loads(subprocess.run([om, '--data-dir', str(data), '--project', str(other), 'office', '--no-open',
+                                        '--port', str(PORT)], capture_output=True, text=True, timeout=60, env=env,
+                                       check=True).stdout)
+    first = json.loads(run('office', '--no-open', '--port', str(PORT)).stdout)
+    assert first['reused'] == 'true' and second['reused'] == 'false' and second['url'] != first['url'], (first, second)
+    def health_of(url):
+        req = urllib.request.Request(url + 'api/v1/health', headers={'Authorization': 'Bearer ' + bearer})
+        return json.loads(urllib.request.urlopen(req, timeout=5).read())
+    assert health_of(first['url'])['project_name'] == 'project space'
+    assert health_of(second['url'])['project_name'] == 'other project'
+    stop = json.loads(run('stop', '--all').stdout)
+    assert stop['server'] == 'stopped' and len(stop['pid'].split(',')) == 2, stop
+    assert not list((data / 'servers').glob('*.json'))
     assert json.loads(run('stop').stdout)['server'] == 'not running'
 
-print(f'PASS: Claude hook wake/first-prompt once/end; office reuse; React served by Vapor; '
+print(f'PASS: Claude hook wake/first-prompt once/end; subagent session; office reuse; React served by Vapor; '
       f'WS origin/auth/scope guards; live task event ({latency:.2f}s with Redis); CAS conflict; '
-      f'Redis outage keeps MongoDB writes; om stop')
+      f'Redis outage keeps MongoDB writes; Redis state honest and resubscribed; one server per project; om stop --all')

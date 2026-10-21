@@ -10,12 +10,65 @@ struct Options: ParsableArguments {
   var project: String { explicitProject ?? FileManager.default.currentDirectoryPath }
   @Option(name: .long, help: "Provenance label; not an authentication identity.") var agent:
     String = "cli"
+  @Flag(name: .long, help: "Print JSON even in a terminal (piped output is always JSON).") var json = false
   func open() async throws -> MemoryStore {
     try await MemoryStore.open(dataDir: dataDir, project: project)
   }
 }
+/// JSON for agents, plugins and scripts (anything that pipes us); a readable layout only when a
+/// person runs the command in a terminal and did not ask for --json.
 func output<T: Encodable>(_ value: T) throws {
-  print(String(decoding: try encodeJSON(value, pretty: true), as: UTF8.self))
+  let data = try encodeJSON(value, pretty: true)
+  guard isatty(STDOUT_FILENO) == 1, !CommandLine.arguments.contains("--json"),
+    let object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+  else { return print(String(decoding: data, as: UTF8.self)) }
+  print(Readable.render(object))
+}
+
+enum Readable {
+  /// Columns shown for lists, in this order, when the rows have them.
+  static let columns = [
+    "id", "agent", "client", "kind", "status", "priority", "owner", "model", "title", "action",
+    "requested_by", "last_seen", "created_at", "session_id",
+  ]
+
+  static func render(_ object: Any) -> String {
+    if let rows = object as? [[String: Any]] { return table(rows) }
+    if let list = object as? [Any] { return list.isEmpty ? "(none)" : list.map(cell).joined(separator: "\n") }
+    if let fields = object as? [String: Any] {
+      let width = fields.keys.map(\.count).max() ?? 0
+      return fields.keys.sorted().map { key in
+        key.padding(toLength: width, withPad: " ", startingAt: 0) + "  " + cell(fields[key]!)
+      }.joined(separator: "\n")
+    }
+    return cell(object)
+  }
+
+  static func table(_ rows: [[String: Any]]) -> String {
+    guard !rows.isEmpty else { return "(none)" }
+    let keys = columns.filter { key in rows.contains { $0[key] != nil && !($0[key] is [Any]) && !($0[key] is [String: Any]) } }
+      .prefix(6)
+    let cells = rows.map { row in keys.map { row[$0].map { String(cell($0).prefix(40)) } ?? "" } }
+    let widths = keys.enumerated().map { i, key in max(key.count, cells.map { $0[i].count }.max() ?? 0) }
+    let line = { (values: [String]) in
+      zip(values, widths).map { $0.padding(toLength: $1, withPad: " ", startingAt: 0) }.joined(separator: "  ")
+        .trimmingCharacters(in: .whitespaces)
+    }
+    return ([line(keys.map { $0.uppercased() })] + cells.map(line)).joined(separator: "\n")
+      + "\n(\(rows.count) \(rows.count == 1 ? "row" : "rows"); --json for every field)"
+  }
+
+  static func cell(_ value: Any) -> String {
+    switch value {
+    case let text as String: return text
+    case let number as NSNumber:
+      return CFGetTypeID(number) == CFBooleanGetTypeID() ? (number.boolValue ? "yes" : "no") : number.stringValue
+    case is NSNull: return "-"
+    default:
+      let data = (try? JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed])) ?? Data()
+      return String(decoding: data, as: UTF8.self)
+    }
+  }
 }
 @main
 struct OmniMemo: AsyncParsableCommand {
@@ -25,7 +78,7 @@ struct OmniMemo: AsyncParsableCommand {
     subcommands: [
       Init.self, Status.self, Doctor.self, Project.self, Memory.self, Context.self, Checkpoint.self,
       Cache.self, MCP.self, Rea.self, Install.self, Uninstall.self, Wake.self, Recall.self,
-      Agents.self, Tasks.self, Runtime.self, Statusline.self, Rollover.self, Codex.self, Approvals.self, Redis.self, Autosave.self, Serve.self, Office.self, Stop.self, Hook.self,
+      Agents.self, Tasks.self, Runtime.self, Statusline.self, Rollover.self, Codex.self, OpenCode.self, Approvals.self, Redis.self, Autosave.self, Serve.self, Office.self, Stop.self, Hook.self,
     ])
   @OptionGroup var options: Options
   /// Bare `om`: status plus the next useful command; never starts a server.
@@ -33,11 +86,14 @@ struct OmniMemo: AsyncParsableCommand {
     let store = try await options.open()
     do {
       let s = try await store.status()
-      let running = ServerState.read(dataDir: options.dataDir).map { "http://127.0.0.1:\($0.port)/" }
+      let running = ServerState.read(dataDir: options.dataDir, project: s.projectID).map {
+        "running on port \($0.port); open it with: om office"
+      }
       try output([
-        "project_id": s.projectID, "records": String(s.records), "storage": "available",
-        "office": running ?? "not running",
-        "next": "om context \"<task>\" | om recall <query> | om office",
+        "project": URL(fileURLWithPath: options.project).lastPathComponent, "project_id": s.projectID,
+        "records": String(s.records), "storage": "available",
+        "office": running ?? "not running; start it with: om office",
+        "next": "om context \"what you are about to do\" · om recall <words> · om office (Mission Control)",
       ])
       await store.close()
     } catch {
@@ -86,6 +142,7 @@ struct OmniMemo: AsyncParsableCommand {
     }
   }
   struct Status: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(abstract: "Show the project, its record count and storage state.")
     @OptionGroup var options: Options
     func run() async throws {
       let store = try await options.open()
@@ -99,13 +156,14 @@ struct OmniMemo: AsyncParsableCommand {
     }
   }
   struct Doctor: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(abstract: "Check storage, MCP and host adapters; prints no secrets.")
     @OptionGroup var options: Options
     func run() async throws {
       let store = try await options.open()
       do {
         let s = try await store.status()
         try output([
-          "backend": "MongoDB", "project_id": s.projectID, "storage": "available", "schema": "1",
+          "backend": s.backend, "project_id": s.projectID, "storage": "available", "schema": "1",
           "mcp": "Swift SDK 0.12.x; stdio", "adapters": "codex,claude",
           "token_counter": "conservative UTF-8 bound; not exact tokenizer",
         ])
@@ -117,7 +175,8 @@ struct OmniMemo: AsyncParsableCommand {
     }
   }
   struct Project: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(subcommands: [Attach.self])
+    static let configuration = CommandConfiguration(
+      abstract: "Show how OmniMemo identifies a project folder.", subcommands: [Attach.self])
     struct Attach: AsyncParsableCommand {
       @OptionGroup var options: Options
       @Argument var path: String?
@@ -130,22 +189,24 @@ struct OmniMemo: AsyncParsableCommand {
     }
   }
   struct Memory: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(subcommands: [
+    static let configuration = CommandConfiguration(
+      abstract: "Save, search, show, list, delete or export memories.", subcommands: [
       Save.self, Search.self, Show.self, List.self, Delete.self, Export.self,
     ])
     struct Save: AsyncParsableCommand {
       @OptionGroup var options: Options
-      @Option var kind: String = "fact"
-      @Option var title: String
+      @Option(help: "fact, decision, task, issue, preference, insight or checkpoint.") var kind: String = "fact"
+      @Option(help: "Short title.") var title: String
       @Option(
         help: "Memory text; for sensitive environments use --stdin instead of shell arguments.")
       var content: String?
       @Flag(help: "Read memory text from stdin.") var stdin = false
-      @Option(name: .customLong("source")) var sources: [String] = []
-      @Option(name: .customLong("tag")) var tags: [String] = []
-      @Option var idempotencyKey: String?
-      @Option var subject: String?
-      @Option var predicate: String?
+      @Option(name: .customLong("source"), help: "Project file that backs this memory; it is marked stale when the file changes.")
+      var sources: [String] = []
+      @Option(name: .customLong("tag"), help: "Label for finding it later (repeat for each).") var tags: [String] = []
+      @Option(help: "Reusing the same key updates the same memory instead of adding another.") var idempotencyKey: String?
+      @Option(help: "What the fact is about, e.g. AuthService (optional).") var subject: String?
+      @Option(help: "The relation, e.g. uses or replaces (optional).") var predicate: String?
       func run() async throws {
         guard stdin != (content != nil) else {
           throw ValidationError("provide exactly one of --content or --stdin")
@@ -260,9 +321,10 @@ struct OmniMemo: AsyncParsableCommand {
     }
   }
   struct Context: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(abstract: "Print a short memory brief for what you are about to do.")
     @OptionGroup var options: Options
-    @Argument var task: String?
-    @Option var maxTokens: Int = 500
+    @Argument(help: "What you are about to work on, in plain words (not a task id).") var task: String?
+    @Option(help: "Upper bound for the brief, in tokens.") var maxTokens: Int = 500
     @Flag(help: "Session capsule; printed only when changed since this session last received it.")
     var firstPrompt = false
     @Option(help: "Session for --first-prompt; --agent names the provider.") var session: String?
@@ -295,14 +357,17 @@ struct OmniMemo: AsyncParsableCommand {
     }
   }
   struct Checkpoint: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(abstract: "Save a handoff for the next session: done, next, blocked, tests, changed files.")
     @OptionGroup var options: Options
-    @Option var title: String = "Session handoff"
-    @Option var done: [String] = []
-    @Option var next: [String] = []
-    @Option var blocked: [String] = []
-    @Option var tests: [String] = []
-    @Option(name: .customLong("changed-file")) var changedFiles: [String] = []
-    @Option var idempotencyKey: String?
+    @Option(help: "Short title for this handoff.") var title: String = "Session handoff"
+    @Option(help: "Something finished (repeat for each).") var done: [String] = []
+    @Option(help: "What the next session should do (repeat for each).") var next: [String] = []
+    @Option(help: "What is stuck and why (repeat for each).") var blocked: [String] = []
+    @Option(help: "A test command and its real result (repeat for each).") var tests: [String] = []
+    @Option(name: .customLong("changed-file"), help: "A file this work changed (repeat for each).")
+    var changedFiles: [String] = []
+    @Option(help: "Reusing the same key updates the same checkpoint instead of adding another.")
+    var idempotencyKey: String?
     func run() async throws {
       let store = try await options.open()
       do {
@@ -319,7 +384,8 @@ struct OmniMemo: AsyncParsableCommand {
     }
   }
   struct Cache: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(subcommands: [Info.self, Clear.self])
+    static let configuration = CommandConfiguration(
+      abstract: "Inspect or clear the disposable local cache (memory itself is kept).", subcommands: [Info.self, Clear.self])
     struct Info: AsyncParsableCommand {
       @OptionGroup var options: Options
       func run() async throws {
@@ -350,7 +416,8 @@ struct OmniMemo: AsyncParsableCommand {
     }
   }
   struct MCP: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(commandName: "mcp", subcommands: [Serve.self])
+    static let configuration = CommandConfiguration(
+      commandName: "mcp", abstract: "Run the MCP server that agent hosts connect to.", subcommands: [Serve.self])
     struct Serve: AsyncParsableCommand {
       @OptionGroup var options: Options
       @Flag(help: "Serve MCP using standard input/output.") var stdio = false
@@ -366,6 +433,7 @@ struct OmniMemo: AsyncParsableCommand {
     }
   }
   struct Install: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(abstract: "Preview (or --apply) project MCP and skill config for agent hosts.")
     @OptionGroup var options: Options
     @Option(help: "Comma-separated host adapters.") var agents: String = "codex,claude"
     @Option(help: "Root receiving .codex/config.toml, .mcp.json and skills; defaults to project.")
@@ -386,6 +454,7 @@ struct OmniMemo: AsyncParsableCommand {
     }
   }
   struct Uninstall: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(abstract: "Remove the project host config OmniMemo manages; memory is kept.")
     @OptionGroup var options: Options
     @Option var agents: String = "codex,claude"
     @Option var configRoot: String?

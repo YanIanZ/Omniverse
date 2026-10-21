@@ -1,8 +1,10 @@
-// Omniverse bridge mod: OmniMemo agent cards, reported context usage and opt-in rollover.
+// Omniverse bridge mod: OmniMemo presence, agent cards, reported context usage and opt-in rollover.
 // Everything goes through the local `om` CLI (no server, no token). Telemetry is the host's
-// own numbers; prompts and tool arguments are never sent. See docs/RUNTIME_EVENTS.md.
+// own numbers; tool arguments are never sent. See docs/RUNTIME_EVENTS.md.
+// Lifecycle (session, prompt, tool, turn) comes from the plugin's own engine events, so no
+// Claude Code settings hooks are needed for OmniMemo.
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, TurnUsage } from 'claude-code'
 
 import type { AgentCard, AgentRecord } from '../types'
 
@@ -19,11 +21,13 @@ export function present(list: AgentCard[]) {
   return list.filter(a => a.status !== 'offline' && a.status !== 'stale')
 }
 
-/** Other terminal agents for the band: present, not this session, busiest first. */
+/** Other agents for the band: present, not this session, busiest first. Claude subagents are
+ * left out (each Claude lists its own); a Codex or OpenCode run delegated from here stays in,
+ * since Claude's list shows only the subagent waiting on it, not the run's progress. */
 export function others(list: AgentCard[], session: string) {
   const order = ['blocked', 'working', 'waiting']
   return present(list)
-    .filter(a => a.session_id !== session)
+    .filter(a => a.session_id !== session && !(a.spawned_by && (a.client ?? a.display_slug.split('-')[0]) === 'claude'))
     .sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status))
 }
 
@@ -70,7 +74,7 @@ const tone = (status: string) => (status === 'working' ? 'success' : status === 
 
 /** What is known about an agent, in order; unknown values are left out rather than printed as "unknown". */
 export function facts(a: AgentCard, now: number) {
-  const out = [a.status]
+  const out = [a.agent_type === 'delegated' ? `delegated · ${a.status}` : a.status]
   if (a.task) out.push(a.task.title)
   else if (a.tool_category) out.push(a.tool_category.replace('_', ' '))
   const p = a.progress
@@ -94,7 +98,19 @@ type Pending = { parent: string; child?: string; digest: string; capsule: string
 const pendingLimitMs = 15 * 60_000
 
 // Options are read in register on each load; the rest starts over on a reload.
-const config = { om: 'om', mode: 'suggest', rolloverAt: 80, prepareAt: 70 }
+const config = { om: 'om', mode: 'suggest', rolloverAt: 80, prepareAt: 70, windows: new Map<string, number>() }
+
+/** `claude-sonnet-5-5=1000000, claude-haiku-5-5=200000`: windows the person states for models
+ * other than the session's, which the host does not report. Bad entries are ignored. */
+export function parseWindows(text: string) {
+  const windows = new Map<string, number>()
+  for (const entry of text.split(',')) {
+    const [model, size] = entry.split('=').map(s => s.trim())
+    const tokens = Number(size)
+    if (model && Number.isInteger(tokens) && tokens > 0) windows.set(model, tokens)
+  }
+  return windows
+}
 let pending: Pending | undefined
 let lastLevel = 'unknown'
 const rollovers: number[] = []
@@ -116,8 +132,31 @@ export function acknowledged(answer: string, digest: string) {
   return first === 'ACK ' + digest
 }
 
-function run($: EngineInterface, args: string[], stdin?: string) {
-  return $.process.run([config.om, ...args], { stdin, timeoutMs: 30_000 })
+/** The child's first reply text after the capsule prompt. A turn's `answer` is its final text,
+ * which follows any tool work, so the ACK that opens the turn is read from the transcript. */
+export function firstReply(messages: readonly { role: string; text: string }[], digest: string) {
+  const asked = messages.findLastIndex(m => m.role === 'user' && m.text.includes('ACK ' + digest))
+  if (asked < 0) return undefined
+  return messages.slice(asked + 1).find(m => m.role === 'assistant' && m.text.trim())?.text
+}
+
+function run($: EngineInterface, args: string[], stdin?: string, timeoutMs = 30_000) {
+  return $.process.run([config.om, ...args], { stdin, timeoutMs })
+}
+
+/**
+ * One lifecycle signal as `om hook claude` reads it, the payload a settings hook would have sent:
+ * the event name, session id, working directory and model, plus the tool name or prompt where
+ * that event carries one. Never tool arguments. Failures are ignored: presence never blocks Claude.
+ */
+async function lifecycle($: EngineInterface, event: string, extra: Record<string, unknown> = {}, timeoutMs = 5_000) {
+  try {
+    const payload = { hook_event_name: event, session_id: await $.session.id(), cwd: await $.session.cwd(), model: await $.session.model(), ...extra }
+    const r = await run($, ['hook', 'claude'], JSON.stringify(payload), timeoutMs)
+    return r.exitCode === 0 ? r.stdout.trim() : ''
+  } catch {
+    return ''
+  }
 }
 
 async function refresh($: EngineInterface, context?: number) {
@@ -134,11 +173,11 @@ async function refresh($: EngineInterface, context?: number) {
     const quiet = all.filter(a => a.status === 'stale').length
     const hidden = quiet ? ` · ${quiet} with no recent signal hidden` : ''
     await update($, report, () => (live.length ? `${live.length} agent(s) present${hidden}` : `No agents present${hidden}`))
-    $.ui.status(`OmniMemo · ${live.length} agents · ${count('working')} working · ${count('blocked')} blocked${ctx}`)
+    $.ui.status(`OmniMemo · ${live.length} ${live.length === 1 ? 'agent' : 'agents'} · ${count('working')} working · ${count('blocked')} blocked${ctx}`)
   } catch {
     await update($, agents, () => [])
     await update($, report, () => 'Bridge unavailable')
-    $.ui.status('OmniMemo unavailable' + ctx)
+    $.ui.status('OmniMemo unavailable · run om doctor' + ctx)
   }
 }
 
@@ -189,7 +228,9 @@ async function afterTurn($: EngineInterface, answer: string) {
   await expirePending($)
   const session = await $.session.id()
   if (pending?.child && pending.child === session) {
-    const ok = acknowledged(answer, pending.digest)
+    const { digest } = pending
+    const reply = await $.session.messages().then(m => firstReply(m, digest), () => undefined)
+    const ok = acknowledged(reply ?? answer, pending.digest)
     await run($, ['rollover', 'report', '--session', pending.parent, '--child', session, '--digest', pending.digest, '--outcome', ok ? 'completed' : 'failed', '--reason', ok ? 'acknowledged' : 'first line was not the ACK'])
     $.ui.toast(
       ok
@@ -235,19 +276,87 @@ async function openAgent($: EngineInterface, card: AgentCard) {
   await $.ui.open({ id: SESSION_PANE, title: agentLabel(card), focus: true })
 }
 
+/** Subagents seen in this session: who spawned each, and which have ended. */
+const parents = new Map<string, string>()
+const ended = new Set<string>()
+
+/** A subagent's event names it and its parent, so it is linked whichever event arrives first. */
+async function subagent($: EngineInterface, agentId: string) {
+  return { session_id: agentId, model: undefined, spawned_by: parents.get(agentId) ?? (await $.session.id()) }
+}
+
+/** Other CLIs as Claude subagent types: each hands one task to its CLI through `om` and reports
+ * back. Read-only by default; offered only for a request that names that CLI. */
+const WORKERS = [
+  { name: 'codex', cli: 'Codex (OpenAI)', run: 'codex run', write: '--sandbox workspace-write' },
+  { name: 'opencode', cli: 'OpenCode', run: 'opencode run', write: '--write' },
+]
+
+function workerPrompt(w: (typeof WORKERS)[number]) {
+  return `You hand one task to ${w.cli}, another coding agent CLI, through OmniMemo, then report back.
+1. Write the task as a self-contained brief to a new file in $TMPDIR (use Write): the goal, the files or area in scope, what done means, and constraints. Include only what the task needs: never secrets, credentials, or this conversation.
+2. Run it with Bash, Bash timeout 600000: \`${config.om} --agent claude ${w.run} --prompt-file <file> --timeout 570 --spawned-by "$CLAUDE_CODE_SESSION_ID"\`
+   A model named for the task goes in \`--model <id>\`, not in the brief. It is read-only by default. Add \`${w.write}\` only when the task you were given explicitly asks for file edits. A task too big for ten minutes: say so and suggest how to split it.
+3. Reply with what it reported: its answer, the files it changed (\`git status --short\`), and any failure exactly as printed. Do not redo its work yourself. Never commit, push, or change git settings.
+If the command is missing or fails to start, say so and stop.`
+}
+
+async function registerWorkers($: EngineInterface) {
+  for (const w of WORKERS) {
+    await $.agent.register({
+      name: w.name,
+      description: `Hands one self-contained task to the ${w.cli} CLI through OmniMemo and returns its answer. Use only when the user asks for ${w.name} (for example "run it with ${w.name}" or "${w.name} subagent"). Read-only unless the user asked for edits.`,
+      prompt: workerPrompt(w),
+      tools: ['Bash', 'Write', 'Read'],
+      model: 'haiku',
+    }).catch(() => undefined) // a host without agent types keeps the rest of the bridge
+  }
+}
+
+/** Last context sample (tokens) sent per subagent, so a step that barely moved it spawns no `om`. */
+const sampled = new Map<string, number>()
+
+/** A subagent's context: its last request's tokens. Over the session's window when it runs the
+ * session's model; on any other model the window is unknown, so tokens only, never a guessed percent. */
+async function subagentContext($: EngineInterface, agentId: string, usage: TurnUsage) {
+  try {
+    const { context } = await $.session.usage()
+    const base = (m: string) => m.replace(/\[.*\]$/, '')
+    const window =
+      (context.window && base(usage.model) === base(await $.session.model()) ? context.window : undefined)
+      ?? config.windows.get(base(usage.model))
+    const tokens = usage.input_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens + usage.output_tokens
+    if (Math.abs((sampled.get(agentId) ?? -Infinity) - tokens) < (window ? window / 100 : 5_000)) return
+    sampled.set(agentId, tokens)
+    const sample = window
+      ? { used_percentage: Math.min(100, Math.round((tokens / window) * 100)), context_window_size: window }
+      : { used_tokens: tokens }
+    await run($, ['hook', 'claude'], JSON.stringify({
+      hook_event_name: 'context.usage', session_id: agentId, cwd: await $.session.cwd(), model: usage.model,
+      context_window: sample,
+    }))
+  } catch {
+    // Context is best effort: a failed sample leaves the card's context unknown.
+  }
+}
+
 export const register: Register = (on, options) => {
   config.om = String(options.omPath || 'om')
   config.mode = String(options.rollover || 'suggest')
   config.rolloverAt = Number(options.rolloverAt ?? 80)
   config.prepareAt = Math.min(Number(options.prepareAt ?? 70), config.rolloverAt)
+  config.windows = parseWindows(String(options.contextWindows ?? ''))
 
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'om-agents', description: 'Show live OmniMemo agent cards' })
-    await $.command.register({ name: 'om-agent', description: 'Open another agent session from OmniMemo: /om-agent codex' })
-    await $.command.register({ name: 'om-rollover', description: 'Hand off to a fresh context from a verified OmniMemo capsule' })
+    void lifecycle($, 'SessionStart')
+    await $.command.register({ name: 'om-agents', description: 'Show the other agents OmniMemo sees (Codex, OpenCode, other Claude sessions)' })
+    await $.command.register({ name: 'om-agent', description: "Show another agent's OmniMemo card and saved records (not its chat): /om-agent codex" })
+    await $.command.register({ name: 'om-rollover', description: 'Save a checkpoint and continue this work in a fresh, empty conversation' })
     $.clock.after(300, () => void refresh($))
     $.clock.every(15_000, () => void refresh($))
-    return next(e)
+    const result = await next(e)
+    void registerWorkers($) // agent types are accepted once the session has bound
+    return result
   })
 
   on('command.run', { command: 'om-agents' }, async $ => {
@@ -259,8 +368,13 @@ export const register: Register = (on, options) => {
   on('command.run', { command: 'om-agent' }, async ($, e) => {
     const want = e.args.trim()
     const list = others(await read($, agents), await read($, self))
-    const card = list.find(a => a.session_id === want || a.client === want || agentLabel(a).startsWith(want)) ?? list[0]
-    if (!card) return { text: 'No other agent is present in OmniMemo right now.' }
+    const card = want
+      ? list.find(a => a.session_id === want || a.client === want || agentLabel(a).startsWith(want))
+      : list[0]
+    if (!card) {
+      if (!list.length) return { text: 'No other agent is present in OmniMemo right now.' }
+      return { text: `No present agent matches "${want}". Present: ${list.map(agentLabel).join(', ')}.` }
+    }
     await openAgent($, card)
     return { text: `Opened ${agentLabel(card)} from OmniMemo.` }
   })
@@ -272,8 +386,61 @@ export const register: Register = (on, options) => {
     return { text: 'OmniMemo rollover starting: checkpoint, then a fresh session from the capsule.' }
   })
 
+  // The project capsule rides with the prompt as context the model reads and the person never sees;
+  // `om` returns it only when it changed since this session last received it.
+  on('prompt.submit', async ($, e, next) => {
+    if (e.command || e.isMeta) return next(e)
+    const capsule = await lifecycle($, 'UserPromptSubmit', { prompt: e.text })
+    return next(capsule ? { ...e, context: [...(e.context ?? []), capsule] } : e)
+  }).catch(($, e, next) => next(e)) // fail open: the prompt always goes through
+
+  // A subagent is its own OmniMemo session (its loop's agentId), linked to the loop that spawned it.
+  // Its spawn can settle after its tool calls, or after it ended: then it only fills in the type.
+  on('agent.spawn', async ($, e, next) => {
+    const result = await next(e)
+    if (result.agentId) {
+      const parent = e.parentAgentId ?? (await $.session.id())
+      parents.set(result.agentId, parent)
+      void lifecycle($, ended.has(result.agentId) ? 'SubagentStop' : 'SubagentStart', {
+        session_id: result.agentId, model: result.model, spawned_by: parent, agent_type: e.subagentType,
+        // The call's few-word task label; `om` keeps it only where session titles are opted in.
+        title: e.description,
+      })
+    }
+    return result
+  }).catch(($, e, next) => next(e)) // fail open: never refuses a spawn
+
+  // Tool activity by category: `om` maps the tool name and reads nothing else of the call.
+  // A subagent's call counts for the subagent, not for the main session.
+  on('tool.call', async ($, e, next) => {
+    const who = e.agentId ? await subagent($, e.agentId) : {}
+    void lifecycle($, 'PreToolUse', { tool_name: e.tool, ...who })
+    const result = await next(e)
+    const failed = result.deny !== undefined || result.isError === true
+    void lifecycle($, failed ? 'PostToolUseFailure' : 'PostToolUse', { tool_name: e.tool, ...who })
+    return result
+  }).catch(($, e, next) => next(e)) // fail open: never refuses or repeats a tool call
+
+  // A subagent's requests carry its context use; the main session's comes from session.usage.
+  on('turn.step', async function* ($, e, next) {
+    const result = yield* next(e)
+    if (e.agentId && result.usage) void subagentContext($, e.agentId, result.usage)
+    return result
+  })
+
+  on('session.end', async ($, e, next) => {
+    // The engine allows about 1.5 s for every session.end hook together.
+    await lifecycle($, 'SessionEnd', { session_id: e.sessionId, reason: e.reason }, 1_200)
+    return next(e)
+  })
+
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
+    if (e.agentId === undefined) void lifecycle($, 'Stop')
+    else {
+      ended.add(e.agentId)
+      void lifecycle($, 'SubagentStop', await subagent($, e.agentId))
+    }
     // After the turn, so /clear and prompts run with the session idle.
     if (e.agentId === undefined) $.clock.after(200, () => void afterTurn($, e.answer))
     return result

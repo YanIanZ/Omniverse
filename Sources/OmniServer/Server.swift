@@ -3,6 +3,10 @@ import Foundation
 import OmniMemoCore
 import Vapor
 
+#if canImport(LocalAuthentication)
+  import LocalAuthentication
+#endif
+
 public struct ServerConfig: Sendable {
   public var host: String
   public var port: Int
@@ -10,15 +14,18 @@ public struct ServerConfig: Sendable {
   public var distPath: String?
   /// Extra allowed browser origins (e.g. the Vite dev server); loopback only by policy.
   public var devOrigins: [String]
+  /// Asks the person at the Mac to confirm an approval; tests substitute their own answer.
+  public var confirmPresence: @Sendable (String) async -> Bool
   public init(
     host: String = "127.0.0.1", port: Int = 8787, token: String, distPath: String? = nil,
-    devOrigins: [String] = []
+    devOrigins: [String] = [], confirmPresence: @escaping @Sendable (String) async -> Bool = HumanPresence.confirm
   ) {
     self.host = host
     self.port = port
     self.token = token
     self.distPath = distPath
     self.devOrigins = devOrigins
+    self.confirmPresence = confirmPresence
   }
   var allowedHosts: Set<String> { ["127.0.0.1:\(port)", "localhost:\(port)"] }
   var allowedOrigins: Set<String> {
@@ -31,13 +38,39 @@ public struct ServerConfig: Sendable {
 final class BrowserSessions: @unchecked Sendable {
   private let lock = NSLock()
   private var values: [String] = []
+  private var codes: [String: Date] = [:]
+  /// How long a sign-in code from `om office` stays valid.
+  static let codeLifetime: TimeInterval = 60
+
+  private static func random() -> String {
+    [UInt8].random(count: 32).map { String(format: "%02x", $0) }.joined()
+  }
 
   func mint() -> String {
-    let value = [UInt8].random(count: 32).map { String(format: "%02x", $0) }.joined()
+    let value = Self.random()
     lock.lock()
     defer { lock.unlock() }
     values = Array((values + [value]).suffix(16))
     return value
+  }
+
+  /// A short-lived, single-use code for the sign-in URL, so the server token never reaches
+  /// browser history or the `open` command line.
+  func mintCode() -> String {
+    let code = Self.random()
+    lock.lock()
+    defer { lock.unlock() }
+    codes = codes.filter { $0.value > Date() }
+    codes[code] = Date().addingTimeInterval(Self.codeLifetime)
+    return code
+  }
+
+  func redeem(_ supplied: String) -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    guard let code = codes.keys.first(where: { OmniServer.matches(supplied, $0) }) else { return false }
+    let expires = codes.removeValue(forKey: code)!
+    return expires > Date()
   }
 
   func contains(_ supplied: String) -> Bool {
@@ -47,8 +80,26 @@ final class BrowserSessions: @unchecked Sendable {
   }
 }
 
+/// Same-user agents can read the server token and so reach the browser routes. An approval is
+/// therefore confirmed by the system owner check (Touch ID, Apple Watch or the login password),
+/// a dialog the operating system shows and an agent cannot answer. Unavailable means refused.
+public enum HumanPresence {
+  public static func confirm(_ reason: String) async -> Bool {
+    #if canImport(LocalAuthentication)
+      let context = LAContext()
+      var error: NSError?
+      guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else { return false }
+      return (try? await context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason)) ?? false
+    #else
+      return false
+    #endif
+  }
+}
+
 public enum OmniServer {
-  public static let cookie = "omnimemo_session"
+  /// Browsers share cookies across ports of a host, and each project's server has its own port and
+  /// sessions: the name carries the port so signing in to one project does not sign out another.
+  public static func cookie(_ port: Int) -> String { "omnimemo_session_\(port)" }
 
   /// Registers middleware and routes. Returns the hub so callers can stop polling on shutdown.
   @discardableResult
@@ -70,11 +121,13 @@ public enum OmniServer {
 
     let sessions = BrowserSessions()
     app.get("auth") { req async throws -> Response in
-      guard let token = req.query[String.self, at: "token"], matches(token, config.token) else {
-        throw Abort(.unauthorized)
+      // A used or expired link (back button, history, another browser) lands on the locked
+      // screen, which says how to get a fresh one, instead of a raw 401.
+      guard let code = req.query[String.self, at: "code"], sessions.redeem(code) else {
+        return req.redirect(to: "/")
       }
       let response = req.redirect(to: "/")
-      response.cookies[cookie] = HTTPCookies.Value(
+      response.cookies[cookie(config.port)] = HTTPCookies.Value(
         string: sessions.mint(), path: "/", isSecure: false, isHTTPOnly: true, sameSite: .strict)
       return response
     }
@@ -83,7 +136,8 @@ public enum OmniServer {
     api.get("health") { _ async throws -> Response in
       let status = try await store.status()
       return try json([
-        "status": "ok", "storage": "mongodb", "project_id": status.projectID,
+        "status": "ok", "storage": status.backend.lowercased(), "project_id": status.projectID,
+        "project_name": store.binding.root.lastPathComponent,
         "records": String(status.records), "revision": String(await hub.revision),
         "redis": await hub.redisState, "pid": String(getpid()),
       ])
@@ -119,6 +173,11 @@ public enum OmniServer {
       await hub.poll()
       return try json(task)
     }
+    // Bearer only (CLI): a browser session must not mint further sign-ins.
+    api.post("login-code") { req async throws -> Response in
+      guard req.headers.bearerAuthorization != nil else { throw Abort(.forbidden) }
+      return try json(["code": sessions.mintCode()])
+    }
     api.get("approvals") { _ async throws -> Response in try json(try await store.listApprovals()) }
     // Human decision: only a browser session (cookie + allowed Origin) may decide.
     // Bearer tokens are what CLIs and agents hold, so they are refused here.
@@ -128,8 +187,20 @@ public enum OmniServer {
       }
       struct Body: Content { var decision: String }
       let body = try req.content.decode(Body.self)
-      let record = try await store.decideApproval(
-        id: req.parameters.get("id") ?? "", decision: body.decision)
+      let id = req.parameters.get("id") ?? ""
+      // Denying is always safe; approving needs the person at this Mac.
+      if body.decision == "approved" {
+        guard let pending = try await store.listApprovals().first(where: { $0.id == id && $0.status == "pending" })
+        else { throw Abort(.conflict, reason: "this request was already decided") }
+        let action = String(pending.action.split(whereSeparator: \.isNewline).first ?? "").prefix(120)
+        guard await config.confirmPresence("approve \"\(action)\" requested by \(pending.requestedBy)") else {
+          throw Abort(.forbidden, reason: "approval was not confirmed at this Mac")
+        }
+      }
+      let record: ApprovalRecord
+      do { record = try await store.decideApproval(id: id, decision: body.decision) } catch MemoError.conflict {
+        throw Abort(.conflict, reason: "this request was already decided")
+      }
       await hub.poll()
       return try json(record)
     }
@@ -291,7 +362,7 @@ struct AuthMiddleware: AsyncMiddleware {
   var requireOrigin = false
   func respond(to req: Request, chainingTo next: AsyncResponder) async throws -> Response {
     let bearer = req.headers.bearerAuthorization?.token
-    let cookie = req.cookies[OmniServer.cookie]?.string
+    let cookie = req.cookies[OmniServer.cookie(config.port)]?.string
     if let bearer {
       guard OmniServer.matches(bearer, config.token) else { throw Abort(.unauthorized) }
     } else {

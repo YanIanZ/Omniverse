@@ -22,7 +22,7 @@ Usage: bash install.sh [options]
   --setup             Initialize memory and apply project Codex/Claude adapters
   --global            Register MCP + npx skills for detected user-level hosts
                       (Python 3.11+ and Node/npm required; preview with --dry-run)
-  --with-hooks        With --global, add Claude Code session/prompt hooks (opt-in)
+  --with-hooks        With --global, add lifecycle presence: Claude Code plugin, Codex/Gemini hooks (opt-in)
   --agents LIST       Project adapters: codex,claude (default: both)
   --backend NAME      Storage profile for --setup: mongodb (default) or sqlite (no server needed)
   --mongo-uri URI     Existing mongodb:// server; OMNIMEM_MONGO_URI overrides it (use it for secrets)
@@ -151,6 +151,12 @@ else
 fi
 "$LAUNCHER" --version
 COMMITTED=1
+# Claude Code runs its own copy of an installed plugin; refresh it so new sessions get this code.
+# Captured first: with pipefail, `grep -q` closing the pipe early would read as "not installed".
+if command -v claude >/dev/null && [[ "$(claude plugin list 2>/dev/null || true)" == *'omniverse-bridge@omnimemo'* ]]; then
+  claude plugin marketplace update omnimemo >/dev/null && claude plugin update omniverse-bridge@omnimemo \
+    || printf 'Claude Code plugin not refreshed; run: claude plugin update omniverse-bridge@omnimemo\n'
+fi
 if ((START_MONGO)); then
   OMNIMEM_MONGO_ROOT="${OMNIMEM_MONGO_ROOT:-$CACHE/mongodb}" OMNIMEM_MONGO_PORT=27018 "$ROOT/scripts/mongodb.sh" start
 fi

@@ -1,7 +1,8 @@
 #!/bin/sh
 # Dedicated local MongoDB; never uses Homebrew's normal dbPath.
 set -eu
-BASE="${OMNIMEM_MONGO_ROOT:-/Volumes/Ext/DevCache/OmniMemo/mongodb}"
+if [ -d /Volumes/Ext/DevCache ]; then ROOT_DEFAULT=/Volumes/Ext/DevCache/OmniMemo; else ROOT_DEFAULT="$HOME/Library/Caches/OmniMemo"; fi
+BASE="${OMNIMEM_MONGO_ROOT:-$ROOT_DEFAULT/mongodb}"
 PORT="${OMNIMEM_MONGO_PORT:-27018}"
 case "${1:-status}" in
   start)

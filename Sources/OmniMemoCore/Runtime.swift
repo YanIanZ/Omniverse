@@ -18,10 +18,13 @@ public struct AgentSession: Codable, Sendable {
     case taskID = "task_id"
     case contextUsedPercent = "context_used_percent"
     case contextWindowTokens = "context_window_tokens"
+    case contextUsedTokens = "context_used_tokens"
     case contextObservedAt = "context_observed_at"
     case parentSessionID = "parent_session_id"
     case childSessionID = "child_session_id"
     case rolloverState = "rollover_state"
+    case spawnedBy = "spawned_by"
+    case agentType = "agent_type"
     case revision
   }
   public var agent: String
@@ -47,11 +50,16 @@ public struct AgentSession: Codable, Sendable {
   /// Active context-window occupancy as the host reported it (never lifetime tokens).
   public var contextUsedPercent: Double? = nil
   public var contextWindowTokens: Int? = nil
+  /// Tokens in use when the host could not say the window (a subagent on another model).
+  public var contextUsedTokens: Int? = nil
   public var contextObservedAt: String? = nil
   /// Fresh-session lineage; `rolloverState` follows the v2.4 state machine on the parent.
   public var parentSessionID: String? = nil
   public var childSessionID: String? = nil
   public var rolloverState: String? = nil
+  /// A subagent's parent session (or parent subagent) and the type it was spawned as.
+  public var spawnedBy: String? = nil
+  public var agentType: String? = nil
   /// Write counter for compare-and-set saves; nil on sessions stored before it existed.
   public var revision: Int? = nil
 }
@@ -254,7 +262,7 @@ extension MemoryStore {
     let passive = format.string(from: Date().addingTimeInterval(-Self.presenceTimeout))
     let managed = format.string(from: Date().addingTimeInterval(-Self.managedStaleAfter))
     do {
-      return try await backend.sessions(project: binding.id, limit: limit).map {
+      let sessions = Self.withoutMCPShadows(try await backend.sessions(project: binding.id, limit: limit)).map {
         var s = $0
         s.status = RuntimeMapping.legacy(s.status)
         // Silence never becomes offline or done: it is stale, shown with its last-seen time.
@@ -262,7 +270,31 @@ extension MemoryStore {
         if s.status != "offline" && s.lastSeen < cutoff { s.status = "stale" }
         return s
       }
+      // An interrupted subagent never reports its end; it ends with the session that spawned it.
+      let ended = Set(sessions.filter { $0.status == "offline" }.map { $0.agent + "|" + $0.sessionID })
+      return sessions.map {
+        var s = $0
+        if let parent = s.spawnedBy, ended.contains(s.agent + "|" + parent) { s.status = "offline" }
+        return s
+      }
     } catch { throw Self.safeError(error) }
+  }
+
+  /// A CLI with lifecycle hooks also starts the MCP server, which records its own presence
+  /// session. Both are the same agent, so the MCP one is hidden while a hook-reported session of
+  /// that client overlaps it in time; MCP-only hosts (IDEs) keep their card.
+  static func withoutMCPShadows(_ sessions: [AgentSession]) -> [AgentSession] {
+    let format = ISO8601DateFormatter()
+    let slack: TimeInterval = 120
+    func span(_ s: AgentSession) -> (Date, Date)? {
+      guard let first = format.date(from: s.firstSeen), let last = format.date(from: s.lastSeen) else { return nil }
+      return (first.addingTimeInterval(-slack), last.addingTimeInterval(slack))
+    }
+    let hooked = sessions.filter { $0.source != "mcp" }.compactMap { s in span(s).map { (s.agent, $0) } }
+    return sessions.filter { s in
+      guard s.source == "mcp", let (first, last) = span(s) else { return true }
+      return !hooked.contains { $0.0 == s.agent && $0.1.0 <= last && first <= $0.1.1 }
+    }
   }
 
   // MARK: Tasks

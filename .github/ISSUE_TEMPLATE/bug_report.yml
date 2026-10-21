@@ -1,0 +1,46 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead. Paste exact error text.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. om init --backend sqlite
+        2. om context "…"
+        3. …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: om --version
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: macOS, Swift and storage profile
+      placeholder: macOS 15.5 (Apple Silicon), Swift 6.1, sqlite
+    validations:
+      required: true
+  - type: dropdown
+    id: host
+    attributes:
+      label: Agent host involved
+      multiple: true
+      options: [None / CLI only, Claude Code, Codex, Gemini CLI, OpenCode, Other MCP host, Mission Control (browser)]
+  - type: textarea
+    id: doctor
+    attributes:
+      label: om doctor output
+      description: It prints no secrets, but check before pasting.
+      render: text

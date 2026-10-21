@@ -2,6 +2,7 @@ import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'rea
 import type { Store } from './App'
 import {
   type Agent,
+  agentName,
   ApiError,
   type Approval,
   type Memory,
@@ -13,14 +14,15 @@ import {
   api,
 } from './api'
 import { AgentMark } from './Figure'
-import { ago, PLAN, type Placement, ROOMS, type RoomId } from './office'
+import { ago, inOffice, PLAN, type Placement, ROOMS, type RoomId } from './office'
 import { OfficeMap } from './OfficeMap'
 
 type Office = { placed: Placement[]; overflow: Partial<Record<RoomId, number>> }
 type Event = Store['events'][number]
 
 const SOURCE: Record<string, { label: string; how: string }> = {
-  claude_hook: { label: 'Claude Code hook', how: 'Session, prompt and tool hooks; tools are reported by category only.' },
+  // `om hook claude` names its source claude_hook; it is called by the omniverse-bridge plugin.
+  claude_hook: { label: 'Claude Code plugin', how: 'The omniverse-bridge plugin: session, prompt, tool and turn events; tools by category only.' },
   codex_hook: { label: 'Codex hook', how: 'Codex hooks.json session and tool events.' },
   codex_app_server: { label: 'Managed Codex', how: 'om codex run: OmniMemo owns the app-server process and its heartbeat.' },
   gemini_hook: { label: 'Gemini CLI hook', how: 'Gemini CLI session and tool hooks.' },
@@ -35,7 +37,7 @@ const STATUS_HELP: Record<Agent['status'], string> = {
   working: 'The host reported a prompt or tool call in this session.',
   waiting: 'The session reported in and is waiting for work.',
   blocked: 'The host reported the session is waiting on an approval or a blocker.',
-  stale: 'No recent signal. It may still be running; OmniMemo cannot tell.',
+  stale: 'No recent signal. It may still be running; OmniMemo cannot tell. It leaves the office map until its next signal.',
   offline: 'The host reported that the session ended.',
 }
 const MEMORY_HELP: Record<string, string> = {
@@ -51,6 +53,13 @@ function ContextIndicator({ agent, now }: { agent: Agent; now: number }) {
   const percent = agent.context_used_percent
   if (typeof percent !== 'number' || !Number.isFinite(percent) || percent < 0 || percent > 100 ||
       agent.status === 'stale' || agent.status === 'offline') {
+    const used = agent.context_used_tokens
+    if (typeof used === 'number' && Number.isInteger(used) && used >= 0 && agent.status !== 'stale' && agent.status !== 'offline') {
+      const text = used >= 1000 ? `${Math.round(used / 1000)}k tokens` : `${used} tokens`
+      const when = agent.context_observed_at ? `, reported ${ago(agent.context_observed_at, now)}` : ''
+      const description = `${used.toLocaleString()} tokens in use${when}; this model's window is unknown, so no percent`
+      return <span className="mono" title={description} aria-label={description}>{text}</span>
+    }
     return <span className="muted" title="Context unknown: no current reported sample">unknown</span>
   }
   const level = percent >= 90 ? 'critical' : percent >= 80 ? 'handoff' : percent >= 70 ? 'prepare' : 'normal'
@@ -61,9 +70,10 @@ function ContextIndicator({ agent, now }: { agent: Agent; now: number }) {
   const observed = agent.context_observed_at
   const reported = observed && Number.isFinite(Date.parse(observed))
     ? `reported ${ago(observed, now)}` : 'report time unknown'
-  const advice = level === 'critical' ? '; critical: fresh-session handoff advised (om rollover prepare)'
-    : level === 'handoff' ? '; fresh-session handoff advised (om rollover prepare)'
-    : level === 'prepare' ? '; prepare a checkpoint (om rollover prepare)' : ''
+  const handoff = agent.agent === 'claude' ? '/om-rollover in Claude Code' : 'om rollover prepare'
+  const advice = level === 'critical' ? `; critical: hand off to a fresh session now (${handoff})`
+    : level === 'handoff' ? `; hand off to a fresh session (${handoff})`
+    : level === 'prepare' ? '; a checkpoint is worth saving (om rollover prepare)' : ''
   const description = `Context ${percent}%${capacity}, ${reported}${advice}`
   return (
     <span className={'context-usage context-' + level} title={description} role="meter"
@@ -176,7 +186,6 @@ const PLAN_STATES: [string, Placement['tone'], string][] = [
   ['reviewing', 'flight', 'The agent owns a task in review.'],
   ['handing off', 'flight', 'The agent saved a checkpoint in the last three minutes.'],
   ['waiting', 'neutral', 'The session reported in and is waiting for work.'],
-  ['stale', 'unknown', 'No recent signal, even if it owns a task. It may still be running; OmniMemo cannot tell.'],
 ]
 
 const stateLabel = (p: Placement) => p.state[0].toUpperCase() + p.state.slice(1)
@@ -233,7 +242,6 @@ export function OfficeView({ store, office }: { store: Store; office: Office }) 
             <li className="key-working">working</li>
             <li className="key-attention">asks you</li>
             <li className="key-flight">reviewing</li>
-            <li className="key-unknown">stale</li>
           </ul>
         </div>
         {store.loaded && office.placed.length === 0 && (
@@ -241,11 +249,11 @@ export function OfficeView({ store, office }: { store: Store; office: Office }) 
             <p>
               {store.agents.length === 0
                 ? 'No agent has reported in yet.'
-                : 'Nobody is in the office: every observed session has gone offline.'}
+                : 'Nobody is in the office: every observed session has ended or gone silent.'}
             </p>
             <p className="muted">
-              Agents appear when a supported hook fires, an MCP client connects, or you run{' '}
-              <kbd>om --agent claude wake --session demo</kbd>.
+              Agents appear once their host reports in: Claude Code through the omniverse-bridge plugin, Codex and
+              Gemini through <kbd>install.sh --global --with-hooks</kbd>, any other agent by connecting over MCP.
             </p>
           </div>
         )}
@@ -277,7 +285,7 @@ export function OfficeView({ store, office }: { store: Store; office: Office }) 
                     <th scope="row">
                       <button type="button" className="row-select" aria-pressed={current?.key === p.key} onClick={() => setSelected(p.key)}>
                         <AgentMark agent={p.agent.agent} size={16} unknown={p.tone === 'unknown'} />
-                        {p.agent.agent}
+                        {agentName(p.agent)}
                       </button>
                     </th>
                     <td>{roomLabel(p.room)}</td>
@@ -302,7 +310,7 @@ export function OfficeView({ store, office }: { store: Store; office: Office }) 
               <h2>
                 <span className="detail-name">
                   <AgentMark agent={current.agent.agent} size={22} unknown={current.tone === 'unknown'} />
-                  {current.agent.agent}
+                  {agentName(current.agent)}
                 </span>
                 <span className="panel-note mono">{current.agent.session_id}</span>
               </h2>
@@ -329,6 +337,12 @@ export function OfficeView({ store, office }: { store: Store; office: Office }) 
                     <dd>
                       <a href="#approvals">{current.approval.action}</a>
                     </dd>
+                  </>
+                )}
+                {current.agent.spawned_by && (
+                  <>
+                    <dt>Subagent of</dt>
+                    <dd className="mono">{current.agent.spawned_by}</dd>
                   </>
                 )}
                 <dt>Signal</dt>
@@ -619,20 +633,37 @@ export function TasksView({ store }: { store: Store }) {
 /* Agents */
 
 export function AgentsView({ store, office }: { store: Store; office: Office }) {
+  const [history, setHistory] = useState(false)
   if (!store.loaded) return <Loading label="Loading sessions" />
   if (store.agents.length === 0) {
     return (
       <Empty title="No sessions observed">
-        Install host hooks with <kbd>install.sh --global --with-hooks</kbd>, connect an agent over MCP, or announce
-        one by hand with <kbd>om --agent claude wake --session demo</kbd>.
+        Agents appear once their host reports in. Run <kbd>install.sh --global --with-hooks</kbd> once: Claude Code
+        gets the omniverse-bridge plugin, Codex and Gemini get hooks, OpenCode its plugin. Any other agent appears
+        when it connects over MCP.
       </Empty>
     )
   }
   const order: Agent['status'][] = ['working', 'blocked', 'waiting', 'stale', 'offline']
-  const agents = [...store.agents].sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status))
+  const gone = store.agents.filter((a) => !inOffice(a)).length
+  const agents = store.agents
+    .filter((a) => history || inOffice(a))
+    .sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status))
   const sources = [...new Set(store.agents.map((a) => a.source))]
   return (
     <div className="stack">
+      <p className="muted small">
+        Status: working, waiting, blocked, offline, or stale (no recent signal). Context is the share of the
+        model's window the host reported: at 70% save a checkpoint, at 80% hand off to a fresh session, 90% is
+        critical.
+      </p>
+      {gone > 0 && (
+        <p className="small">
+          <button type="button" className="link" onClick={() => setHistory(!history)}>
+            {history ? 'Hide' : 'Show'} {gone} ended or silent {gone === 1 ? 'session' : 'sessions'}
+          </button>
+        </p>
+      )}
       <div className="table-wrap">
         <table className="table">
           <thead>
@@ -648,6 +679,11 @@ export function AgentsView({ store, office }: { store: Store; office: Office }) 
             </tr>
           </thead>
           <tbody>
+            {agents.length === 0 && (
+              <tr>
+                <td colSpan={8} className="muted">No session is reporting right now.</td>
+              </tr>
+            )}
             {agents.map((a) => {
               const p = office.placed.find((x) => x.agent === a)
               return (
@@ -655,7 +691,10 @@ export function AgentsView({ store, office }: { store: Store; office: Office }) 
                   <th scope="row">
                     <span className="cell-agent">
                       <AgentMark agent={a.agent} size={20} unknown={a.status === 'stale'} />
-                      {a.agent}
+                      <span>
+                        {agentName(a)}
+                        {a.title && <span className="muted small" style={{ display: 'block' }}>{a.title}</span>}
+                      </span>
                     </span>
                   </th>
                   <td>
@@ -670,7 +709,7 @@ export function AgentsView({ store, office }: { store: Store; office: Office }) 
                         {roomLabel(p.room)} <span className="muted">· {p.state}</span>
                       </>
                     ) : (
-                      <span className="muted">{a.status === 'offline' ? 'Left the office' : 'Room full'}</span>
+                      <span className="muted">{a.status === 'offline' ? 'Left the office' : a.status === 'stale' ? 'Out of the office' : a.spawned_by ? 'With the session that spawned it' : 'Room full'}</span>
                     )}
                   </td>
                   <td>{sourceLabel(a.source)}</td>
@@ -735,13 +774,21 @@ export function ApprovalsView({ store }: { store: Store }) {
     .filter((a) => a.status !== 'pending')
     .sort((a, b) => (b.decided_at ?? '').localeCompare(a.decided_at ?? ''))
 
+  const [notice, setNotice] = useState<string>()
   const decide = async (approval: Approval, decision: 'approved' | 'denied') => {
     setBusy(approval.id)
+    setNotice(undefined)
     try {
       await api.decide(approval, decision)
       await store.refresh()
     } catch (err) {
-      store.report(err)
+      // Expected outcomes, not failures: the Mac check was cancelled, or someone decided first.
+      if (err instanceof ApiError && err.status === 403 && decision === 'approved') {
+        setNotice('Not approved: the confirmation at this Mac was cancelled. The request is still waiting.')
+      } else if (err instanceof ApiError && err.status === 409) {
+        setNotice('This request was already decided; the list has been refreshed.')
+        await store.refresh()
+      } else store.report(err)
     } finally {
       setBusy(undefined)
     }
@@ -753,8 +800,14 @@ export function ApprovalsView({ store }: { store: Store }) {
     <div className="stack">
       <p className="lede" id="approval-consequence">
         Your answer is a record, not a command. The agent reads it and acts on its own; OmniMemo never runs the action
-        and an approval here never authorizes a Git push.
+        and an approval here never authorizes a Git push. Approving opens a macOS dialog: confirm with Touch ID or
+        your password.
       </p>
+      {notice ? (
+        <p className="muted" role="status">
+          {notice}
+        </p>
+      ) : null}
       {pending.length === 0 ? (
         <Empty title="Nothing is waiting for you">
           Agents ask with <kbd>om approvals request "push main to origin" --reason "…"</kbd>; requests appear here

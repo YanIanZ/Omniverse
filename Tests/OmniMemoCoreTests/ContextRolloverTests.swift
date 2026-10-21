@@ -4,19 +4,9 @@ import XCTest
 
 final class ContextRolloverTests: XCTestCase {
   private func fixture(mongo: Bool) async throws -> MemoryStore {
-    let root: URL
-    let store: MemoryStore
-    if mongo {
-      (root, store) = try await MongoTests().fixture()
-    } else {
-      let (data, _, sqlite) = try await SQLiteTests().fixture()
-      root = data.deletingLastPathComponent()
-      store = sqlite
-    }
-    addTeardownBlock {
-      await store.close()
-      try? FileManager.default.removeItem(at: root)
-    }
+    let store = mongo
+      ? try await MongoTests().fixture(owner: self).1
+      : try await SQLiteTests().fixture(owner: self).2
     try await store.ensureRuntimeIndexes()
     return store
   }
@@ -222,6 +212,13 @@ final class ContextRolloverTests: XCTestCase {
     XCTAssertNil(retired.taskID)
     XCTAssertEqual(child.taskID, "task_b")
     XCTAssertEqual(child.parentSessionID, "p2")
+    // The retired parent was resumed and filled up again: it may hand off once more, only once.
+    async let again = store.beginRollover(agent: "codex", parent: "p2")
+    async let twice = store.beginRollover(agent: "codex", parent: "p2")
+    let reclaims = try await [again, twice]
+    XCTAssertEqual(reclaims.filter { $0 }.count, 1)
+    let reopened = try await stored(store, "p2")
+    XCTAssertEqual(reopened.rolloverState, "starting_child")
     let types = try await store.events(after: 0).map(\.type).filter { $0.hasPrefix("rollover.") }
     XCTAssertEqual(types, ["rollover.created", "rollover.failed", "rollover.created", "rollover.completed"])
   }

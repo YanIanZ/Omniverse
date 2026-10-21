@@ -27,7 +27,21 @@ public actor LiveHub {
     Task { await self.run() }
   }
 
-  private func run() async {
+  /// How often a lost or missing Redis subscription is tried again.
+  static let redisRetry: TimeInterval = 10
+  private var redisTried = Date.distantPast
+
+  /// Keeps the hint subscription alive and its reported state honest: a Redis restart drops the
+  /// connection, and without this the hub would report `connected` while hearing nothing.
+  private func ensureRedis() async {
+    guard store.redisURL != nil else { return }
+    if let redis, redis.isConnected { return }
+    if redis != nil {
+      redis = nil
+      redisState = "unavailable"
+    }
+    guard Date().timeIntervalSince(redisTried) >= Self.redisRetry else { return }
+    redisTried = Date()
     let wake = self.wake
     if let connection = await RedisSignal.subscribe(
       projectID: store.binding.id, url: store.redisURL, onSignal: { wake.yield() })
@@ -35,6 +49,10 @@ public actor LiveHub {
       redis = connection
       redisState = "connected"
     }
+  }
+
+  private func run() async {
+    await ensureRedis()
     let ticker = Task {
       while !Task.isCancelled {
         try? await Task.sleep(nanoseconds: 1_000_000_000)
@@ -44,6 +62,7 @@ public actor LiveHub {
     task = ticker
     for await _ in wakeups {
       if Task.isCancelled || ticker.isCancelled { break }
+      await ensureRedis()
       await poll()
     }
   }

@@ -36,7 +36,7 @@ Follow `AGENTS.md` section 9. MongoDB (or the explicit SQLite profile) is canoni
 
 ## Multi-agent bridge, Omniverse and runtime events
 
-Follow `AGENTS.md` §§11–13. Claude Code reports real lifecycle and tool activity to OmniMemo through its supported adapter (hooks or plugin); report only categories, never prompts, tool arguments or secrets. Agent cards show `client-model`, current task and honest progress; unknown stays unknown, and silence becomes stale.
+Follow `AGENTS.md` §§11–13. Claude Code reports real lifecycle and tool activity to OmniMemo through its supported adapter, the `omniverse-bridge` plugin (OmniMemo installs no Claude settings hooks); report only categories, never prompts, tool arguments or secrets. Agent cards show `client-model`, current task and honest progress; unknown stays unknown, and silence becomes stale.
 
 ## Context rollover
 

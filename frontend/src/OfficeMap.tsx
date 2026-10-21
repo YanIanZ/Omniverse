@@ -1,5 +1,5 @@
 import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { Health } from './api'
+import { agentName, type Health } from './api'
 import { FigureGlyph } from './Figure'
 import { BUILDING, CORRIDOR, HALL_X, minutesAgo, PLAN, type Placement, ROOMS, type RoomId, route } from './office'
 import './office.css'
@@ -88,6 +88,9 @@ type Props = {
   onSelect: (key: string) => void
 }
 
+const shortType = (type = 'subagent') => type.split(':').pop()!.split('-')[0] || 'subagent'
+const plate = (name: string) => (name.length > 11 ? name.slice(0, 10) + '…' : name)
+
 export function OfficeMap({ placed, overflow, health, selected, now, live, onSelect }: Props) {
   const nodes = useRef(new Map<string, SVGGElement>())
   const previous = useRef(new Map<string, { room: RoomId; x: number; y: number }>())
@@ -104,7 +107,7 @@ export function OfficeMap({ placed, overflow, health, selected, now, live, onSel
       const from = ROOMS.find((r) => r.id === before.room)!
       const to = ROOMS.find((r) => r.id === p.room)!
       const points = route(from, to, [before.x, before.y], [p.x, p.y])
-      const short = `${p.agent.agent} → ${to.label}`
+      const short = `${agentName(p.agent)} → ${to.label}`
       fresh.push({ id: Date.now() + Math.random(), key: p.key, points, short, label: p.task ? `${short} · ${p.task.title}` : short })
       const node = nodes.current.get(p.key)
       if (!node || reducedMotion()) continue
@@ -277,7 +280,7 @@ export function OfficeMap({ placed, overflow, health, selected, now, live, onSel
             role="button"
             tabIndex={0}
             aria-pressed={isSelected}
-            aria-label={`${p.agent.agent}, ${p.state}${p.task ? ': ' + p.task.title : ''}, in ${ROOMS.find((r) => r.id === p.room)?.label}, last signal ${minutes} minutes ago`}
+            aria-label={`${agentName(p.agent)}${p.helpers ? ` with ${p.helpers} subagent${p.helpers === 1 ? '' : 's'}` : ''}, ${p.state}${p.task ? ': ' + p.task.title : ''}, in ${ROOMS.find((r) => r.id === p.room)?.label}, last signal ${minutes} minutes ago`}
             onClick={() => onSelect(p.key)}
             onKeyDown={select(p.key)}
           >
@@ -286,9 +289,16 @@ export function OfficeMap({ placed, overflow, health, selected, now, live, onSel
             <circle className="select-ring" cy={-12} r={20} />
             <FigureGlyph agent={p.agent.agent} unknown={p.tone === 'unknown'} />
             <circle className="pip" cx={11} cy={-24} r={3.6} />
+            {p.helpers > 0 && (
+              <g className="helpers" aria-hidden="true">
+                <rect x={40} y={5} width={26} height={18} rx={9} />
+                <text x={53} y={18}>+{p.helpers}</text>
+              </g>
+            )}
             <rect className="plate" x={-38} y={5} width={76} height={18} />
             <text className="plate-name" y={18}>
-              {p.agent.agent.length > 11 ? p.agent.agent.slice(0, 10) + '…' : p.agent.agent}
+              {/* A subagent's plate names its type in short (`general`, `codex`); the figure shows its client. */}
+              {plate(p.agent.spawned_by ? '› ' + shortType(p.agent.agent_type) : p.agent.agent)}
             </text>
             {/* Stale figures carry no per-agent line: the room tag already says there is no recent signal. */}
             {p.tone !== 'unknown' && (
@@ -314,25 +324,26 @@ export function OfficeMap({ placed, overflow, health, selected, now, live, onSel
         <text className="sheet-head" y={10}>
           LEGEND
         </text>
-        <circle className="key-working" cx={5} cy={30} r={4.5} />
-        <text x={16} y={34}>
-          working
+        {/* Every plan state, grouped by the mark it is drawn with (see PLAN_STATES in views.tsx). */}
+        <circle className="key-working" cx={5} cy={28} r={4.5} />
+        <text x={16} y={32}>
+          doing, working
         </text>
-        <circle className="key-attention" cx={92} cy={30} r={4.5} />
-        <text x={103} y={34}>
-          asks you
+        <circle className="key-attention" cx={122} cy={28} r={4.5} />
+        <text x={133} y={32}>
+          asks you, blocked
         </text>
-        <circle className="key-flight" cx={176} cy={30} r={3.6} />
-        <text x={187} y={34}>
+        <circle className="key-flight" cx={256} cy={28} r={3.6} />
+        <text x={267} y={32}>
           reviewing, handing off
         </text>
-        <circle className="key-fault" cx={340} cy={30} r={4.5} />
-        <text x={351} y={34}>
-          fault
+        <circle className="key-neutral" cx={5} cy={46} r={4.5} />
+        <text x={16} y={50}>
+          waiting
         </text>
-        <rect className="key-unknown" x={400} y={25} width={10} height={10} />
-        <text x={416} y={34}>
-          stale, unknown
+        <circle className="key-fault" cx={122} cy={46} r={4.5} />
+        <text x={133} y={50}>
+          fault (server rack)
         </text>
         {[
           [1, '1m'],
@@ -342,13 +353,13 @@ export function OfficeMap({ placed, overflow, health, selected, now, live, onSel
           const w = dimension(m as number)
           const x = [0, 52, 132][i]
           return (
-            <g key={label} className="dimension" transform={`translate(${x + w / 2} 60)`}>
+            <g key={label} className="dimension" transform={`translate(${x + w / 2} 70)`}>
               <path d={`M${-w / 2} -3v6M${w / 2} -3v6M${-w / 2} 0H-12M12 0H${w / 2}`} />
               <text y={3.5}>{label}</text>
             </g>
           )
         })}
-        <text x={238} y={64}>
+        <text x={238} y={74}>
           minutes since the last verified signal
         </text>
       </g>
@@ -359,7 +370,7 @@ export function OfficeMap({ placed, overflow, health, selected, now, live, onSel
           PROJECT
         </text>
         <text className="tb-mono" x={10} y={35}>
-          {health ? health.project_id.slice(0, 12) : 'unknown'}
+          {health ? (health.project_name ?? health.project_id.slice(0, 12)).slice(0, 18) : 'unknown'}
         </text>
         <text className="tb-key" x={160} y={16}>
           DRAWING
