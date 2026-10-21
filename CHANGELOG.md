@@ -4,7 +4,16 @@ Notable changes to OmniMemo. The format follows [Keep a Changelog](https://keepa
 
 ## Unreleased
 
+## 0.3.0 - 2026-10-22
+
+First public release.
+
 ### Added
+- `om` CLI alias, Vapor HTTP/WebSocket server and React Mission Control with a pixel-art agent office, task board, approvals, memory and events.
+- SQLite storage profile beside MongoDB; opt-in auto-save; approvals with Touch ID or password.
+- Host adapters: Codex and Gemini hooks, OpenCode 2.x plugin.
+- Runtime events, agent cards, managed Codex runs and context rollover.
+- Global installation for detected agent hosts and skills via `npx skills`.
 - Claude subagents appear as their own sessions linked to their parent, with their context use; Codex and OpenCode can be used as Claude subagent types, delegated read-only through `om`.
 - One Mission Control server per project; readable CLI output in a terminal.
 - Claude Code presence and context rollover through the `omniverse-bridge` plugin (no settings hooks).
@@ -18,14 +27,5 @@ Notable changes to OmniMemo. The format follows [Keep a Changelog](https://keepa
 - Hardening of the bridge, server authentication, storage and guard hooks from code review.
 - Build and test scripts work on machines without the maintainer's external disk.
 - Mission Control builds from its TypeScript sources; stale compiled `.js` files are no longer committed beside them.
-
-## 0.3.0 - 2026-10-19
-
-### Added
-- `om` CLI alias, Vapor HTTP/WebSocket server and React Mission Control with a pixel-art agent office, task board, approvals, memory and events.
-- SQLite storage profile beside MongoDB; opt-in auto-save; approvals with Touch ID or password.
-- Host adapters: Codex and Gemini hooks, OpenCode 2.x plugin.
-- Runtime events, agent cards, managed Codex runs and context rollover.
-- Global installation for detected agent hosts and skills via `npx skills`.
 
 Earlier work in this release: the Swift + MongoDB memory core (MCP tools `memory_save`, `memory_get`, `memory_context`, `memory_checkpoint`, CLI, project isolation, evidence hashes, secret rejection, compact context, disk cache) and the complete pinned REA runtime as a separate MCP server and skill.
