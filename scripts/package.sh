@@ -3,7 +3,8 @@ set -eu
 cd "$(dirname "$0")/.."
 ./scripts/swift.sh build -c release
 BIN_DIR="$(./scripts/swift.sh build -c release --show-bin-path)"
-DEST="${1:-/Volumes/Ext/DevCache/OmniMemo/dist/0.3.0}"
+if [ -d /Volumes/Ext/DevCache ]; then ROOT_DEFAULT=/Volumes/Ext/DevCache/OmniMemo; else ROOT_DEFAULT="$HOME/Library/Caches/OmniMemo"; fi
+DEST="${1:-$ROOT_DEFAULT/dist/0.3.0}"
 mkdir -p "$DEST"
 # A new inode: overwriting a signed binary in place gets it killed by the kernel.
 rm -f "$DEST/omnimem"
@@ -38,7 +39,7 @@ cat > "$DEST/.claude-plugin/marketplace.json" <<'JSON'
 JSON
 cp LICENSE "$DEST/LICENSE"
 # Unset: the development default. Set but empty: package without an REA runtime.
-REA_RUNTIME="${OMNIMEM_REA_RUNTIME-/Volumes/Ext/DevCache/OmniMemo/integrations/rea-runtime.json}"
+REA_RUNTIME="${OMNIMEM_REA_RUNTIME-$ROOT_DEFAULT/integrations/rea-runtime.json}"
 if [ -n "$REA_RUNTIME" ] && [ -f "$REA_RUNTIME" ]; then cp "$REA_RUNTIME" "$DEST/rea-runtime.json"; fi
 "$DEST/omnimem" --version
 printf 'Packaged at %s\n' "$DEST"

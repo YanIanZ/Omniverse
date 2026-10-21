@@ -46,7 +46,7 @@ def prepare(base,node,vendor=False):
     return source,bundle
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--base',type=pathlib.Path,default=pathlib.Path('/Volumes/Ext/DevCache/OmniMemo'));parser.add_argument('--node',default=shutil.which('node'));parser.add_argument('--vendor',action='store_true',help='Refresh versioned skill/provenance resources from the matching built source.')
+    parser=argparse.ArgumentParser();parser.add_argument('--base',type=pathlib.Path,default=pathlib.Path('/Volumes/Ext/DevCache/OmniMemo') if pathlib.Path('/Volumes/Ext/DevCache').is_dir() else pathlib.Path.home()/'Library/Caches/OmniMemo');parser.add_argument('--node',default=shutil.which('node'));parser.add_argument('--vendor',action='store_true',help='Refresh versioned skill/provenance resources from the matching built source.')
     args=parser.parse_args()
     if not args.node:raise SystemExit('Node is not installed; install a supported version explicitly.')
     source,bundle=prepare(args.base,args.node,args.vendor)
