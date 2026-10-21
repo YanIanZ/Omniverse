@@ -32,3 +32,7 @@ mongod.lock
 # Engine-written mod types (Claude Code lays them when it loads a mod)
 plugins/*/.claude-plugin/types/
 plugins/*/tsconfig.json
+
+# Frontend: Vite builds from the TypeScript sources; never commit tsc output beside them
+frontend/src/**/*.js
+*.tsbuildinfo
