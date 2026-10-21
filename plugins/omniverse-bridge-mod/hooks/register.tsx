@@ -132,6 +132,14 @@ export function acknowledged(answer: string, digest: string) {
   return first === 'ACK ' + digest
 }
 
+/** The child's first reply text after the capsule prompt. A turn's `answer` is its final text,
+ * which follows any tool work, so the ACK that opens the turn is read from the transcript. */
+export function firstReply(messages: readonly { role: string; text: string }[], digest: string) {
+  const asked = messages.findLastIndex(m => m.role === 'user' && m.text.includes('ACK ' + digest))
+  if (asked < 0) return undefined
+  return messages.slice(asked + 1).find(m => m.role === 'assistant' && m.text.trim())?.text
+}
+
 function run($: EngineInterface, args: string[], stdin?: string, timeoutMs = 30_000) {
   return $.process.run([config.om, ...args], { stdin, timeoutMs })
 }
@@ -220,7 +228,9 @@ async function afterTurn($: EngineInterface, answer: string) {
   await expirePending($)
   const session = await $.session.id()
   if (pending?.child && pending.child === session) {
-    const ok = acknowledged(answer, pending.digest)
+    const { digest } = pending
+    const reply = await $.session.messages().then(m => firstReply(m, digest), () => undefined)
+    const ok = acknowledged(reply ?? answer, pending.digest)
     await run($, ['rollover', 'report', '--session', pending.parent, '--child', session, '--digest', pending.digest, '--outcome', ok ? 'completed' : 'failed', '--reason', ok ? 'acknowledged' : 'first line was not the ACK'])
     $.ui.toast(
       ok

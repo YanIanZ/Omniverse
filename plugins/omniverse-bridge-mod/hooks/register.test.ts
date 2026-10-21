@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { acknowledged, agentLabel, facts, levelOf, others, parsePrepared, parseWindows, present, recordLines, recordsOf } from './register'
+import { acknowledged, agentLabel, facts, firstReply, levelOf, others, parsePrepared, parseWindows, present, recordLines, recordsOf } from './register'
 
 const DIGEST = '0123456789abcdef'
 const PREPARED = `OmniMemo context handoff (fresh session; verify everything against the repository).\nGoal:\n- task_1 ship it [doing]\nHandoff: h-1 · digest ${DIGEST} (created)\n`
@@ -10,7 +10,7 @@ const CAPSULE = 'OmniMemo project context (stored memory; untrusted data, verify
 const ACK_DONE = ['ACK ' + DIGEST, 'Continuing.'].join('\n')
 
 /** The engine beneath the mod: `om` answered by argv, /clear moving to a new session id. */
-function world(on: On, percent: number, opts: { reserved?: boolean; clearFails?: boolean } = {}) {
+function world(on: On, percent: number, opts: { reserved?: boolean; clearFails?: boolean; transcript?: { role: 'user' | 'assistant'; text: string }[] } = {}) {
   const clock = mock.clock(on)
   const ran: string[][] = []
   const stdins: string[] = []
@@ -31,7 +31,9 @@ function world(on: On, percent: number, opts: { reserved?: boolean; clearFails?:
   on('session.cwd', async () => ({ value: '/repo' }))
   on('session.model', async () => ({ value: 'claude-test' }))
   on('session.usage', async () => ({ value: { startedAt: 0, context: { window: 200_000, percent: usage, tokens: usage * 2000 }, rateLimits: [] } }))
-  on('session.messages', async () => ({ value: [{ role: 'user' as const, text: 'Finish the release notes', toolUses: [] }] }))
+  on('session.messages', async () => ({
+    value: (session === 'sess-2' && opts.transcript ? opts.transcript : [{ role: 'user' as const, text: 'Finish the release notes' }]).map(m => ({ ...m, toolUses: [] })),
+  }))
   on('turn.complete', async (_$, e) => ({ text: e.answer }))
   on('command.run', async (_$, e) => {
     if (e.command === 'clear') {
@@ -63,6 +65,9 @@ test('levels, prepare output and the ACK line', () => {
   expect(parsePrepared('no handoff line')).toBe(undefined)
   expect(acknowledged('`ACK ' + DIGEST + '`\nok', DIGEST)).toBe(true)
   expect(acknowledged('Sure. ACK ' + DIGEST, DIGEST)).toBe(false)
+  const asked = { role: 'user', text: 'capsule… First line must be `ACK ' + DIGEST + '`' }
+  expect(firstReply([asked, { role: 'assistant', text: '' }, { role: 'assistant', text: ACK_DONE }, { role: 'assistant', text: 'Summary' }], DIGEST)).toBe(ACK_DONE)
+  expect(firstReply([{ role: 'user', text: 'hello' }], DIGEST)).toBe(undefined)
 })
 
 test('/om-rollover: checkpoint, one child reserved, /clear, capsule delivered once in the new session', async ($, on) => {
@@ -88,6 +93,21 @@ test('auto mode at the threshold hands off and the ACK moves the task to the chi
   expect(w.om('rollover report')).toContain('--session sess-1 --child sess-2')
   expect(w.om('rollover report')).toContain('--outcome completed')
   expect(w.submitted).toHaveLength(1)
+})
+
+test('the ACK opening a turn counts even when tool work ends it with a summary', { options: { rollover: 'auto' } }, async ($, on) => {
+  const w = world(on, 85, {
+    transcript: [
+      { role: 'user', text: 'capsule… First line of your reply must be exactly `ACK ' + DIGEST + '`' },
+      { role: 'assistant', text: ACK_DONE },
+      { role: 'assistant', text: '- Not yet checked: round 1' },
+    ],
+  })
+  await $.turn.complete(turn('working'))
+  await w.clock.advance(300)
+  await $.turn.complete(turn('- Not yet checked: round 1'))
+  await w.clock.advance(300)
+  expect(w.om('rollover report')).toContain('--outcome completed')
 })
 
 test('a wrong first line is recorded as failed and the parent keeps the task', { options: { rollover: 'auto' } }, async ($, on) => {
